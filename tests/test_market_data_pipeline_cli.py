@@ -48,7 +48,8 @@ def test_cli_output_is_deterministic_and_compact(tmp_path):
 def test_cli_fails_closed_for_invalid_explicit_dataset(tmp_path, capsys):
     path = tmp_path / "bad.json"; path.write_text("{", encoding="utf-8")
     assert main(arguments(path, "fixture")) == 2
-    assert json.loads(capsys.readouterr().out)["status"] == "blocked"
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {"cli_version": OFFLINE_RESEARCH_PIPELINE_CLI_VERSION, "error_code": "VALIDATION_FAILED", "status": "blocked"}
 
 
 def test_cli_architecture_boundary_has_no_network_or_trading_dependency():

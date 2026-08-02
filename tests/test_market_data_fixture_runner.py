@@ -59,5 +59,13 @@ def test_main_returns_blocked_json_without_overwriting(tmp_path, capsys):
     source = tmp_path / "fixture.json"; source.write_text(json.dumps([row()]), encoding="utf-8")
     output = (tmp_path / "result.json").resolve(); output.write_text("existing", encoding="utf-8")
     assert main(arguments(source, output)) == 2
-    assert json.loads(capsys.readouterr().out)["status"] == "blocked"
+    assert json.loads(capsys.readouterr().out) == {"error_code": "VALIDATION_FAILED", "export_version": OFFLINE_RESEARCH_FIXTURE_EXPORT_VERSION, "status": "blocked"}
     assert output.read_text(encoding="utf-8") == "existing"
+
+
+def test_explicit_replace_policy_is_the_only_overwrite_path(tmp_path):
+    source = tmp_path / "fixture.json"; source.write_text(json.dumps([row()]), encoding="utf-8")
+    output = (tmp_path / "result.json").resolve(); output.write_text("old", encoding="utf-8")
+    args = build_export_parser().parse_args(arguments(source, output) + ["--overwrite", "replace"])
+    export = write_fixture_export(args, output, overwrite_policy=args.overwrite)
+    assert json.loads(output.read_text(encoding="utf-8"))["export_hash"] == export.export_hash

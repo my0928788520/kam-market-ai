@@ -11,7 +11,7 @@ from typing import Sequence
 from .pipeline_cli import OFFLINE_RESEARCH_PIPELINE_CLI_VERSION, build_offline_pipeline_output, build_parser
 
 
-OFFLINE_RESEARCH_FIXTURE_EXPORT_VERSION = "1.1.0-phase2"
+OFFLINE_RESEARCH_FIXTURE_EXPORT_VERSION = "1.1.0"
 
 
 def _hash(payload: object) -> str:
@@ -83,7 +83,12 @@ def build_fixture_export(args: argparse.Namespace) -> OfflineResearchFixtureExpo
     return OfflineResearchFixtureExport(metadata, pipeline_payload)
 
 
-def write_fixture_export(args: argparse.Namespace, output_path: Path) -> OfflineResearchFixtureExport:
+def write_fixture_export(
+    args: argparse.Namespace,
+    output_path: Path,
+    *,
+    overwrite_policy: str = "forbid",
+) -> OfflineResearchFixtureExport:
     """Write one deterministic export to one explicit, new local JSON path."""
     if not isinstance(output_path, Path) or not output_path.is_absolute():
         raise ValueError("Output path must be explicit and absolute.")
@@ -91,7 +96,9 @@ def write_fixture_export(args: argparse.Namespace, output_path: Path) -> Offline
         raise ValueError("Output path must use the .json extension.")
     if not output_path.parent.is_dir():
         raise ValueError("Output directory must already exist.")
-    if output_path.exists():
+    if overwrite_policy not in {"forbid", "replace"}:
+        raise ValueError("Unknown overwrite policy.")
+    if output_path.exists() and overwrite_policy == "forbid":
         raise ValueError("Refusing to overwrite an existing export.")
     export = build_fixture_export(args)
     output_path.write_text(export.serialize(), encoding="utf-8")
@@ -101,17 +108,18 @@ def write_fixture_export(args: argparse.Namespace, output_path: Path) -> Offline
 def build_export_parser() -> argparse.ArgumentParser:
     parser = build_parser()
     parser.description = "Run offline research and write one deterministic JSON export."
-    parser.add_argument("--output", required=True, type=Path, help="Explicit absolute new JSON export path.")
+    next(action for action in parser._actions if action.dest == "output").required = True
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_export_parser().parse_args(argv)
     try:
-        export = write_fixture_export(args, args.output)
+        export = write_fixture_export(args, args.output, overwrite_policy=args.overwrite)
         print(export.serialize())
     except (OSError, ValueError, KeyError) as error:
-        print(dumps({"status": "blocked", "error": str(error)}, sort_keys=True, separators=(",", ":"), ensure_ascii=True))
+        code = "INPUT_UNAVAILABLE" if isinstance(error, OSError) else "VALIDATION_FAILED"
+        print(dumps({"export_version": OFFLINE_RESEARCH_FIXTURE_EXPORT_VERSION, "error_code": code, "status": "blocked"}, sort_keys=True, separators=(",", ":"), ensure_ascii=True))
         return 2
     return 0
 

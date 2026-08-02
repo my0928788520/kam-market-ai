@@ -14,7 +14,7 @@ from .provider_contract import MarketDataProviderContract, MarketDataTimeframe, 
 from .scan_engine import MarketDataScanRequest, build_market_data_scan_plan
 
 
-OFFLINE_RESEARCH_PIPELINE_CLI_VERSION = "1.1.0-phase1"
+OFFLINE_RESEARCH_PIPELINE_CLI_VERSION = "1.1.0"
 
 
 def _parse_timestamp(value: str) -> datetime:
@@ -50,6 +50,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--as-of", required=True)
     parser.add_argument("--captured-at", required=True)
     parser.add_argument("--batch-size", type=int, default=100)
+    parser.add_argument("--output", type=Path, help="Explicit absolute JSON export path.")
+    parser.add_argument("--overwrite", choices=("forbid", "replace"), default="forbid")
     return parser
 
 
@@ -94,9 +96,15 @@ def build_offline_pipeline_output(args: argparse.Namespace) -> str:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        print(build_offline_pipeline_output(args))
+        if args.output is None:
+            print(build_offline_pipeline_output(args))
+        else:
+            from .fixture_runner import write_fixture_export
+
+            print(write_fixture_export(args, args.output, overwrite_policy=args.overwrite).serialize())
     except (OSError, ValueError) as error:
-        print(dumps({"status": "blocked", "error": str(error)}, sort_keys=True, separators=(",", ":"), ensure_ascii=True))
+        code = "INPUT_UNAVAILABLE" if isinstance(error, OSError) else "VALIDATION_FAILED"
+        print(dumps({"cli_version": OFFLINE_RESEARCH_PIPELINE_CLI_VERSION, "error_code": code, "status": "blocked"}, sort_keys=True, separators=(",", ":"), ensure_ascii=True))
         return 2
     return 0
 
