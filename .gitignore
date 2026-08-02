@@ -1,0 +1,37 @@
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+logs/*.log
+data/*.db
+data/*.sqlite*
+data/*.jsonl
+!data/.gitkeep
+!logs/.gitkeep
+debug/position/
+
+# Local runtime output
+log/
+logs/
+debug/
+
+# Local archives and binary installers
+*.zip
+*.whl
+
+# Rebuilt Git metadata backup
+.git.empty-backup/
+
+# Legacy standalone project
+KAM_V1.6_fubon_bridge/

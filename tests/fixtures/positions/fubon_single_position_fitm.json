@@ -1,0 +1,16 @@
+[
+  {
+    "symbol": "FITM",
+    "expiry_date": 202608,
+    "buy_sell": "BSAction.Sell",
+    "orig_lots": 1,
+    "tradable_lot": 1,
+    "price": "40000.0",
+    "market_price": "39900.0000",
+    "profit_or_loss": "100.0",
+    "currency": "TWD",
+    "initial_margin": "0.0",
+    "maintenance_margin": "0.0",
+    "clearing_margin": "0.0"
+  }
+]

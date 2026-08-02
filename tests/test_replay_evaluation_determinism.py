@@ -1,0 +1,2 @@
+from test_replay_evaluation_serialization import test_evaluation_serialization_is_deterministic
+def test_evaluation_hash_regression(): test_evaluation_serialization_is_deterministic()

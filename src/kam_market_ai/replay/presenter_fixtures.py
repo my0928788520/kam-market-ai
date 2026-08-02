@@ -1,0 +1,3 @@
+"""Safe deterministic scenario labels for presenter tests."""
+REPLAY_PRESENTER_FIXTURE_VERSION="1.0"
+REPLAY_PRESENTER_FIXTURE_NAMES=frozenset({"initial_presenter","unchanged_presenter","direction_changed_presenter","confidence_changed_presenter","risk_changed_presenter","next_step_changed_presenter","partial_timeframe_changed_presenter","module_changed_presenter","stale_presenter","blocked_presenter","data_gap_presenter","unavailable_decision_presenter","evaluation_failed_presenter","source_correction_presenter","fixture_preview_presenter","invalid_presenter","high_confidence_high_risk_presenter","deterministic_presenter"})
