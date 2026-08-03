@@ -20,7 +20,12 @@ _FIELD_LABELS = {
 def render_operator_html(view: PaperTradingOperatorView) -> str:
     """Render local read-only content; values are already escaped by presenter."""
     def rows(values: dict[str, str]) -> str:
-        return "".join(f"<dt>{escape(_FIELD_LABELS.get(key, key.replace('_', ' ')))}</dt><dd>{value}</dd>" for key, value in values.items())
+        return "".join(
+            f"<dt>{escape(_FIELD_LABELS.get(key, key.replace('_', ' ')))}</dt>"
+            f"<dd{' class=\"hash\"' if key.endswith('hash') else ''}{' title=\"' + escape(str(value)) + '\"' if key.endswith('hash') else ''}>"
+            f"{escape(str(value)[:10]) if key.endswith('hash') else value}</dd>"
+            for key, value in values.items()
+        )
     audit = "".join(f"<li title='{escape(item['hash'])}'>{item['type']} · {escape(item['hash'][:10])}</li>" for item in view.audit_events[-3:])
     demo_html = ""
     if view.demo:
