@@ -10,7 +10,9 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Proprietary - private personal research only" }
 authors = [{ name = "KAM" }]
-dependencies = []
+dependencies = [
+  "fugle-marketdata==2.4.1",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -39,4 +41,3 @@ target-version = "py311"
 python_version = "3.11"
 strict = true
 packages = ["kam_market_ai"]
-
