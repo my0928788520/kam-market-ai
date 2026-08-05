@@ -8,6 +8,7 @@ from kam_market_ai.paper_trading.operator_wsgi import build_operator_wsgi, rende
 from kam_market_ai.paper_trading.demo_proposal import build_demo_session
 from kam_market_ai.paper_trading.demo_snapshot import DEMO_SNAPSHOT
 from kam_market_ai.paper_trading.operator_presenter import build_demo_operator_presenter
+from kam_market_ai.live_read_only.market_snapshot import OFFLINE_DEMO_MARKET_DATA_SOURCE
 from kam_market_ai.account_read_only import (
     AccountDataFreshness,
     AccountFunds,
@@ -203,7 +204,7 @@ def test_terminal_account_drawer_is_closed_by_default_and_reuses_get_only_accoun
 def test_dashboard_renders_real_control_cells_and_coloured_cycle_structure() -> None:
     proposal, matching = build_demo_session()
     view = build_demo_operator_presenter(proposal, matching, DEMO_SNAPSHOT)
-    html = render_operator_html(view)
+    html = render_operator_html(view, OFFLINE_DEMO_MARKET_DATA_SOURCE.read_snapshot("TX"))
 
     assert "多方 6｜空方 4" in html
     assert "多方 62" not in html and "空方 38" not in html
@@ -221,12 +222,30 @@ def test_dashboard_renders_real_control_cells_and_coloured_cycle_structure() -> 
     assert "preserveAspectRatio='xMidYMid meet'" in html
     for field in ("目前位置", "循環狀態", "上一階段", "下一階段", "唯一下一步", "風險"):
         assert field in html
-    for state_code in ("AU", "NF", "NU"):
-        assert state_code in html
+    assert html.count("class='timeframe-card'") == 5
+    for timeframe in ("週線", "日線", "60 分", "15 分", "5 分"):
+        assert timeframe in html
     for footer_field in ("已實現損益", "未實現損益", "緊急停止"):
         assert footer_field in html
     for label in ("低檔確認", "起漲形成", "多方延伸", "高檔回落", "起跌形成", "空方延伸", "低點止跌"):
         assert label in html
+
+
+def test_halted_and_closed_selected_snapshots_are_presented_fail_closed() -> None:
+    proposal, matching = build_demo_session()
+    view = build_demo_operator_presenter(proposal, matching, DEMO_SNAPSHOT)
+
+    halted_html = render_operator_html(view, OFFLINE_DEMO_MARKET_DATA_SOURCE.read_snapshot("MTX"))
+    assert "暫停／不可判讀" in halted_html
+    assert "等待資料恢復" in halted_html
+    assert "多方 6｜空方 4" not in halted_html
+    assert halted_html.count("class='control-cell ") == 10
+
+    closed_html = render_operator_html(view, OFFLINE_DEMO_MARKET_DATA_SOURCE.read_snapshot("TMF"))
+    assert "休市／不可判讀" in closed_html
+    assert "等待市場恢復" in closed_html
+    assert "多方 6｜空方 4" not in closed_html
+    assert closed_html.count("class='control-cell ") == 10
 
 
 def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers() -> None:

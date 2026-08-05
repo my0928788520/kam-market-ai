@@ -1,6 +1,7 @@
 """GET-only local WSGI dashboard renderer."""
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
 from html import escape
 from pathlib import Path
@@ -14,6 +15,7 @@ from kam_market_ai.live_read_only.market_snapshot import (
     MarketSnapshot,
     MarketSnapshotStatus,
 )
+from kam_market_ai.live_read_only.decision_presentation import SelectedSnapshotDecisionPresenter
 
 from kam_market_ai.account_read_only import (
     AccountReadOnlySource, CapitalSafetyAssessment, CapitalSafetyThresholds,
@@ -280,13 +282,19 @@ def _account_drawer_html() -> str:
 def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapshot | None = None) -> str:
     """Add a client-only Account Drawer around the existing read-only terminal."""
     snapshot = snapshot or OFFLINE_DEMO_MARKET_DATA_SOURCE.read_snapshot(DEFAULT_MARKET_PRODUCT)
-    html = _render_terminal_html(view, snapshot)
+    presentation = SelectedSnapshotDecisionPresenter().present(snapshot, view.demo)
+    demo = dict(view.demo or {})
+    bull_cells = presentation.control.bull_score
+    demo.update({"direction": presentation.direction.label, "direction_reason": presentation.direction.reason, "bull_score": bull_cells * 10 if bull_cells is not None else 50, "trend_health": presentation.trend_health.label, "next_step": presentation.next_step.label, "timeframes": tuple((item.timeframe, item.label) for item in presentation.timeframes), "u_stage": "U0" if presentation.cycle.state in {"closed", "halted", "invalid"} else "U3"})
+    html = _render_terminal_html(replace(view, demo=demo), snapshot)
     trigger = "<button id='account-drawer-trigger' class='account-chip account-drawer-trigger' type='button' aria-expanded='false' aria-controls='account-drawer'>期貨帳戶｜資金安全</button>"
     html = html.replace("<a class='account-chip' href='/account'>期貨帳戶｜資金安全</a>", trigger, 1)
     html = html.replace("<span class='header-readonly-note'>帳戶未連線・券商未連線・唯讀模式・模擬執行・禁止真實下單</span>", "", 1)
     banner_start = html.index("<div class='banner'>")
     banner_end = html.index("</div>", banner_start) + len("</div>")
-    html = html[:banner_start] + f"<div class='banner market-status-line' title='OFFLINE_DEMO'>{_market_status_line(snapshot)}</div>" + html[banner_end:]
+    html = html[:banner_start] + f"<div class='banner market-status-line' title='OFFLINE_DEMO'>離線示範行情｜{_market_status_line(snapshot)}</div>" + html[banner_end:]
+    html = html.replace("<h2>模擬委託建議</h2>", "<h2>模擬委託建議</h2><p>決策呈現已切換；模擬委託流程尚未接入此商品 snapshot。</p>", 1)
+    html = html.replace("<h2>模擬撮合結果</h2>", "<h2>模擬撮合結果</h2><p>決策呈現已切換；模擬委託流程尚未接入此商品 snapshot。</p>", 1)
     return html.replace("</main></body>", _account_drawer_html() + "</main></body>", 1)
 
 
