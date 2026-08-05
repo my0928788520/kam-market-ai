@@ -12,6 +12,18 @@ from .market_snapshot import (
     OfflineDemoMarketDataSource,
     TradingSession,
 )
+from .live_market_adapter import (
+    FakeLiveMarketDataClient,
+    LiveMarketAdapterConfig,
+    LiveMarketConnectionStatus,
+    LiveMarketDataAdapter,
+    LiveMarketDataClientProtocol,
+    LiveMarketDataError,
+    LiveMarketDataRecord,
+    LiveMarketReadStatus,
+    MarketSourceSelection,
+    select_market_data_source,
+)
 
 __all__ = [
     "DEFAULT_MARKET_PRODUCT",
@@ -24,4 +36,14 @@ __all__ = [
     "MarketSnapshotStatus",
     "OfflineDemoMarketDataSource",
     "TradingSession",
+    "FakeLiveMarketDataClient",
+    "LiveMarketAdapterConfig",
+    "LiveMarketConnectionStatus",
+    "LiveMarketDataAdapter",
+    "LiveMarketDataClientProtocol",
+    "LiveMarketDataError",
+    "LiveMarketDataRecord",
+    "LiveMarketReadStatus",
+    "MarketSourceSelection",
+    "select_market_data_source",
 ]

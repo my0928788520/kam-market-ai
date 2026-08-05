@@ -8,7 +8,7 @@ from enum import StrEnum
 from hashlib import sha256
 from json import dumps
 from re import fullmatch
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 
 DEFAULT_MARKET_PRODUCT = "TMF"
@@ -32,6 +32,8 @@ class MarketDataFreshness(StrEnum):
 
 class MarketDataSource(StrEnum):
     OFFLINE_DEMO = "OFFLINE_DEMO"
+    FAKE_LIVE = "FAKE_LIVE"
+    FUTURE_LIVE = "FUTURE_LIVE"
 
 
 class MarketSnapshotStatus(StrEnum):
@@ -42,6 +44,9 @@ class MarketSnapshotStatus(StrEnum):
     STALE = "STALE"
     EXPIRED = "EXPIRED"
     UNKNOWN = "UNKNOWN"
+    CLIENT_UNAVAILABLE = "CLIENT_UNAVAILABLE"
+    TIMEOUT = "TIMEOUT"
+    MALFORMED_PAYLOAD = "MALFORMED_PAYLOAD"
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,7 +107,14 @@ class MarketSnapshot:
     def __post_init__(self) -> None:
         status = self.status
         freshness = self.freshness
-        if self.product_code not in _PRODUCT_NAMES or self.instrument_name != _PRODUCT_NAMES.get(self.product_code):
+        terminal_adapter_failure = {
+            MarketSnapshotStatus.CLIENT_UNAVAILABLE,
+            MarketSnapshotStatus.TIMEOUT,
+            MarketSnapshotStatus.MALFORMED_PAYLOAD,
+        }
+        if status in terminal_adapter_failure:
+            freshness = MarketDataFreshness.UNKNOWN
+        elif self.product_code not in _PRODUCT_NAMES or self.instrument_name != _PRODUCT_NAMES.get(self.product_code):
             status = MarketSnapshotStatus.INVALID_PRODUCT
         elif self.contract_code is None or self.contract_month is None:
             status = MarketSnapshotStatus.INVALID_CONTRACT
@@ -111,7 +123,7 @@ class MarketSnapshot:
                 FuturesContractIdentity(self.product_code, self.contract_code, self.contract_month)
             except ValueError:
                 status = MarketSnapshotStatus.INVALID_CONTRACT
-        if status in {MarketSnapshotStatus.INVALID_PRODUCT, MarketSnapshotStatus.INVALID_CONTRACT}:
+        if status in terminal_adapter_failure | {MarketSnapshotStatus.INVALID_PRODUCT, MarketSnapshotStatus.INVALID_CONTRACT}:
             pass
         elif self.timestamp is None or self.observed_at is None or self.source_timestamp is None:
             status, freshness = MarketSnapshotStatus.INVALID_TIMESTAMP, MarketDataFreshness.UNKNOWN
@@ -167,6 +179,7 @@ class MarketSnapshot:
         return sha256(self.serialize().encode("utf-8")).hexdigest()
 
 
+@runtime_checkable
 class MarketDataReadOnlySource(Protocol):
     def read_snapshot(self, product_code: str) -> MarketSnapshot: ...
 
