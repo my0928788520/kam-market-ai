@@ -1,0 +1,13 @@
+:root {
+  --kam-bg:#08111f; --kam-card:#101c2d; --kam-card-border:#263954;
+  --kam-red:#ff3d52; --kam-red-soft:#9c2543; --kam-green:#37df80;
+  --kam-teal:#20c9b5; --kam-yellow:#f4c95d; --kam-blue:#9db5d8;
+  --kam-info:#65a9ff; --kam-neutral:#adc0db; --kam-text:#e5eefc;
+  --kam-font-page-title:26px; --kam-font-card-title:14px;
+  --kam-font-section:12px; --kam-font-body:12px; --kam-font-small:11px;
+  --kam-font-number:30px; --kam-radius:8px; --kam-card-padding:9px;
+  --kam-gap:7px; --kam-grid-gap:7px; --kam-header-height:52px;
+  --kam-footer-height:52px; --kam-core-row-height:190px;
+  --kam-timeframe-row-height:150px; --kam-decision-row-height:135px;
+  --kam-execution-row-min-height:210px;
+}
