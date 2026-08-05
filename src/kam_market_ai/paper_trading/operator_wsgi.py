@@ -46,6 +46,9 @@ def _cycle(view: PaperTradingOperatorView) -> str:
     index = _stage_index(raw)
     x, y = _POINTS[index]
     stage, state = _STAGES[index]
+    if demo.get("cycle_label") is not None:
+        stage = str(demo["cycle_label"])
+        state = str(demo["cycle_label"])
     previous = _STAGES[max(0, index - 1)][0]
     following = _STAGES[min(8, index + 1)][0]
     next_step = str(demo.get("next_step", "等待資料完整"))
@@ -285,7 +288,7 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
     presentation = SelectedSnapshotDecisionPresenter().present(snapshot, view.demo)
     demo = dict(view.demo or {})
     bull_cells = presentation.control.bull_score
-    demo.update({"direction": presentation.direction.label, "direction_reason": presentation.direction.reason, "bull_score": bull_cells * 10 if bull_cells is not None else 50, "trend_health": presentation.trend_health.label, "next_step": presentation.next_step.label, "timeframes": tuple((item.timeframe, item.label) for item in presentation.timeframes), "u_stage": "U0" if presentation.cycle.state in {"closed", "halted", "invalid"} else "U3"})
+    demo.update({"direction": presentation.direction.label, "direction_reason": presentation.direction.reason, "bull_score": bull_cells * 10 if bull_cells is not None else 50, "cycle_label": presentation.cycle.label, "trend_health": presentation.trend_health.label, "next_step": presentation.next_step.label, "timeframes": tuple((item.timeframe, item.label) for item in presentation.timeframes), "u_stage": "U0" if presentation.cycle.state in {"closed", "halted", "invalid"} else "U3"})
     html = _render_terminal_html(replace(view, demo=demo), snapshot)
     trigger = "<button id='account-drawer-trigger' class='account-chip account-drawer-trigger' type='button' aria-expanded='false' aria-controls='account-drawer'>期貨帳戶｜資金安全</button>"
     html = html.replace("<a class='account-chip' href='/account'>期貨帳戶｜資金安全</a>", trigger, 1)
@@ -318,5 +321,13 @@ def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], a
             start_response("404 Not Found", [("Content-Type", "text/plain; charset=utf-8")]); return ["找不到頁面。".encode()]
         query = parse_qs(str(environ.get("QUERY_STRING", "")), keep_blank_values=True)
         snapshot = market_data_source.read_snapshot(query.get("instrument", [DEFAULT_MARKET_PRODUCT])[0])
-        body = render_operator_html(view_provider(), snapshot).encode(); start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"), ("Content-Length", str(len(body)))]); return [body]
+        body = render_operator_html(view_provider(), snapshot)
+        runtime_mode = getattr(market_data_source, "mode", None)
+        runtime_status = getattr(market_data_source, "status", None)
+        if str(runtime_mode) == "fake-live":
+            label = "模擬即時行情｜WebSocket 模擬連線｜連線就緒" if str(runtime_status) == "READY" else "模擬即時行情｜連線降級｜資料不足／無法判讀"
+            body = body.replace("離線示範行情｜", label + "｜", 1)
+        elif str(runtime_mode) == "fugle-live":
+            body = body.replace("離線示範行情｜", "真實行情來源尚未啟用｜資料不足／無法判讀｜", 1)
+        body = body.encode(); start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"), ("Content-Length", str(len(body)))]); return [body]
     return app
