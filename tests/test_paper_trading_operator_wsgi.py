@@ -31,7 +31,7 @@ def test_wsgi_is_get_only_escapes_html_and_serves_static_css() -> None:
     def start(status, headers): response.update(status=status, headers=headers)
     body = b"".join(app({"REQUEST_METHOD": "GET", "PATH_INFO": "/"}, start)).decode()
     assert response["status"] == "200 OK" and "&lt;KAM&gt;" in body and "lang='zh-Hant-TW'" in body
-    assert "唯讀模式・模擬執行・禁止真實下單" in body and "Paper Order Proposal" not in body
+    assert "唯讀模式・禁止真實下單" in body and "Paper Order Proposal" not in body
     assert b"".join(app({"REQUEST_METHOD": "POST", "PATH_INFO": "/"}, start)) == "唯讀端點，不接受此操作。".encode("utf-8")
     assert response["status"] == "405 Method Not Allowed"
     assert b"body" in b"".join(app({"REQUEST_METHOD": "GET", "PATH_INFO": "/static/operator.css"}, start))
@@ -47,7 +47,7 @@ def test_account_page_is_get_only_demo_data_and_never_exposes_trading_endpoints(
 
     dashboard = b"".join(app({"REQUEST_METHOD": "GET", "PATH_INFO": "/"}, start)).decode()
     account = b"".join(app({"REQUEST_METHOD": "GET", "PATH_INFO": "/account"}, start)).decode()
-    assert "href='/account'>期貨帳戶｜資金安全" in dashboard
+    assert "id='account-drawer-trigger'" in dashboard and "期貨帳戶｜資金安全</button>" in dashboard
     assert response["status"] == "200 OK"
     for text in ("示範帳戶資料", "非真實帳戶", "唯讀模式", "禁止真實交易", "尚未連線"):
         assert text in account
@@ -144,6 +144,60 @@ def test_account_center_localizes_visible_status_source_and_read_only_settings()
         assert label in settings
     for key in ("initial_margin_multiplier", "minimum_free_margin", "maximum_margin_usage_ratio", "warning_buffer_amount"):
         assert key not in settings
+
+
+def test_terminal_header_uses_read_only_market_snapshots_and_get_instrument_selector() -> None:
+    app = build_operator_wsgi(_view)
+    response = {}
+
+    def start(status, headers):
+        response.update(status=status, headers=headers)
+
+    def get(query: str = "") -> str:
+        return b"".join(app({"REQUEST_METHOD": "GET", "PATH_INFO": "/", "QUERY_STRING": query}, start)).decode()
+
+    tmf = get()
+    assert response["status"] == "200 OK"
+    assert "TMF202610" in tmf and "24,108" in tmf and "82,514" in tmf
+    assert "微型臺指期貨" in tmf and "休市" in tmf
+    assert "微型臺指期貨・TMF｜TMF202610・202610｜最新 24,108・量 82,514" in tmf
+    assert "資料時間：2026-08-06 02:14｜休市｜帳戶未連線・券商未連線・唯讀模式・禁止真實下單" in tmf
+    assert "market-selector-chip active' href='/?instrument=TMF'" in tmf
+
+    tx = get("instrument=TX")
+    assert "TXF202609" in tx and "臺股期貨" in tx and "日盤" in tx and "14,872" in tx
+    assert "market-selector-chip active' href='/?instrument=TX'" in tx
+    mtx = get("instrument=MTX")
+    assert "MXF202609" in mtx and "小型臺指期貨" in mtx and "夜盤" in mtx and "39,761" in mtx
+    assert "market-selector-chip active' href='/?instrument=MTX'" in mtx
+
+    invalid = get("instrument=BAD")
+    assert "商品代碼無效" in invalid
+    assert "TMF202610" not in invalid and "TXF202609" not in invalid and "MXF202609" not in invalid
+    assert "未載入模擬委託建議" in invalid
+    assert "account_connected=false" not in invalid and "broker_connected=false" not in invalid
+    b"".join(app({"REQUEST_METHOD": "POST", "PATH_INFO": "/", "QUERY_STRING": "instrument=TX"}, start))
+    assert response["status"] == "405 Method Not Allowed"
+
+
+def test_terminal_account_drawer_is_closed_by_default_and_reuses_get_only_account_center() -> None:
+    html = render_operator_html(_view())
+    css = Path("src/kam_market_ai/paper_trading/static/operator.css").read_text(encoding="utf-8")
+
+    assert "id='account-drawer-trigger'" in html
+    assert "aria-expanded='false'" in html and "aria-controls='account-drawer'" in html
+    assert "id='account-drawer'" in html and "role='dialog'" in html and "aria-modal='true'" in html
+    assert "src='/account?view=overview'" in html
+    for tab in ("帳戶總覽", "資金水位", "商品部位", "設定"):
+        assert tab in html
+    assert "開啟完整帳戶中心" in html and "href='/account'" in html
+    assert "data-account-drawer-close" in html and "event.key==='Escape'" in html
+    assert "trigger.focus()" in html
+    for text in ("帳戶未連線", "券商未連線", "交易功能停用", "禁止真實下單", "緊急停止未啟動"):
+        assert text in html
+    assert "position: fixed" in css and "width: clamp(520px, 42vw, 720px)" in css
+    assert "transform: translateX(102%)" in css and "transition: transform 190ms ease" in css
+    assert "calc(100vw - 24px)" in css
 
 
 def test_dashboard_renders_real_control_cells_and_coloured_cycle_structure() -> None:

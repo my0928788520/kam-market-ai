@@ -7,6 +7,14 @@ from pathlib import Path
 from typing import Callable, Iterable
 from urllib.parse import parse_qs
 
+from kam_market_ai.live_read_only.market_snapshot import (
+    DEFAULT_MARKET_PRODUCT,
+    OFFLINE_DEMO_MARKET_DATA_SOURCE,
+    MarketDataReadOnlySource,
+    MarketSnapshot,
+    MarketSnapshotStatus,
+)
+
 from kam_market_ai.account_read_only import (
     AccountReadOnlySource, CapitalSafetyAssessment, CapitalSafetyThresholds,
     DEMO_ACCOUNT_SOURCE, DEMO_ACCOUNT_THRESHOLDS, DEMO_MARGIN_SOURCE,
@@ -218,7 +226,71 @@ def render_account_html(source: AccountReadOnlySource = DEMO_ACCOUNT_SOURCE, thr
     return f"""<!doctype html><html lang='zh-Hant-TW'><head><meta charset='utf-8'><title>KAM 帳戶中心</title><link rel='stylesheet' href='/static/operator.css'></head><body><main class='account-main'><header><div><h1>KAM 帳戶中心</h1><small>期貨帳戶｜資金安全</small></div><a class='account-chip' href='/'>返回市場儀表板</a><span>唯讀模式・禁止真實交易</span></header><div class='account-banner'>示範帳戶資料・非真實帳戶・唯讀模式・禁止真實交易</div><nav class='account-tabs' aria-label='帳戶檢視'>{tabs}</nav>{content}<footer class='account-status-footer'><span>{account}</span><span>{broker}</span><span>交易功能停用</span><span>禁止真實下單</span><span>{emergency}</span></footer></main></body></html>"""
 
 
-def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], account_source: AccountReadOnlySource = DEMO_ACCOUNT_SOURCE, account_thresholds: CapitalSafetyThresholds = DEMO_ACCOUNT_THRESHOLDS, margin_source: MarginRequirementSource = DEMO_MARGIN_SOURCE) -> Callable[..., Iterable[bytes]]:
+def _market_snapshot_header(snapshot: MarketSnapshot) -> str:
+    session = {"DAY": "日盤", "NIGHT": "夜盤", "CLOSED": "休市", "UNKNOWN": "資料不足／無法判讀"}[snapshot.trading_session.value]
+    freshness = {"FRESH": "資料新鮮", "STALE": "資料延遲", "EXPIRED": "資料過期", "UNKNOWN": "資料不足／無法判讀"}[snapshot.freshness.value]
+    market = {"OPEN": "交易中", "HALTED": "暫停交易", "CLOSED": "休市", "UNKNOWN": "資料不足／無法判讀"}.get(snapshot.market_status, snapshot.market_status)
+    selected = snapshot.product_code
+    selector = "".join(
+        f"<a class='market-selector-chip {'active' if code == selected else ''}' href='/?instrument={code}'>{label}</a>"
+        for code, label in (("TX", "大台 TX"), ("MTX", "小台 MTX"), ("TMF", "微台 TMF"))
+    )
+    return f"<div class='market-selector' aria-label='商品切換'>{selector}</div>"
+    if snapshot.status is MarketSnapshotStatus.INVALID_PRODUCT:
+        fields = "<span class='market-invalid'>商品代碼無效</span>"
+    else:
+        fields = "".join((
+            f"<span class='market-chip'>{escape(snapshot.instrument_name)} · {escape(snapshot.product_code)}</span>",
+            f"<span class='market-chip'>{escape(snapshot.contract_code or '—')}／{escape(snapshot.contract_month or '—')}</span>",
+            f"<span class='market-chip'>最新：{escape(_money(snapshot.last_price))} · 量：{escape(_money(snapshot.volume))}</span>",
+            f"<span class='market-chip'>資料時間：{escape(str(snapshot.timestamp or '—'))}</span>",
+            f"<span class='market-chip'>{session} · {market} · {freshness}</span>",
+            "<span class='market-chip' title='OFFLINE_DEMO'>離線示範行情</span>",
+        ))
+    return f"<div class='market-selector' aria-label='商品切換'>{selector}</div><div class='market-snapshot-fields'>{fields}</div>"
+
+
+def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapshot | None = None) -> str:
+    """Render existing terminal cards plus a read-only market snapshot header only."""
+    snapshot = snapshot or OFFLINE_DEMO_MARKET_DATA_SOURCE.read_snapshot(DEFAULT_MARKET_PRODUCT)
+    demo = view.demo or {}
+    bull, cells = _cells(view)
+    frames = "".join(_timeframe_card(name, state) for name, state in demo.get("timeframes", ()))
+    audit = "".join(f"<li title='{escape(item['hash'])}'>{escape(item['type'])} · {escape(item['hash'][:10])}</li>" for item in view.audit_events[-3:])
+    proposal = "<section class='proposal'><h2>模擬委託建議</h2><dl>{}</dl></section>".format(_rows(view.proposal))
+    if snapshot.status is MarketSnapshotStatus.INVALID_PRODUCT:
+        proposal = "<section class='proposal'><h2>模擬委託建議</h2><p>商品代碼無效，未載入模擬委託建議。</p></section>"
+    return f"""<!doctype html><html lang='zh-Hant-TW'><head><meta charset='utf-8'><title>{escape(view.title)}</title><link rel='stylesheet' href='/static/operator.css'></head><body><main><header><h1>{escape(view.title)}</h1><a class='account-chip' href='/account'>期貨帳戶｜資金安全</a>{_market_snapshot_header(snapshot)}<span class='header-readonly-note'>帳戶未連線・券商未連線・唯讀模式・模擬執行・禁止真實下單</span></header><div class='banner'>{escape(str(demo.get('banner', '尚未載入模擬委託建議。本機頁面目前為唯讀模式。')))} · 目前僅 Header 已切換至離線示範行情；決策卡尚未接入此商品 snapshot。</div><div class='dashboard'><section class='direction-card'><h2>市場方向</h2><strong>{escape(str(demo.get('direction', '—')))}</strong><p>{escape(str(demo.get('direction_reason', '尚未載入方向資料')))}</p></section><section class='control-card'><h2>多空控制權</h2><strong>多方 {bull}｜空方 {10-bull}</strong><small>控制權分裂</small><div class='control-cells'>{cells}</div></section>{_cycle(view)}<section class='timeframes'><h2>五週期狀態</h2><div>{frames}</div></section><section><h2>趨勢健康度</h2><strong>{escape(str(demo.get('trend_health', '—')))}</strong></section><section><h2>目前模擬部位</h2><strong>{escape(str(demo.get('position', '無部位')))}</strong><p>現價 {escape(str(demo.get('current_price', '—')))} · 未實現 {escape(str(demo.get('unrealized_pnl', '—')))}</p></section><section class='next-card next-wait'><h2>唯一下一步</h2><strong>{escape(str(demo.get('next_step', '等待資料完整')))}</strong></section>{proposal}<section class='matching'><h2>模擬撮合結果</h2><dl>{_rows(view.matching)}</dl></section></div><footer><span>模擬現金：{escape(str(view.ledger.get('cash', '—')))}</span><span>模擬部位：{escape(str(view.ledger.get('positions', '—')))}</span><span>已實現損益：—</span><span>未實現損益：{escape(str(demo.get('unrealized_pnl', '—')))}</span><span>緊急停止：{'已啟動' if view.emergency_stop else '未啟動'}</span><span class='audit'>稽核紀錄：{audit}</span></footer></main></body></html>"""
+
+
+_render_terminal_html = render_operator_html
+
+
+def _market_status_line(snapshot: MarketSnapshot) -> str:
+    if snapshot.status is MarketSnapshotStatus.INVALID_PRODUCT:
+        return "商品代碼無效｜帳戶未連線・券商未連線・唯讀模式・禁止真實下單"
+    session = {"DAY": "日盤", "NIGHT": "夜盤", "CLOSED": "休市", "UNKNOWN": "資料不足／無法判讀"}[snapshot.trading_session.value]
+    return f"{snapshot.instrument_name}・{snapshot.product_code}｜{snapshot.contract_code}・{snapshot.contract_month}｜最新 {_money(snapshot.last_price)}・量 {_money(snapshot.volume)}<br>資料時間：{str(snapshot.timestamp or '—')[:16].replace('T', ' ')}｜{session}｜帳戶未連線・券商未連線・唯讀模式・禁止真實下單"
+
+
+def _account_drawer_html() -> str:
+    return """<div class='account-drawer-backdrop' data-account-drawer-close hidden></div><aside id='account-drawer' class='account-drawer' role='dialog' aria-modal='true' aria-labelledby='account-drawer-title' aria-hidden='true'><header class='account-drawer-header'><div><h2 id='account-drawer-title'>期貨帳戶｜資金安全</h2><p>示範帳戶・唯讀模式・禁止真實交易</p></div><button type='button' class='account-drawer-close' data-account-drawer-close aria-label='關閉帳戶抽屜'>關閉</button></header><nav class='account-drawer-tabs' aria-label='帳戶檢視'><a href='/account?view=overview' target='account-drawer-frame'>帳戶總覽</a><a href='/account?view=water-level' target='account-drawer-frame'>資金水位</a><a href='/account?view=position&amp;instrument=TMF' target='account-drawer-frame'>商品部位</a><a href='/account?view=settings' target='account-drawer-frame'>設定</a></nav><iframe class='account-drawer-frame' name='account-drawer-frame' title='KAM 帳戶中心唯讀內容' src='/account?view=overview'></iframe><footer class='account-drawer-footer'><span>帳戶未連線</span><span>券商未連線</span><span>交易功能停用</span><span>禁止真實下單</span><span>緊急停止未啟動</span><a href='/account'>開啟完整帳戶中心</a></footer></aside><script>(function(){const trigger=document.getElementById('account-drawer-trigger'),drawer=document.getElementById('account-drawer'),backdrop=document.querySelector('.account-drawer-backdrop'),close=()=>{drawer.classList.remove('is-open');drawer.setAttribute('aria-hidden','true');backdrop.hidden=true;trigger.setAttribute('aria-expanded','false');trigger.focus()},open=()=>{drawer.classList.add('is-open');drawer.setAttribute('aria-hidden','false');backdrop.hidden=false;trigger.setAttribute('aria-expanded','true');drawer.querySelector('.account-drawer-close').focus()};trigger.addEventListener('click',()=>drawer.classList.contains('is-open')?close():open());document.querySelectorAll('[data-account-drawer-close]').forEach(item=>item.addEventListener('click',close));document.addEventListener('keydown',event=>{if(event.key==='Escape'&&drawer.classList.contains('is-open'))close()})})();</script>"""
+
+
+def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapshot | None = None) -> str:
+    """Add a client-only Account Drawer around the existing read-only terminal."""
+    snapshot = snapshot or OFFLINE_DEMO_MARKET_DATA_SOURCE.read_snapshot(DEFAULT_MARKET_PRODUCT)
+    html = _render_terminal_html(view, snapshot)
+    trigger = "<button id='account-drawer-trigger' class='account-chip account-drawer-trigger' type='button' aria-expanded='false' aria-controls='account-drawer'>期貨帳戶｜資金安全</button>"
+    html = html.replace("<a class='account-chip' href='/account'>期貨帳戶｜資金安全</a>", trigger, 1)
+    html = html.replace("<span class='header-readonly-note'>帳戶未連線・券商未連線・唯讀模式・模擬執行・禁止真實下單</span>", "", 1)
+    banner_start = html.index("<div class='banner'>")
+    banner_end = html.index("</div>", banner_start) + len("</div>")
+    html = html[:banner_start] + f"<div class='banner market-status-line' title='OFFLINE_DEMO'>{_market_status_line(snapshot)}</div>" + html[banner_end:]
+    return html.replace("</main></body>", _account_drawer_html() + "</main></body>", 1)
+
+
+def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], account_source: AccountReadOnlySource = DEMO_ACCOUNT_SOURCE, account_thresholds: CapitalSafetyThresholds = DEMO_ACCOUNT_THRESHOLDS, margin_source: MarginRequirementSource = DEMO_MARGIN_SOURCE, market_data_source: MarketDataReadOnlySource = OFFLINE_DEMO_MARKET_DATA_SOURCE) -> Callable[..., Iterable[bytes]]:
     css_path = Path(__file__).with_name("static") / "operator.css"
     def app(environ: dict[str, object], start_response: Callable[..., object]) -> Iterable[bytes]:
         path, method = str(environ.get("PATH_INFO", "/")), str(environ.get("REQUEST_METHOD", "GET"))
@@ -236,5 +308,7 @@ def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], a
             return [body]
         if path != "/":
             start_response("404 Not Found", [("Content-Type", "text/plain; charset=utf-8")]); return ["找不到頁面。".encode()]
-        body = render_operator_html(view_provider()).encode(); start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"), ("Content-Length", str(len(body)))]); return [body]
+        query = parse_qs(str(environ.get("QUERY_STRING", "")), keep_blank_values=True)
+        snapshot = market_data_source.read_snapshot(query.get("instrument", [DEFAULT_MARKET_PRODUCT])[0])
+        body = render_operator_html(view_provider(), snapshot).encode(); start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"), ("Content-Length", str(len(body)))]); return [body]
     return app
