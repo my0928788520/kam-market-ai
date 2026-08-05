@@ -1,11 +1,25 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
+import re
 
 from kam_market_ai.paper_trading.operator_presenter import PaperTradingOperatorView
-from kam_market_ai.paper_trading.operator_wsgi import build_operator_wsgi, render_operator_html
+from kam_market_ai.paper_trading.operator_wsgi import build_operator_wsgi, render_account_html, render_operator_html
 from kam_market_ai.paper_trading.demo_proposal import build_demo_session
 from kam_market_ai.paper_trading.demo_snapshot import DEMO_SNAPSHOT
 from kam_market_ai.paper_trading.operator_presenter import build_demo_operator_presenter
+from kam_market_ai.account_read_only import (
+    AccountDataFreshness,
+    AccountFunds,
+    AccountPositionSummary,
+    CapitalSafetyThresholds,
+    DEMO_ACCOUNT_SOURCE,
+    DemoAccountReadOnlySource,
+    DemoMarginRequirementSource,
+    FuturesAccountSnapshot,
+    MarginRequirement,
+    MarginUsage,
+)
 
 
 def _view() -> PaperTradingOperatorView:
@@ -22,6 +36,114 @@ def test_wsgi_is_get_only_escapes_html_and_serves_static_css() -> None:
     assert response["status"] == "405 Method Not Allowed"
     assert b"body" in b"".join(app({"REQUEST_METHOD": "GET", "PATH_INFO": "/static/operator.css"}, start))
     assert "<KAM>" not in render_operator_html(_view())
+
+
+def test_account_page_is_get_only_demo_data_and_never_exposes_trading_endpoints() -> None:
+    app = build_operator_wsgi(_view)
+    response = {}
+
+    def start(status, headers):
+        response.update(status=status, headers=headers)
+
+    dashboard = b"".join(app({"REQUEST_METHOD": "GET", "PATH_INFO": "/"}, start)).decode()
+    account = b"".join(app({"REQUEST_METHOD": "GET", "PATH_INFO": "/account"}, start)).decode()
+    assert "href='/account'>期貨帳戶｜資金安全" in dashboard
+    assert response["status"] == "200 OK"
+    for text in ("示範帳戶資料", "非真實帳戶", "唯讀模式", "禁止真實交易", "尚未連線"):
+        assert text in account
+    assert DEMO_ACCOUNT_SOURCE.snapshot.account_connected is False
+    for status in ("帳戶未連線", "券商未連線", "交易功能停用", "禁止真實下單", "緊急停止"):
+        assert status in account
+    for internal_flag in ("account_connected=false", "live_order_allowed=false", "broker_connected=false", "trading_enabled=false"):
+        assert internal_flag not in account
+    assert "1,000,000" in account and "1000000" not in account
+    b"".join(app({"REQUEST_METHOD": "POST", "PATH_INFO": "/account"}, start))
+    assert response["status"] == "405 Method Not Allowed"
+    b"".join(app({"REQUEST_METHOD": "GET", "PATH_INFO": "/account/order"}, start))
+    assert response["status"] == "404 Not Found"
+
+
+def test_account_page_calculates_all_position_margins_from_injected_read_only_source() -> None:
+    timestamp = datetime(2026, 8, 5, tzinfo=UTC)
+    snapshot = FuturesAccountSnapshot(
+        "測試帳戶", "••••-1234",
+        AccountFunds(Decimal("1000000"), Decimal("700000"), Decimal("1"), Decimal("0"), Decimal("1"), Decimal("0"), Decimal("0")),
+        MarginUsage(Decimal("0")),
+        (
+            AccountPositionSummary("TX", "大台 TX", Decimal("1"), "LONG", Decimal("0")),
+            AccountPositionSummary("MTX", "小台 MTX", Decimal("-2"), "SHORT", Decimal("0")),
+            AccountPositionSummary("TMF", "微台 TMF", Decimal("3"), "LONG", Decimal("0")),
+        ),
+        "fixture-account", timestamp, AccountDataFreshness.FRESH, account_connected=True,
+    )
+    margin_source = DemoMarginRequirementSource((
+        MarginRequirement("TX", Decimal("636000"), Decimal("488000"), timestamp, "fixture-margin", timestamp, AccountDataFreshness.FRESH),
+        MarginRequirement("MTX", Decimal("159000"), Decimal("122000"), timestamp, "fixture-margin", timestamp, AccountDataFreshness.FRESH),
+        MarginRequirement("TMF", Decimal("31800"), Decimal("24400"), timestamp, "fixture-margin", timestamp, AccountDataFreshness.FRESH),
+    ))
+
+    html = render_account_html(
+        DemoAccountReadOnlySource(snapshot),
+        CapitalSafetyThresholds(Decimal("0.5"), Decimal("0.75")),
+        margin_source,
+        selected_view="water-level",
+    )
+
+    assert "1,049,400" in html and "805,200" in html
+    assert "fixture-margin" in html
+    assert "詳細資料" in html
+
+
+def test_account_center_get_tabs_detail_and_instrument_validation_are_fail_closed() -> None:
+    app = build_operator_wsgi(_view)
+    response = {}
+
+    def start(status, headers):
+        response.update(status=status, headers=headers)
+
+    def get(query: str = "") -> str:
+        return b"".join(app({"REQUEST_METHOD": "GET", "PATH_INFO": "/account", "QUERY_STRING": query}, start)).decode()
+
+    overview = get()
+    assert response["status"] == "200 OK"
+    for label in ("帳戶總覽", "資金水位", "商品部位", "設定"):
+        assert label in overview
+    assert "全部持倉所需原始保證金" not in overview
+
+    water = get("view=water-level")
+    assert "全部持倉所需原始保證金" in water and "顯示詳細資料" in water
+    assert "保證金詳細資料" not in water
+    assert "保證金詳細資料" in get("view=water-level&detail=1")
+
+    tmf = get("view=position")
+    assert "契約代碼" in tmf and "TMF" in tmf
+    assert "大台 TX" in tmf and "小台 MTX" in tmf and "微台 TMF" in tmf
+    assert "商品代碼無效" in get("view=position&instrument=BAD")
+    assert "檢視項目無效" in get("view=unsupported")
+    for internal in ("account_connected=false", "live_order_allowed=false", "broker_connected=false", "trading_enabled=false"):
+        assert internal not in overview
+
+
+def test_account_center_localizes_visible_status_source_and_read_only_settings() -> None:
+    html = render_account_html()
+    visible = re.sub(r"\s(?:title|data-[\w-]+)='[^']*'", "", html)
+
+    assert html.count("<section class='account-content'>") == 1
+    assert "KAM 帳戶中心" in visible
+    assert "離線示範帳戶快照" in visible
+    assert "offline-demo-account-snapshot" not in visible
+    assert "UNKNOWN" not in visible
+
+    water = render_account_html(selected_view="water-level")
+    visible_water = re.sub(r"\s(?:title|data-[\w-]+)='[^']*'", "", water)
+    assert "資料不足／無法判讀" in visible_water
+    assert "UNKNOWN" not in visible_water
+
+    settings = render_account_html(selected_view="settings")
+    for label in ("原始保證金倍數", "最低可用保證金", "最高資金使用率", "警示緩衝金額"):
+        assert label in settings
+    for key in ("initial_margin_multiplier", "minimum_free_margin", "maximum_margin_usage_ratio", "warning_buffer_amount"):
+        assert key not in settings
 
 
 def test_dashboard_renders_real_control_cells_and_coloured_cycle_structure() -> None:
