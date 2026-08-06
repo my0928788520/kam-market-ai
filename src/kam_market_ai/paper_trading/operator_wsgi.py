@@ -301,14 +301,39 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
     return html.replace("</main></body>", _account_drawer_html() + "</main></body>", 1)
 
 
-def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], account_source: AccountReadOnlySource = DEMO_ACCOUNT_SOURCE, account_thresholds: CapitalSafetyThresholds = DEMO_ACCOUNT_THRESHOLDS, margin_source: MarginRequirementSource = DEMO_MARGIN_SOURCE, market_data_source: MarketDataReadOnlySource = OFFLINE_DEMO_MARKET_DATA_SOURCE) -> Callable[..., Iterable[bytes]]:
+def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], account_source: AccountReadOnlySource = DEMO_ACCOUNT_SOURCE, account_thresholds: CapitalSafetyThresholds = DEMO_ACCOUNT_THRESHOLDS, margin_source: MarginRequirementSource = DEMO_MARGIN_SOURCE, market_data_source: MarketDataReadOnlySource = OFFLINE_DEMO_MARKET_DATA_SOURCE, public_embed_config=None) -> Callable[..., Iterable[bytes]]:
+    from kam_market_ai.live_read_only.decision_presentation import SelectedSnapshotDecisionPresenter
+    from kam_market_ai.live_read_only.runtime_market_source import RuntimeMarketSourceStatus
+    from kam_market_ai.paper_trading.embed_presenter import EmbedPagePresenter
+    from kam_market_ai.paper_trading.public_routes import build_health_response
+    from kam_market_ai.public_deployment import PublicEmbedConfig
+    public_embed_config = public_embed_config or PublicEmbedConfig()
     css_path = Path(__file__).with_name("static") / "operator.css"
     def app(environ: dict[str, object], start_response: Callable[..., object]) -> Iterable[bytes]:
         path, method = str(environ.get("PATH_INFO", "/")), str(environ.get("REQUEST_METHOD", "GET"))
+        headers = [("Content-Security-Policy", public_embed_config.content_security_policy), ("X-Content-Type-Options", "nosniff"), ("Referrer-Policy", "strict-origin-when-cross-origin"), ("Permissions-Policy", "geolocation=(), camera=(), microphone=()"), ("Cache-Control", "no-store")]
+        if path == "/healthz" and method == "GET":
+            response = build_health_response(); body = response.body.encode()
+            start_response("200 OK", [("Content-Type", response.content_type), *headers]); return [body]
+        if path == "/readyz" and method == "GET":
+            ready = str(getattr(market_data_source, "status", "READY")) == "READY" and str(getattr(market_data_source, "mode", "offline-demo")) != "fugle-live"
+            body = (b'{"status":"ready","source_mode":"offline-demo","trading_enabled":false}' if ready else b'{"status":"not_ready","trading_enabled":false}')
+            start_response("200 OK" if ready else "503 Service Unavailable", [("Content-Type", "application/json; charset=utf-8"), *headers]); return [body]
         if method != "GET":
             start_response("405 Method Not Allowed", [("Content-Type", "text/plain; charset=utf-8"), ("Allow", "GET")]); return ["唯讀端點，不接受此操作。".encode()]
         if path == "/static/operator.css":
             start_response("200 OK", [("Content-Type", "text/css; charset=utf-8")]); return [css_path.read_bytes()]
+        if path == "/embed":
+            if not public_embed_config.enable_embed:
+                start_response("404 Not Found", [("Content-Type", "text/plain; charset=utf-8"), *headers]); return [b"Not found"]
+            query = parse_qs(str(environ.get("QUERY_STRING", "")), keep_blank_values=True)
+            selected = query.get("instrument", [DEFAULT_MARKET_PRODUCT])[0]
+            snapshot = market_data_source.read_snapshot(selected)
+            decision = SelectedSnapshotDecisionPresenter().present(snapshot)
+            runtime_status = getattr(market_data_source, "status", RuntimeMarketSourceStatus.READY)
+            model = EmbedPagePresenter().build_model(snapshot, decision, runtime_status, public_embed_config, selected, public_embed_config.enable_account_drawer)
+            body = EmbedPagePresenter().render(model).encode()
+            start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"), *headers]); return [body]
         if path == "/account":
             query = parse_qs(str(environ.get("QUERY_STRING", "")), keep_blank_values=True)
             selected_view = query.get("view", ["overview"])[0]
