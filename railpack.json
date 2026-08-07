@@ -9,5 +9,10 @@
       "commands": ["...", "python -m pip install ."],
       "deployOutputs": ["."]
     }
+  },
+  "deploy": {
+    "variables": {
+      "PYTHONPATH": "/app/src"
+    }
   }
 }
