@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from wsgiref.simple_server import make_server
 import argparse
+import os
 
 from kam_market_ai.paper_trading.operator_app import create_operator_app
 from kam_market_ai.paper_trading.operator_presenter import PaperTradingOperatorView
@@ -21,6 +22,8 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("offline-demo", "fake-live", "fugle-live"),
         default="offline-demo",
     )
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")))
     return parser
 
 
@@ -47,7 +50,7 @@ def build_operator_application(args: argparse.Namespace):
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     app = build_operator_application(args)
-    with make_server("127.0.0.1", 8000, app) as server:
+    with make_server(args.host, args.port, app) as server:
         print("KAM 模擬交易操作台：http://127.0.0.1:8000/")
         server.serve_forever()
     return 0

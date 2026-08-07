@@ -1,0 +1,10 @@
+[build]
+builder = "NIXPACKS"
+buildCommand = "python -m pip install ."
+
+[deploy]
+startCommand = "python tools/run_paper_trading_operator.py --kam-rule-demo --market-source offline-demo --host 0.0.0.0"
+healthcheckPath = "/healthz"
+healthcheckTimeout = 100
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
