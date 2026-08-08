@@ -222,9 +222,12 @@ def test_dashboard_renders_real_control_cells_and_coloured_cycle_structure() -> 
     assert "preserveAspectRatio='xMidYMid meet'" in html
     for field in ("目前位置", "循環狀態", "上一階段", "下一階段", "唯一下一步", "風險"):
         assert field in html
-    assert html.count("class='timeframe-card'") == 5
-    for timeframe in ("週線", "日線", "60 分", "15 分", "5 分"):
+    assert html.count("class='timeframe-card'") == 4
+    assert "四週期狀態" in html
+    for timeframe in ("週線", "日線", "60 分", "15 分"):
         assert timeframe in html
+    assert "<b>5 分</b>" not in html
+    assert len(view.demo["timeframes"]) == 5
     for footer_field in ("已實現損益", "未實現損益", "緊急停止"):
         assert footer_field in html
     for label in ("低檔確認", "起漲形成", "多方延伸", "高檔回落", "起跌形成", "空方延伸", "低點止跌"):
@@ -258,6 +261,7 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert ".cycle-chart svg" in css and "height: 180px" in css
     assert "marker-breathe 5s" in css
     assert ".proposal dd, .matching dd" in css and "text-overflow: ellipsis" in css
+    assert "grid-template-columns: repeat(4, minmax(0, 1fr))" in css
     assert "justify-content: center" in css and "border-radius: 7px" in css
     bull_rule = css.split(".control-cell.bull", 1)[1].split(".control-cell.bear", 1)[0]
     bear_rule = css.split(".control-cell.bear", 1)[1]

@@ -46,7 +46,7 @@ def test_reserved_source_renders_all_six_decision_blocks_fail_closed_without_dem
     for text in (
         "市場方向", "資料不足／無法判讀",
         "多空控制權", "不可判讀",
-        "市場循環位置", "五週期狀態", "等待資料",
+        "市場循環位置", "四週期狀態", "等待資料",
         "趨勢健康度", "唯一下一步", "等待資料恢復",
     ):
         assert text in html
