@@ -1,27 +1,17 @@
 {
-    "$schema":  "https://schema.railpack.com",
-    "provider":  "python",
-    "packages":  {
-                     "python":  "3.12"
-                 },
-    "steps":  {
-                  "install":  {
-                                  "commands":  [
-                                                   "...",
-                                                   "python -m pip install ."
-                                               ],
-                                  "deployOutputs":  [
-                                                        {
-                                                            "include":  [
-                                                                            "."
-                                                                        ]
-                                                        }
-                                                    ]
-                              }
-              },
-    "deploy":  {
-                   "variables":  {
-                                     "PYTHONPATH":  "/app/src"
-                                 }
-               }
+  "$schema": "https://schema.railpack.com",
+  "provider": "python",
+  "packages": {
+    "python": "3.12"
+  },
+  "steps": {
+    "build": {
+      "commands": ["...", "python -m pip install ."]
+    }
+  },
+  "deploy": {
+    "variables": {
+      "PYTHONPATH": "/app/src"
+    }
+  }
 }
