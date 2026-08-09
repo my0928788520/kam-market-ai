@@ -70,6 +70,20 @@ $env:PYTHONPATH = "src"
 
 只有本人在本機明確決定進行最小唯讀授權時，才使用 `--live`。該流程只建立已授權的 market-data clients，沒有訂閱、REST 請求或下單邏輯；授權層與 KAM engine／adapter 完全分離。
 
+### Sprint 9A：富邦期貨真實行情唯讀探針
+
+先依富邦官方下載頁在 Windows 本機安裝對應 Python 版本的 Fubon Neo SDK，並完成上方 `.env`；不要把任何秘密貼到聊天室。請只在臺灣期貨市場有成交的時段執行：
+
+```powershell
+$env:PYTHONPATH = "src"
+& ".\.venv\Scripts\python.exe" -m kam_market_ai.market_data.futures_live_probe_cli `
+    --live `
+    --duration-seconds 30 `
+    --verify-reconnect
+```
+
+驗證夜盤時再加上 `--after-hours`。成功條件是 TX、MTX、TMF 都能辨識唯一活動契約、收到新鮮 `trades` 資料，並完成 channel-ID 取消訂閱、斷線及受控重連。此工具只驗證市場行情；不讀帳戶、不顯示資金、不下單，也不會把真實憑證送到 Railway。
+
 ## 專案結構
 
 ```text
