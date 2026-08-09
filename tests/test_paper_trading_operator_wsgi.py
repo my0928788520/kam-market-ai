@@ -262,6 +262,10 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert "marker-breathe 5s" in css
     assert ".proposal dd, .matching dd" in css and "text-overflow: ellipsis" in css
     assert "grid-template-columns: repeat(4, minmax(0, 1fr))" in css
+    assert ".timeframes { grid-column: 1 / 3; grid-row: 2; padding: 8px 13px; }" in css
+    assert ".timeframes h2 { margin-bottom: 5px; }" in css
+    assert ".timeframe-card { padding: 5px 7px; overflow: hidden;" in css
+    assert ".timeframe-card small { display: block; margin: 0;" in css
     assert "justify-content: center" in css and "border-radius: 7px" in css
     bull_rule = css.split(".control-cell.bull", 1)[1].split(".control-cell.bear", 1)[0]
     bear_rule = css.split(".control-cell.bear", 1)[1]
