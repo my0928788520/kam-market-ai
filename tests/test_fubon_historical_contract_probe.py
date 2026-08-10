@@ -55,7 +55,7 @@ def test_probe_records_signature_without_invoking_endpoint() -> None:
     assert history.calls == 0
     assert result.endpoint_invoked is False
     assert result.trading_enabled is False
-    assert result.schema_version == "2.0"
+    assert result.schema_version == "3.0"
     assert [item["name"] for item in result.candles_parameters] == ["symbol", "timeframe"]
     assert result.candles_parameters[0]["required"] == "true"
     assert len(result.fingerprint_sha256) == 64
@@ -63,6 +63,7 @@ def test_probe_records_signature_without_invoking_endpoint() -> None:
     assert result.candles_evidence["code_available"] is True
     assert result.request_evidence["parameters"][0]["name"] == "method"
     assert "base_url" in result.config_members
+    assert result.candles_instructions
 
 
 def test_probe_is_deterministic_and_contains_no_runtime_objects() -> None:
@@ -107,6 +108,35 @@ def test_probe_filters_code_strings_without_invoking_callable() -> None:
     assert "/historical/candles/{symbol}" in strings
     assert "api_token" not in strings
     assert not any(value.startswith("https:") for value in strings)
+
+
+def test_probe_records_sanitized_parameter_flow_without_secret_literals() -> None:
+    class EvidenceHistorical(Historical):
+        def candles(self, **params: object) -> object:
+            symbol = params.pop("symbol")
+            secret = "api_token"
+            url = "https://marketdata.example.invalid"
+            assert secret and url
+            return self.request(f"historical/candles/{symbol}", **params)
+
+    authorized, history = clients(EvidenceHistorical())
+    result = probe_fubon_historical_contract(authorized)
+    instructions = result.candles_instructions
+    assert history.calls == 0
+    assert any(item == {"opname": "LOAD_CONST", "safe_arg": "symbol"} for item in instructions)
+    assert any(item == {"opname": "LOAD_FAST", "safe_arg": "params"} for item in instructions)
+    assert any(item["opname"] in {"DICT_MERGE", "DICT_UPDATE"} for item in instructions)
+    serialized = json.dumps(instructions)
+    assert "api_token" not in serialized
+    assert "marketdata.example.invalid" not in serialized
+
+
+def test_probe_emits_no_instructions_when_callable_has_no_python_code() -> None:
+    history = Historical()
+    history.candles = len  # type: ignore[method-assign]
+    authorized, _ = clients(history)
+    result = probe_fubon_historical_contract(authorized)
+    assert result.candles_instructions == ()
 
 
 def test_probe_fails_closed_when_request_is_not_callable() -> None:

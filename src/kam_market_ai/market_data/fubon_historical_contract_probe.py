@@ -7,6 +7,7 @@ an SDK-specific mapper can be implemented from retained evidence, not guesses.
 
 from __future__ import annotations
 
+import dis
 import hashlib
 import inspect
 import json
@@ -96,6 +97,42 @@ def _callable_evidence(value: object, *, error_prefix: str) -> Mapping[str, Any]
     return evidence
 
 
+def _instruction_evidence(value: object) -> tuple[Mapping[str, Any], ...]:
+    """Return sanitized bytecode instructions without constants that may hold secrets."""
+    code = getattr(value, "__code__", None)
+    if code is None:
+        return ()
+    safe: list[Mapping[str, Any]] = []
+    try:
+        instructions = dis.get_instructions(value)
+    except (TypeError, ValueError) as error:
+        raise HistoricalContractProbeError("CANDLES_INSTRUCTIONS_UNAVAILABLE") from error
+    for instruction in instructions:
+        item: dict[str, Any] = {"opname": instruction.opname}
+        argument = instruction.argval
+        if isinstance(argument, str):
+            if (
+                _SAFE_LITERAL.fullmatch(argument)
+                and not argument.lower().startswith(("http:", "https:"))
+                and not any(part in argument.lower() for part in _FORBIDDEN_LITERAL_PARTS)
+            ):
+                item["safe_arg"] = argument
+        elif isinstance(argument, int) and instruction.opname in {
+            "BUILD_MAP",
+            "BUILD_STRING",
+            "BUILD_TUPLE",
+            "CALL",
+            "CALL_FUNCTION_EX",
+            "CALL_METHOD",
+            "DICT_MERGE",
+            "DICT_UPDATE",
+            "PRECALL",
+        }:
+            item["safe_arg"] = argument
+        safe.append(item)
+    return tuple(safe)
+
+
 @dataclass(frozen=True, slots=True)
 class HistoricalContractFingerprint:
     schema_version: str
@@ -105,6 +142,7 @@ class HistoricalContractFingerprint:
     historical_members: tuple[str, ...]
     candles_parameters: tuple[Mapping[str, str], ...]
     candles_evidence: Mapping[str, Any]
+    candles_instructions: tuple[Mapping[str, Any], ...]
     request_evidence: Mapping[str, Any]
     config_members: tuple[str, ...]
     fingerprint_sha256: str
@@ -118,6 +156,7 @@ class HistoricalContractFingerprint:
             "historical_members": list(self.historical_members),
             "candles_parameters": [dict(item) for item in self.candles_parameters],
             "candles_evidence": dict(self.candles_evidence),
+            "candles_instructions": [dict(item) for item in self.candles_instructions],
             "request_evidence": dict(self.request_evidence),
             "config_members": list(self.config_members),
             "fingerprint_sha256": self.fingerprint_sha256,
@@ -140,13 +179,15 @@ def probe_fubon_historical_contract(
     members = _public_members(historical)
     parameters = _safe_signature(candles)
     candles_evidence = _callable_evidence(candles, error_prefix="CANDLES")
+    candles_instructions = _instruction_evidence(candles)
     request_evidence = _callable_evidence(request, error_prefix="REQUEST")
     config_members = _public_members(config)
     canonical = {
-        "schema_version": "2.0",
+        "schema_version": "3.0",
         "historical_members": list(members),
         "candles_parameters": [dict(item) for item in parameters],
         "candles_evidence": candles_evidence,
+        "candles_instructions": [dict(item) for item in candles_instructions],
         "request_evidence": request_evidence,
         "config_members": list(config_members),
     }
@@ -154,13 +195,14 @@ def probe_fubon_historical_contract(
         json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
     return HistoricalContractFingerprint(
-        schema_version="2.0",
+        schema_version="3.0",
         mode="read_only_contract_probe",
         trading_enabled=False,
         endpoint_invoked=False,
         historical_members=members,
         candles_parameters=parameters,
         candles_evidence=candles_evidence,
+        candles_instructions=candles_instructions,
         request_evidence=request_evidence,
         config_members=config_members,
         fingerprint_sha256=digest,
