@@ -12,6 +12,7 @@ license = { text = "Proprietary - private personal research only" }
 authors = [{ name = "KAM" }]
 dependencies = [
   "fugle-marketdata==2.4.1",
+  "tzdata>=2025.2; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
