@@ -318,8 +318,22 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
     if bull_cells is None:
         html = html.replace("多方 5｜空方 5", "不可判讀", 1)
         html = html.replace("<small>控制權分裂</small>", "<small>等待四週期資料</small>", 1)
-        html = html.replace("control-cell bull", "control-cell neutral")
-        html = html.replace("control-cell bear", "control-cell neutral")
+        html = html.replace(
+            "<div class='control-cells'>",
+            "<div class='control-cells control-cells-unscored' "
+            "aria-label='多空顏色圖例；等待四週期資料後顯示分數'>",
+            1,
+        )
+    html = html.replace(
+        "<section><h2>趨勢健康度</h2>",
+        "<section class='trend-health-card'><h2>趨勢健康度</h2>",
+        1,
+    )
+    html = html.replace(
+        "<section><h2>目前模擬部位</h2>",
+        "<section class='position-card'><h2>目前模擬部位</h2>",
+        1,
+    )
     trigger = "<button id='account-drawer-trigger' class='account-chip account-drawer-trigger' type='button' aria-expanded='false' aria-controls='account-drawer'>期貨帳戶｜資金安全</button>"
     html = html.replace("<a class='account-chip' href='/account'>期貨帳戶｜資金安全</a>", trigger, 1)
     html = html.replace("<span class='header-readonly-note'>帳戶未連線・券商未連線・唯讀模式・模擬執行・禁止真實下單</span>", "", 1)

@@ -238,6 +238,11 @@ def test_live_dashboard_shows_real_quote_but_never_offline_decision_or_proposal(
         "禁止真實下單",
     ):
         assert text in html
+    assert "class='control-cells control-cells-unscored'" in html
+    assert html.count("control-cell bull") == 5
+    assert html.count("control-cell bear") == 5
+    assert "class='trend-health-card'" in html
+    assert "class='position-card'" in html
     for text in ("偏多假資料", "BUY_FIXTURE", "FILLED_FIXTURE", "多單假資料", "買進假資料"):
         assert text not in html
     assert "title='FUTURE_LIVE'" in html

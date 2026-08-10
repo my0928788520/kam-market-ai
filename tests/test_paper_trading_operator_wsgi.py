@@ -266,6 +266,12 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert ".timeframes h2 { margin-bottom: 5px; }" in css
     assert ".timeframe-card { padding: 5px 7px; overflow: hidden;" in css
     assert ".timeframe-card small { display: block; margin: 0;" in css
+    assert ".trend-health-card { grid-column: 1; grid-row: 3; }" in css
+    assert ".position-card { grid-column: 2; grid-row: 3; }" in css
+    assert ".next-card { grid-column: 3; grid-row: 3;" in css
+    assert ".control-cells-unscored" in css
+    assert "@media (max-height: 650px) and (min-width: 1001px)" in css
+    assert "grid-template-rows: minmax(130px, 150px) minmax(90px, 100px) minmax(78px, 88px) minmax(0, 1fr)" in css
     assert "justify-content: center" in css and "border-radius: 7px" in css
     bull_rule = css.split(".control-cell.bull", 1)[1].split(".control-cell.bear", 1)[0]
     bear_rule = css.split(".control-cell.bear", 1)[1]
