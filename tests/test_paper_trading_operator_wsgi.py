@@ -264,6 +264,8 @@ def test_dashboard_renders_real_control_cells_and_coloured_cycle_structure() -> 
         "交易結果與損益由使用者自行承擔",
     ):
         assert disclaimer_text in html
+    assert html.count("<span>風險聲明：") == 1
+    assert "中斷。</span><span>期貨具高槓桿" in html
     for label in ("低檔確認", "起漲形成", "多方延伸", "高檔回落", "起跌形成", "空方延伸", "低點止跌"):
         assert label in html
 
@@ -293,6 +295,7 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert "grid-template-rows: minmax(160px, 205px) minmax(110px, 128px) minmax(96px, 110px) minmax(0, 1fr)" in css
     assert "footer { grid-row: 4; position: static;" in css
     assert ".risk-disclaimer" in css and ".footer-metrics" in css
+    assert "font-size: 11px" in css and ".risk-disclaimer span { display: block; }" in css
     assert ".cycle-chart svg" in css and "height: 180px" in css
     assert "marker-breathe 5s" in css
     assert ".proposal dd, .matching dd" in css and "text-overflow: ellipsis" in css
