@@ -311,9 +311,9 @@ def _account_drawer_html() -> str:
 
 def render_help_html() -> str:
     """Render the static, GET-only operating guide without trading capability."""
-    return """<!doctype html><html class='help-page-root' lang='zh-Hant-TW'><head><meta charset='utf-8'><title>KAM 使用說明｜SOP</title><link rel='stylesheet' href='/static/operator.css'></head><body class='help-page'><main class='help-main'>
+    return """<!doctype html><html class='help-page' lang='zh-Hant-TW'><head><meta charset='utf-8'><title>KAM 使用說明｜SOP</title><link rel='stylesheet' href='/static/operator.css'></head><body class='help-page'><main class='help-main'>
       <header><div><h1>KAM 使用說明｜SOP</h1><small>先判斷、再等待；只有條件完整才行動</small></div><nav class='help-nav' aria-label='主要頁面'><a class='account-chip' href='/'>市場儀表板</a><a class='account-chip' href='/account'>期貨帳戶｜資金安全</a></nav><span>研究與模擬用途・禁止真實自動下單</span></header>
-      <div class='help-banner'>KAM 是交易決策作業系統，不是保證獲利的喊單工具。後端可以複雜，前端只回答：現在能不能做，以及唯一下一步是什麼。</div>
+      <div class='help-banner'>KAM 是交易決策作業系統，不是承諾獲利的交易指示工具。它只清楚回答兩件事：當前是否具備交易條件，以及下一步應採取什麼行動。</div>
       <nav class='help-toc' aria-label='本頁目錄'><a href='#daily-sop'>每日 SOP</a><a href='#read-order'>判讀順序</a><a href='#horizons'>週期與持有時間</a><a href='#rollover'>每月換倉</a><a href='#paper'>模擬紀錄</a><a href='#stop'>停止條件</a></nav>
       <div class='help-content'>
         <section id='daily-sop' class='help-section'><h2>一、每日使用 SOP</h2><ol class='help-steps'>
