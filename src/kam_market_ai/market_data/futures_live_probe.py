@@ -54,7 +54,11 @@ _PRODUCT_PREFIXES = {
 
 _PRODUCT_NAMES = {
     FuturesProductCode.TX: "臺股期貨",
-    FuturesProductCode.MTX: "小型臺指期貨",
+    # The provider ticker name uses the TAIFEX market-data short name
+    # ("小型臺指"), while the exchange product name is "小型臺指期貨".
+    # Matching the common prefix accepts both without weakening the MXF
+    # symbol/month/end-date identity checks below.
+    FuturesProductCode.MTX: "小型臺指",
     FuturesProductCode.TMF: "微型臺指期貨",
 }
 

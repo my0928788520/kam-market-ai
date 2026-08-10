@@ -29,7 +29,7 @@ class FakeIntraday:
                 {"symbol": "TXHG6", "name": "not-a-monthly-contract", "endDate": "2026-07-15"},
                 {"symbol": "TXFH6", "name": "臺股期貨086", "endDate": "2026-08-19"},
                 {"symbol": "TXFI6", "name": "臺股期貨096", "endDate": "2026-09-16"},
-                {"symbol": "MXFH6", "name": "小型臺指期貨086", "endDate": "2026-08-19"},
+                {"symbol": "MXFH6", "name": "小型臺指086", "endDate": "2026-08-19"},
                 {"symbol": "TMFH6", "name": "微型臺指期貨086", "endDate": "2026-08-19"},
             ]
         }

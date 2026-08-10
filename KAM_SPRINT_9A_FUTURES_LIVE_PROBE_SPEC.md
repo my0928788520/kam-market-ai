@@ -14,7 +14,7 @@ Sprint 9A 只驗證富邦期貨行情授權、TX／MTX／TMF 契約辨識、即�
 
 ## 契約探索
 
-探針依富邦官方 `intraday.tickers` 查詢 TAIFEX 指數期貨，再同時用商品前綴、月份字母、到期日與中文商品名稱驗證 TX、MTX、TMF 身分。候選契約使用 `intraday.quote` 的 `total.tradeVolume` 選擇唯一最高活動量契約；缺值或同量歧義一律停止，不猜月份。
+探針依富邦官方 `intraday.tickers` 查詢 TAIFEX 指數期貨，再同時用商品前綴、月份字母、到期日與中文行情商品名稱驗證 TX、MTX、TMF 身分；其中 MTX 依行情簡稱「小型臺指」驗證，並同時接受完整名稱「小型臺指期貨」。候選契約使用 `intraday.quote` 的 `total.tradeVolume` 選擇唯一最高活動量契約；缺值或同量歧義一律停止，不猜月份。
 
 ## WebSocket 驗證
 
