@@ -14,6 +14,7 @@ import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from importlib import metadata
 from typing import Any
 
 from .fubon_neo import AuthorizedMarketDataClients
@@ -25,6 +26,7 @@ class HistoricalContractProbeError(RuntimeError):
 
 _SAFE_LITERAL = re.compile(r"^[A-Za-z0-9_./{}:+-]{1,120}$")
 _FORBIDDEN_LITERAL_PARTS = ("account", "apikey", "cert", "password", "secret", "token")
+_SAFE_PACKAGE_VALUE = re.compile(r"^[A-Za-z0-9_.+-]{1,80}$")
 
 
 def _public_members(value: object) -> tuple[str, ...]:
@@ -133,6 +135,55 @@ def _instruction_evidence(value: object) -> tuple[Mapping[str, Any], ...]:
     return tuple(safe)
 
 
+def _documentation_evidence(value: object) -> Mapping[str, Any]:
+    """Describe callable documentation without retaining its prose."""
+    document = inspect.getdoc(value)
+    annotations = getattr(value, "__annotations__", {})
+    annotation_names = (
+        sorted(str(name) for name in annotations if str(name).isidentifier())
+        if isinstance(annotations, Mapping)
+        else []
+    )
+    return {
+        "docstring_available": bool(document),
+        "docstring_sha256": (
+            hashlib.sha256(document.encode("utf-8")).hexdigest() if document else None
+        ),
+        "annotation_names": annotation_names,
+    }
+
+
+def _sdk_package_evidence() -> Mapping[str, Any]:
+    """Return allow-listed distribution metadata without exposing install paths."""
+    try:
+        distribution = metadata.distribution("fugle-marketdata")
+    except metadata.PackageNotFoundError:
+        return {
+            "distribution_available": False,
+            "name": None,
+            "version": None,
+            "typed_marker_present": False,
+            "stub_files": [],
+        }
+    raw_name = distribution.metadata.get("Name", "")
+    raw_version = distribution.version
+    name = raw_name if _SAFE_PACKAGE_VALUE.fullmatch(raw_name) else None
+    version = raw_version if _SAFE_PACKAGE_VALUE.fullmatch(raw_version) else None
+    files = tuple(str(item).replace("\\", "/") for item in (distribution.files or ()))
+    stubs = sorted(
+        item
+        for item in files
+        if item.startswith("fugle_marketdata/") and item.endswith(".pyi")
+    )
+    return {
+        "distribution_available": True,
+        "name": name,
+        "version": version,
+        "typed_marker_present": "fugle_marketdata/py.typed" in files,
+        "stub_files": stubs,
+    }
+
+
 @dataclass(frozen=True, slots=True)
 class HistoricalContractFingerprint:
     schema_version: str
@@ -143,6 +194,8 @@ class HistoricalContractFingerprint:
     candles_parameters: tuple[Mapping[str, str], ...]
     candles_evidence: Mapping[str, Any]
     candles_instructions: tuple[Mapping[str, Any], ...]
+    candles_documentation: Mapping[str, Any]
+    sdk_package_evidence: Mapping[str, Any]
     request_evidence: Mapping[str, Any]
     config_members: tuple[str, ...]
     fingerprint_sha256: str
@@ -157,6 +210,8 @@ class HistoricalContractFingerprint:
             "candles_parameters": [dict(item) for item in self.candles_parameters],
             "candles_evidence": dict(self.candles_evidence),
             "candles_instructions": [dict(item) for item in self.candles_instructions],
+            "candles_documentation": dict(self.candles_documentation),
+            "sdk_package_evidence": dict(self.sdk_package_evidence),
             "request_evidence": dict(self.request_evidence),
             "config_members": list(self.config_members),
             "fingerprint_sha256": self.fingerprint_sha256,
@@ -180,14 +235,18 @@ def probe_fubon_historical_contract(
     parameters = _safe_signature(candles)
     candles_evidence = _callable_evidence(candles, error_prefix="CANDLES")
     candles_instructions = _instruction_evidence(candles)
+    candles_documentation = _documentation_evidence(candles)
+    sdk_package_evidence = _sdk_package_evidence()
     request_evidence = _callable_evidence(request, error_prefix="REQUEST")
     config_members = _public_members(config)
     canonical = {
-        "schema_version": "3.0",
+        "schema_version": "4.0",
         "historical_members": list(members),
         "candles_parameters": [dict(item) for item in parameters],
         "candles_evidence": candles_evidence,
         "candles_instructions": [dict(item) for item in candles_instructions],
+        "candles_documentation": candles_documentation,
+        "sdk_package_evidence": sdk_package_evidence,
         "request_evidence": request_evidence,
         "config_members": list(config_members),
     }
@@ -195,7 +254,7 @@ def probe_fubon_historical_contract(
         json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
     return HistoricalContractFingerprint(
-        schema_version="3.0",
+        schema_version="4.0",
         mode="read_only_contract_probe",
         trading_enabled=False,
         endpoint_invoked=False,
@@ -203,6 +262,8 @@ def probe_fubon_historical_contract(
         candles_parameters=parameters,
         candles_evidence=candles_evidence,
         candles_instructions=candles_instructions,
+        candles_documentation=candles_documentation,
+        sdk_package_evidence=sdk_package_evidence,
         request_evidence=request_evidence,
         config_members=config_members,
         fingerprint_sha256=digest,

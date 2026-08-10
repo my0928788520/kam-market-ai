@@ -55,7 +55,7 @@ def test_probe_records_signature_without_invoking_endpoint() -> None:
     assert history.calls == 0
     assert result.endpoint_invoked is False
     assert result.trading_enabled is False
-    assert result.schema_version == "3.0"
+    assert result.schema_version == "4.0"
     assert [item["name"] for item in result.candles_parameters] == ["symbol", "timeframe"]
     assert result.candles_parameters[0]["required"] == "true"
     assert len(result.fingerprint_sha256) == 64
@@ -64,6 +64,46 @@ def test_probe_records_signature_without_invoking_endpoint() -> None:
     assert result.request_evidence["parameters"][0]["name"] == "method"
     assert "base_url" in result.config_members
     assert result.candles_instructions
+
+
+def test_probe_records_hashed_documentation_without_retaining_prose() -> None:
+    authorized, history = clients()
+    result = probe_fubon_historical_contract(authorized)
+    assert history.calls == 0
+    assert result.candles_documentation["docstring_available"] is False
+    assert result.candles_documentation["docstring_sha256"] is None
+    assert result.candles_documentation["annotation_names"] == [
+        "return",
+        "symbol",
+        "timeframe",
+    ]
+
+
+def test_probe_records_allow_listed_sdk_distribution_evidence(monkeypatch) -> None:
+    class Distribution:
+        def __init__(self) -> None:
+            self.version = "2.2.8"
+            self.metadata = {"Name": "fugle-marketdata"}
+            self.files = (
+                "fugle_marketdata/py.typed",
+                "fugle_marketdata/rest/futopt/historical.pyi",
+                "outside/private.pyi",
+            )
+
+    monkeypatch.setattr(
+        "kam_market_ai.market_data.fubon_historical_contract_probe.metadata.distribution",
+        lambda name: Distribution(),
+    )
+    authorized, history = clients()
+    result = probe_fubon_historical_contract(authorized)
+    assert history.calls == 0
+    assert result.sdk_package_evidence == {
+        "distribution_available": True,
+        "name": "fugle-marketdata",
+        "version": "2.2.8",
+        "typed_marker_present": True,
+        "stub_files": ["fugle_marketdata/rest/futopt/historical.pyi"],
+    }
 
 
 def test_probe_is_deterministic_and_contains_no_runtime_objects() -> None:
