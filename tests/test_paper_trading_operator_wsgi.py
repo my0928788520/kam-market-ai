@@ -4,7 +4,7 @@ from pathlib import Path
 import re
 
 from kam_market_ai.paper_trading.operator_presenter import PaperTradingOperatorView
-from kam_market_ai.paper_trading.operator_wsgi import build_operator_wsgi, render_account_html, render_operator_html
+from kam_market_ai.paper_trading.operator_wsgi import build_operator_wsgi, render_account_html, render_help_html, render_operator_html
 from kam_market_ai.paper_trading.demo_proposal import build_demo_session
 from kam_market_ai.paper_trading.demo_snapshot import DEMO_SNAPSHOT
 from kam_market_ai.paper_trading.operator_presenter import build_demo_operator_presenter
@@ -37,6 +37,24 @@ def test_wsgi_is_get_only_escapes_html_and_serves_static_css() -> None:
     assert response["status"] == "405 Method Not Allowed"
     assert b"body" in b"".join(app({"REQUEST_METHOD": "GET", "PATH_INFO": "/static/operator.css"}, start))
     assert "<KAM>" not in render_operator_html(_view())
+
+
+def test_help_page_contains_sop_horizons_rollover_and_risk_boundaries() -> None:
+    html = render_help_html()
+    for text in (
+        "每日使用 SOP", "週期與預期持有時間", "長週期", "中期波段", "當沖",
+        "第三個星期三", "到期前 5 個營業日開始提醒", "不是交易所強制換倉日",
+        "禁止真實自動下單", "風險聲明",
+    ):
+        assert text in html
+    response = {}
+    body = b"".join(
+        build_operator_wsgi(_view)(
+            {"REQUEST_METHOD": "GET", "PATH_INFO": "/help"},
+            lambda status, headers: response.update(status=status, headers=headers),
+        )
+    ).decode()
+    assert response["status"] == "200 OK" and "KAM 使用說明｜SOP" in body
 
 
 def test_account_page_is_get_only_demo_data_and_never_exposes_trading_endpoints() -> None:

@@ -309,6 +309,37 @@ def _account_drawer_html() -> str:
     return """<div class='account-drawer-backdrop' data-account-drawer-close hidden></div><aside id='account-drawer' class='account-drawer' role='dialog' aria-modal='true' aria-labelledby='account-drawer-title' aria-hidden='true'><header class='account-drawer-header'><div><h2 id='account-drawer-title'>期貨帳戶｜資金安全</h2><p>示範帳戶・唯讀模式・禁止真實交易</p></div><button type='button' class='account-drawer-close' data-account-drawer-close aria-label='關閉帳戶抽屜'>關閉</button></header><nav class='account-drawer-tabs' aria-label='帳戶檢視'><a href='/account?view=overview' target='account-drawer-frame'>帳戶總覽</a><a href='/account?view=water-level' target='account-drawer-frame'>資金水位</a><a href='/account?view=position&amp;instrument=TMF' target='account-drawer-frame'>商品部位</a><a href='/account?view=settings' target='account-drawer-frame'>設定</a></nav><iframe class='account-drawer-frame' name='account-drawer-frame' title='KAM 帳戶中心唯讀內容' src='/account?view=overview'></iframe><footer class='account-drawer-footer'><span>帳戶未連線</span><span>券商未連線</span><span>交易功能停用</span><span>禁止真實下單</span><span>緊急停止未啟動</span><a href='/account'>開啟完整帳戶中心</a></footer></aside><script>(function(){const trigger=document.getElementById('account-drawer-trigger'),drawer=document.getElementById('account-drawer'),backdrop=document.querySelector('.account-drawer-backdrop'),close=()=>{drawer.classList.remove('is-open');drawer.setAttribute('aria-hidden','true');backdrop.hidden=true;trigger.setAttribute('aria-expanded','false');trigger.focus()},open=()=>{drawer.classList.add('is-open');drawer.setAttribute('aria-hidden','false');backdrop.hidden=false;trigger.setAttribute('aria-expanded','true');drawer.querySelector('.account-drawer-close').focus()};trigger.addEventListener('click',()=>drawer.classList.contains('is-open')?close():open());document.querySelectorAll('[data-account-drawer-close]').forEach(item=>item.addEventListener('click',close));document.addEventListener('keydown',event=>{if(event.key==='Escape'&&drawer.classList.contains('is-open'))close()})})();</script>"""
 
 
+def render_help_html() -> str:
+    """Render the static, GET-only operating guide without trading capability."""
+    return """<!doctype html><html lang='zh-Hant-TW'><head><meta charset='utf-8'><title>KAM 使用說明｜SOP</title><link rel='stylesheet' href='/static/operator.css'></head><body><main class='help-main'>
+      <header><div><h1>KAM 使用說明｜SOP</h1><small>先判斷、再等待；只有條件完整才行動</small></div><nav class='help-nav' aria-label='主要頁面'><a class='account-chip' href='/'>市場儀表板</a><a class='account-chip' href='/account'>期貨帳戶｜資金安全</a></nav><span>研究與模擬用途・禁止真實自動下單</span></header>
+      <div class='help-banner'>KAM 是交易決策作業系統，不是保證獲利的喊單工具。後端可以複雜，前端只回答：現在能不能做，以及唯一下一步是什麼。</div>
+      <nav class='help-toc' aria-label='本頁目錄'><a href='#daily-sop'>每日 SOP</a><a href='#read-order'>判讀順序</a><a href='#horizons'>週期與持有時間</a><a href='#rollover'>每月換倉</a><a href='#paper'>模擬紀錄</a><a href='#stop'>停止條件</a></nav>
+      <div class='help-content'>
+        <section id='daily-sop' class='help-section'><h2>一、每日使用 SOP</h2><ol class='help-steps'>
+          <li><strong>先確認資料。</strong><span>商品代碼、契約月份、台灣資料時間、日盤／夜盤及 WebSocket 狀態都正確；資料過期、中斷或契約不明時停止判讀。</span></li>
+          <li><strong>先看長週期。</strong><span>週線決定大方向，日線確認目前是延伸、回檔或整理；長週期不清楚時，不用短週期猜方向。</span></li>
+          <li><strong>再看核心週期。</strong><span>60 分確認結構與位置，15 分負責進場確認；5 分只作觸發，不得單獨推翻大週期。</span></li>
+          <li><strong>檢查品質閘門。</strong><span>確認市場型態、週期一致、位置、報酬風險、波動、資料品質及當日風控。任何硬性否決出現，就不建立模擬委託。</span></li>
+          <li><strong>只讀唯一下一步。</strong><span>依畫面執行「等待、模擬進場、續抱、減碼或禁止交易」其中一項；不要自行拼接多個訊號。</span></li>
+          <li><strong>先模擬、後檢討。</strong><span>保存進出場、停損、成本、滑價、否決原因與結果。持倉途中不臨時改規則，修正版從下一批樣本才生效。</span></li>
+        </ol></section>
+        <section id='read-order' class='help-section'><h2>二、畫面判讀順序</h2><div class='help-grid'>
+          <article><b>1｜市場方向</b><p>先判斷偏多、偏空或不可判讀。</p></article><article><b>2｜多空控制權</b><p>檢查力量是否一致，避免在分裂狀態追價。</p></article><article><b>3｜市場循環位置</b><p>確認處於築底、起漲、延伸、過熱或轉弱；位置不是價格預測。</p></article><article><b>4｜四週期狀態</b><p>週、日、60 分、15 分是否同向；5 分保留在後台作觸發。</p></article><article><b>5｜趨勢健康度</b><p>辨認健康延伸、衰退或資料不足。</p></article><article><b>6｜唯一下一步</b><p>最後才決定模擬行動；前面任一關不完整即等待。</p></article>
+        </div></section>
+        <section id='horizons' class='help-section'><h2>三、週期與預期持有時間</h2><div class='help-table-wrap'><table class='help-table'><thead><tr><th>操作層級</th><th>主要判讀週期</th><th>概念持有時間</th><th>KAM 用法</th></tr></thead><tbody>
+          <tr><td>長週期</td><td>月線／週線</td><td>約數週至一個月以上</td><td>決定主要方向與大位置，不用來精準抓進場點。</td></tr><tr><td>中期波段</td><td>日線／60 分</td><td>約數天至數週</td><td>日線定狀態，60 分是進出場與結構判讀核心。</td></tr><tr><td>短波段</td><td>60 分／15 分</td><td>約數小時至數天</td><td>60 分找結構，15 分確認，必須服從長週期風險。</td></tr><tr><td>當沖</td><td>15 分／5 分</td><td>同一交易日</td><td>5 分只作觸發；不得因短線轉強就忽略週、日方向與重要位置。</td></tr>
+        </tbody></table></div><p class='help-note'>持有時間是操作分類，不是到期承諾。停損、結構破壞、資料異常或風控停止條件出現時，應優先處理風險；期貨月契約也不適合把「長週期」理解成無限期持有同一契約。</p></section>
+        <section id='rollover' class='help-section'><h2>四、臺指類期貨每月結算與換倉</h2><div class='rollover-alert'><strong>法定規則</strong><p>微型臺指期貨等臺指類月契約，最後交易日為交割月份的第三個星期三；最後交易日一般交易時段至 13:30，該到期月份契約沒有盤後交易。新交割月份契約於最後交易日的下一營業日一般交易時段起掛牌。</p></div><h3>KAM 建議換月流程</h3><ol class='help-steps compact'>
+          <li><strong>到期前 5 個營業日開始提醒。</strong><span>這是風險管理觀察窗，不是交易所強制換倉日。</span></li><li><strong>同時比較近月與次月。</strong><span>檢查成交量、未平倉量、買賣價差與報價連續性；流動性尚未轉移前，不因日期機械換月。</span></li><li><strong>建立新部位前先選流動性較佳契約。</strong><span>若次月已成主力，新的模擬訊號改用次月；舊近月部位則分開管理，不可把兩個月份當成同一價格序列。</span></li><li><strong>最晚在最後交易日前完成決策。</strong><span>不熟悉現金結算者，不把未平倉部位留到最後結算；最後交易日也不得期待夜盤再處理。</span></li><li><strong>換月後重新建立基準。</strong><span>記錄價差、切換時間與新契約代碼，重新確認 20MA、原始整理區及四週期資料連續性，禁止直接沿用錯誤價位。</span></li>
+        </ol><p class='help-note'>交易所規定的是最後交易日與結算方式；「哪一天換倉」屬操作決策。實際日期遇休市或制度調整時，以臺灣期貨交易所當年度行事曆、契約規格及券商通知為準。</p></section>
+        <section id='paper' class='help-section'><h2>五、模擬測試與版本調整</h2><ul class='help-list'><li>A 級條件通過才列入主要樣本；等待與禁止也保留原因。</li><li>每筆計入手續費、交易稅與模擬滑價，分開記錄日盤、夜盤與契約月份。</li><li>至少 30 筆已完成 A 級樣本後，才檢查勝率、平均盈虧、成本後期望值與最大回撤。</li><li>發現程式錯誤可立即修復；策略門檻則鎖定到本批結束，避免邊測邊調造成結果失真。</li><li>每個版本獨立統計，只有樣本外結果改善，才考慮保留新規則。</li></ul></section>
+        <section id='stop' class='help-section'><h2>六、立即停止的情況</h2><div class='stop-grid'><span>資料時間過期或中斷</span><span>契約月份不明或已進入結算風險</span><span>四週期資料缺漏或嚴重衝突</span><span>價差、波動或成交異常</span><span>連續虧損 2 次</span><span>單日虧損達 40 點</span><span>單日交易達 5 次</span><span>模擬持倉或帳戶狀態不同步</span></div></section>
+        <section class='help-section help-risk'><h2>風險聲明</h2><p>本系統僅供研究、模擬與決策輔助，不構成投資建議、獲利保證或代客操作。模擬績效不代表未來結果；行情與系統資料可能延遲、錯誤或中斷。期貨具高槓桿，可能產生超過原始保證金之損失；所有實際委託均由使用者自行判斷並於券商端操作，交易結果與損益由使用者自行承擔。</p></section>
+      </div>
+    </main></body></html>"""
+
+
 def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapshot | None = None) -> str:
     """Add a client-only Account Drawer around the existing read-only terminal."""
     snapshot = snapshot or OFFLINE_DEMO_MARKET_DATA_SOURCE.read_snapshot(DEFAULT_MARKET_PRODUCT)
@@ -352,6 +383,7 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
     )
     trigger = "<button id='account-drawer-trigger' class='account-chip account-drawer-trigger' type='button' aria-expanded='false' aria-controls='account-drawer'>期貨帳戶｜資金安全</button>"
     html = html.replace("<a class='account-chip' href='/account'>期貨帳戶｜資金安全</a>", trigger, 1)
+    html = html.replace(trigger, trigger + "<a class='account-chip' href='/help'>使用說明｜SOP</a>", 1)
     html = html.replace("<span class='header-readonly-note'>帳戶未連線・券商未連線・唯讀模式・模擬執行・禁止真實下單</span>", "", 1)
     banner_start = html.index("<div class='banner'>")
     banner_end = html.index("</div>", banner_start) + len("</div>")
@@ -411,6 +443,10 @@ def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], a
             detail = query.get("detail", [""])[0] == "1"
             body = render_account_html(account_source, account_thresholds, margin_source, selected_view=selected_view, selected_instrument=selected_instrument, detail=detail).encode()
             start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"), ("Content-Length", str(len(body)))])
+            return [body]
+        if path == "/help":
+            body = render_help_html().encode()
+            start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"), ("Content-Length", str(len(body))), *headers])
             return [body]
         if path != "/":
             start_response("404 Not Found", [("Content-Type", "text/plain; charset=utf-8")]); return ["找不到頁面。".encode()]
