@@ -54,6 +54,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--env", default=".env", help="本機 .env 路徑；內容永不輸出")
     parser.add_argument("--after-hours", action="store_true", help="使用富邦期貨夜盤行情")
+    parser.add_argument(
+        "--chart-history-json",
+        help="唯讀載入明確匯出的歷史 OHLCV JSON；不連線券商或網路",
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")))
     return parser
@@ -93,15 +97,22 @@ def build_operator_application(
         fubon_live_client=live_client,
     )
     market_data_source = selection.provider
-    app = create_operator_app(_empty_view, market_data_source=market_data_source)
+    chart_data_source = None
+    if args.chart_history_json:
+        from kam_market_ai.paper_trading.historical_chart_source import load_exported_historical_chart_source
+        chart_data_source = load_exported_historical_chart_source(args.chart_history_json)
+    app_options = {"market_data_source": market_data_source}
+    if chart_data_source is not None:
+        app_options["chart_data_source"] = chart_data_source
+    app = create_operator_app(_empty_view, **app_options)
     if args.demo:
         from kam_market_ai.paper_trading.operator_app import create_demo_operator_app
 
-        app = create_demo_operator_app(market_data_source=market_data_source)
+        app = create_demo_operator_app(**app_options)
     if args.kam_rule_demo:
         from kam_market_ai.paper_trading.operator_app import create_kam_rule_demo_operator_app
 
-        app = create_kam_rule_demo_operator_app(market_data_source=market_data_source)
+        app = create_kam_rule_demo_operator_app(**app_options)
     close = getattr(market_data_source, "close", None)
     if callable(close):
         app.close_market_data = close  # type: ignore[attr-defined]
