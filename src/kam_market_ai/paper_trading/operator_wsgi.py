@@ -288,21 +288,27 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
         "期貨具高槓桿，可能產生超過原始保證金之損失；所有實際委託均由使用者自行判斷並於券商端操作，交易結果與損益由使用者自行承擔。",
     )
     disclaimer = "".join(f"<span>{escape(line)}</span>" for line in disclaimer_lines)
-    return f"""<!doctype html><html lang='zh-Hant-TW'><head><meta charset='utf-8'><title>{escape(view.title)}</title><link rel='stylesheet' href='/static/operator.css'></head><body><main><header><h1>{escape(view.title)}</h1><a class='account-chip' href='/account'>期貨帳戶｜資金安全</a>{_market_snapshot_header(snapshot)}<span class='header-readonly-note'>帳戶未連線・券商未連線・唯讀模式・模擬執行・禁止真實下單</span></header><div class='banner'>{escape(str(demo.get('banner', '尚未載入模擬委託建議。本機頁面目前為唯讀模式。')))} · 目前僅 Header 已切換至離線示範行情；決策卡尚未接入此商品 snapshot。</div><div class='dashboard'><section class='direction-card'><h2>市場方向</h2><strong>{escape(str(demo.get('direction', '—')))}</strong><p>{escape(str(demo.get('direction_reason', '尚未載入方向資料')))}</p></section><section class='control-card'><h2>多空控制權</h2><strong>多方 {bull}｜空方 {10-bull}</strong><small>控制權分裂</small><div class='control-cells'>{cells}</div></section>{_cycle(view)}<section class='timeframes'><h2>四週期狀態</h2><div>{frames}</div></section><section><h2>趨勢健康度</h2><strong>{escape(str(demo.get('trend_health', '—')))}</strong></section><section><h2>目前模擬部位</h2><strong>{escape(str(demo.get('position', '無部位')))}</strong><p>現價 {escape(str(demo.get('current_price', '—')))} · 未實現 {escape(str(demo.get('unrealized_pnl', '—')))}</p></section><section class='next-card next-wait'><h2>唯一下一步</h2><strong>{escape(str(demo.get('next_step', '等待資料完整')))}</strong></section>{proposal}<section class='matching'><h2>模擬撮合結果</h2><dl>{_rows(view.matching)}</dl></section></div><footer><div class='footer-metrics'><span>模擬現金：{escape(str(view.ledger.get('cash', '—')))}</span><span>模擬部位：{escape(str(view.ledger.get('positions', '—')))}</span><span>已實現損益：—</span><span>未實現損益：{escape(str(demo.get('unrealized_pnl', '—')))}</span><span>緊急停止：{'已啟動' if view.emergency_stop else '未啟動'}</span><span class='audit'>稽核紀錄：{audit}</span></div><p class='risk-disclaimer'>{disclaimer}</p></footer></main></body></html>"""
+    return f"""<!doctype html><html lang='zh-Hant-TW'><head><meta charset='utf-8'><title>{escape(view.title)}</title><link rel='stylesheet' href='/static/operator.css'></head><body><main><header><h1>{escape(view.title)}</h1>{_market_header_status(snapshot)}<a class='account-chip' href='/account'>期貨帳戶｜資金安全</a>{_market_snapshot_header(snapshot)}</header><div class='banner'>{escape(str(demo.get('banner', '尚未載入模擬委託建議。本機頁面目前為唯讀模式。')))} · 目前僅 Header 已切換至離線示範行情；決策卡尚未接入此商品 snapshot。</div><div class='dashboard'><section class='direction-card'><h2>市場方向</h2><strong>{escape(str(demo.get('direction', '—')))}</strong><p>{escape(str(demo.get('direction_reason', '尚未載入方向資料')))}</p></section><section class='control-card'><h2>多空控制權</h2><strong>多方 {bull}｜空方 {10-bull}</strong><small>控制權分裂</small><div class='control-cells'>{cells}</div></section>{_cycle(view)}<section class='timeframes'><h2>四週期狀態</h2><div>{frames}</div></section><section><h2>趨勢健康度</h2><strong>{escape(str(demo.get('trend_health', '—')))}</strong></section><section><h2>目前模擬部位</h2><strong>{escape(str(demo.get('position', '無部位')))}</strong><p>現價 {escape(str(demo.get('current_price', '—')))} · 未實現 {escape(str(demo.get('unrealized_pnl', '—')))}</p></section><section class='next-card next-wait'><h2>唯一下一步</h2><strong>{escape(str(demo.get('next_step', '等待資料完整')))}</strong></section>{proposal}<section class='matching'><h2>模擬撮合結果</h2><dl>{_rows(view.matching)}</dl></section></div><footer><div class='footer-metrics'><span>模擬現金：{escape(str(view.ledger.get('cash', '—')))}</span><span>模擬部位：{escape(str(view.ledger.get('positions', '—')))}</span><span>已實現損益：—</span><span>未實現損益：{escape(str(demo.get('unrealized_pnl', '—')))}</span><span>緊急停止：{'已啟動' if view.emergency_stop else '未啟動'}</span><span class='audit'>稽核紀錄：{audit}</span></div><p class='risk-disclaimer'>{disclaimer}</p></footer></main></body></html>"""
 
 
 _render_terminal_html = render_operator_html
 
 
-def _market_status_line(snapshot: MarketSnapshot) -> str:
+def _market_header_status(snapshot: MarketSnapshot) -> str:
     if snapshot.status is MarketSnapshotStatus.INVALID_PRODUCT:
-        return "商品代碼無效｜帳戶未連線・券商未連線・唯讀模式・禁止真實下單"
+        return "<span class='header-market-status'>商品代碼無效｜帳戶未連線・券商未連線・唯讀模式・禁止真實下單</span>"
     session = {"DAY": "日盤", "NIGHT": "夜盤", "CLOSED": "休市", "UNKNOWN": "資料不足／無法判讀"}[snapshot.trading_session.value]
     timestamp = snapshot.timestamp
     display_time = "—"
     if isinstance(timestamp, datetime) and timestamp.tzinfo is not None:
         display_time = timestamp.astimezone(ZoneInfo("Asia/Taipei")).strftime("%Y-%m-%d %H:%M")
-    return f"{snapshot.instrument_name}・{snapshot.product_code}｜{snapshot.contract_code}・{snapshot.contract_month}｜最新 {_money(snapshot.last_price)}・量 {_money(snapshot.volume)}<br>資料時間（台灣）：{display_time}｜{session}｜帳戶未連線・券商未連線・唯讀模式・禁止真實下單"
+    return f"<span class='header-market-status'>資料時間（台灣）：{display_time}｜{session}｜帳戶未連線・券商未連線・唯讀模式・禁止真實下單</span>"
+
+
+def _market_status_line(snapshot: MarketSnapshot) -> str:
+    if snapshot.status is MarketSnapshotStatus.INVALID_PRODUCT:
+        return "商品代碼無效"
+    return f"{snapshot.instrument_name}・{snapshot.product_code}｜{snapshot.contract_code}・{snapshot.contract_month}｜最新 {_money(snapshot.last_price)}・量 {_money(snapshot.volume)}"
 
 
 def _account_drawer_html() -> str:

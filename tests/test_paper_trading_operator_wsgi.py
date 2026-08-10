@@ -191,7 +191,7 @@ def test_terminal_header_uses_read_only_market_snapshots_and_get_instrument_sele
     assert "TMF202610" in tmf and "24,108" in tmf and "82,514" in tmf
     assert "微型臺指期貨" in tmf and "休市" in tmf
     assert "微型臺指期貨・TMF｜TMF202610・202610｜最新 24,108・量 82,514" in tmf
-    assert "資料時間（台灣）：2026-08-06 10:14｜休市｜帳戶未連線・券商未連線・唯讀模式・禁止真實下單" in tmf
+    assert "<span class='header-market-status'>資料時間（台灣）：2026-08-06 10:14｜休市｜帳戶未連線・券商未連線・唯讀模式・禁止真實下單</span>" in tmf
     assert "market-selector-chip active' href='/?instrument=TMF'" in tmf
 
     tx = get("instrument=TX")
@@ -216,6 +216,18 @@ def test_market_status_time_is_explicitly_converted_to_taipei() -> None:
 
     assert "資料時間（台灣）：2026-08-06 10:14" in html
     assert "資料時間：2026-08-06 02:14" not in html
+
+
+def test_market_time_is_in_header_and_latest_snapshot_line_is_emphasized() -> None:
+    html = render_operator_html(_view(), OFFLINE_DEMO_MARKET_DATA_SOURCE.read_snapshot("TMF"))
+    css = Path("src/kam_market_ai/paper_trading/static/operator.css").read_text(encoding="utf-8")
+
+    header_end = html.index("</header>")
+    banner_start = html.index("<div class='banner market-status-line'")
+    assert html.index("class='header-market-status'") < header_end < banner_start
+    assert "資料時間（台灣）：" not in html[banner_start:html.index("</div>", banner_start)]
+    assert ".market-status-line { display: flex; align-items: center;" in css
+    assert "font-size: 13px; font-weight: 750;" in css
 
 
 def test_terminal_account_drawer_is_closed_by_default_and_reuses_get_only_account_center() -> None:
