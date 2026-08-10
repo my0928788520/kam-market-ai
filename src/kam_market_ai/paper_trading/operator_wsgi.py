@@ -1,6 +1,7 @@
 """GET-only local WSGI dashboard renderer."""
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from decimal import Decimal
 from html import escape
@@ -12,6 +13,7 @@ from kam_market_ai.live_read_only.market_snapshot import (
     DEFAULT_MARKET_PRODUCT,
     OFFLINE_DEMO_MARKET_DATA_SOURCE,
     MarketDataReadOnlySource,
+    MarketDataSource,
     MarketSnapshot,
     MarketSnapshotStatus,
 )
@@ -297,8 +299,27 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
     presentation = SelectedSnapshotDecisionPresenter().present(snapshot, view.demo)
     demo = dict(view.demo or {})
     bull_cells = presentation.control.bull_score
-    demo.update({"direction": presentation.direction.label, "direction_reason": presentation.direction.reason, "bull_score": bull_cells * 10 if bull_cells is not None else 50, "cycle_label": presentation.cycle.label, "trend_health": presentation.trend_health.label, "next_step": presentation.next_step.label, "timeframes": tuple((item.timeframe, item.label) for item in presentation.timeframes), "u_stage": "U0" if presentation.cycle.state in {"closed", "halted", "invalid"} else "U3"})
-    html = _render_terminal_html(replace(view, demo=demo), snapshot)
+    demo.update({"direction": presentation.direction.label, "direction_reason": presentation.direction.reason, "bull_score": bull_cells * 10 if bull_cells is not None else 50, "cycle_label": presentation.cycle.label, "trend_health": presentation.trend_health.label, "next_step": presentation.next_step.label, "timeframes": tuple((item.timeframe, item.label) for item in presentation.timeframes), "u_stage": "U0" if presentation.cycle.state in {"closed", "halted", "invalid", "live-data-only"} else "U3"})
+    rendered_view = view
+    if snapshot.data_source is MarketDataSource.FUTURE_LIVE:
+        demo.update(
+            {
+                "position": "尚未接入",
+                "current_price": _money(snapshot.last_price),
+                "unrealized_pnl": "—",
+            }
+        )
+        rendered_view = replace(
+            view,
+            proposal={"status": "尚未接入真實行情決策"},
+            matching={"state": "尚未接入"},
+        )
+    html = _render_terminal_html(replace(rendered_view, demo=demo), snapshot)
+    if bull_cells is None:
+        html = html.replace("多方 5｜空方 5", "不可判讀", 1)
+        html = html.replace("<small>控制權分裂</small>", "<small>等待四週期資料</small>", 1)
+        html = html.replace("control-cell bull", "control-cell neutral")
+        html = html.replace("control-cell bear", "control-cell neutral")
     trigger = "<button id='account-drawer-trigger' class='account-chip account-drawer-trigger' type='button' aria-expanded='false' aria-controls='account-drawer'>期貨帳戶｜資金安全</button>"
     html = html.replace("<a class='account-chip' href='/account'>期貨帳戶｜資金安全</a>", trigger, 1)
     html = html.replace("<span class='header-readonly-note'>帳戶未連線・券商未連線・唯讀模式・模擬執行・禁止真實下單</span>", "", 1)
@@ -310,9 +331,13 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
     return html.replace("</main></body>", _account_drawer_html() + "</main></body>", 1)
 
 
+def _runtime_source_status(source: object) -> object:
+    getter = getattr(source, "runtime_status", None)
+    return getter() if callable(getter) else getattr(source, "status", "READY")
+
+
 def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], account_source: AccountReadOnlySource = DEMO_ACCOUNT_SOURCE, account_thresholds: CapitalSafetyThresholds = DEMO_ACCOUNT_THRESHOLDS, margin_source: MarginRequirementSource = DEMO_MARGIN_SOURCE, market_data_source: MarketDataReadOnlySource = OFFLINE_DEMO_MARKET_DATA_SOURCE, public_embed_config=None) -> Callable[..., Iterable[bytes]]:
     from kam_market_ai.live_read_only.decision_presentation import SelectedSnapshotDecisionPresenter
-    from kam_market_ai.live_read_only.runtime_market_source import RuntimeMarketSourceStatus
     from kam_market_ai.paper_trading.embed_presenter import EmbedPagePresenter
     from kam_market_ai.paper_trading.public_routes import build_health_response
     from kam_market_ai.public_deployment import PublicEmbedConfig
@@ -325,8 +350,14 @@ def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], a
             response = build_health_response(); body = response.body.encode()
             start_response("200 OK", [("Content-Type", response.content_type), *headers]); return [body]
         if path == "/readyz" and method == "GET":
-            ready = str(getattr(market_data_source, "status", "READY")) == "READY" and str(getattr(market_data_source, "mode", "offline-demo")) != "fugle-live"
-            body = (b'{"status":"ready","source_mode":"offline-demo","trading_enabled":false}' if ready else b'{"status":"not_ready","trading_enabled":false}')
+            source_mode = str(getattr(market_data_source, "mode", "offline-demo"))
+            ready = str(_runtime_source_status(market_data_source)) == "READY" and source_mode != "fugle-live"
+            payload = {
+                "status": "ready" if ready else "not_ready",
+                "source_mode": source_mode,
+                "trading_enabled": False,
+            }
+            body = json.dumps(payload, separators=(",", ":")).encode()
             start_response("200 OK" if ready else "503 Service Unavailable", [("Content-Type", "application/json; charset=utf-8"), *headers]); return [body]
         if method != "GET":
             start_response("405 Method Not Allowed", [("Content-Type", "text/plain; charset=utf-8"), ("Allow", "GET")]); return ["唯讀端點，不接受此操作。".encode()]
@@ -339,7 +370,7 @@ def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], a
             selected = query.get("instrument", [DEFAULT_MARKET_PRODUCT])[0]
             snapshot = market_data_source.read_snapshot(selected)
             decision = SelectedSnapshotDecisionPresenter().present(snapshot)
-            runtime_status = getattr(market_data_source, "status", RuntimeMarketSourceStatus.READY)
+            runtime_status = _runtime_source_status(market_data_source)
             model = EmbedPagePresenter().build_model(snapshot, decision, runtime_status, public_embed_config, selected, public_embed_config.enable_account_drawer)
             body = EmbedPagePresenter().render(model).encode()
             start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"), *headers]); return [body]
@@ -357,11 +388,20 @@ def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], a
         snapshot = market_data_source.read_snapshot(query.get("instrument", [DEFAULT_MARKET_PRODUCT])[0])
         body = render_operator_html(view_provider(), snapshot)
         runtime_mode = getattr(market_data_source, "mode", None)
-        runtime_status = getattr(market_data_source, "status", None)
+        runtime_status = _runtime_source_status(market_data_source)
         if str(runtime_mode) == "fake-live":
             label = "模擬即時行情｜WebSocket 模擬連線｜連線就緒" if str(runtime_status) == "READY" else "模擬即時行情｜連線降級｜資料不足／無法判讀"
             body = body.replace("離線示範行情｜", label + "｜", 1)
         elif str(runtime_mode) == "fugle-live":
             body = body.replace("離線示範行情｜", "真實行情來源尚未啟用｜資料不足／無法判讀｜", 1)
+        elif str(runtime_mode) == "fubon-live":
+            label = (
+                "富邦真實期貨行情｜WebSocket 連線就緒｜3 秒更新"
+                if str(runtime_status) == "READY"
+                else "富邦真實期貨行情｜連線中斷｜資料不足／無法判讀"
+            )
+            body = body.replace("離線示範行情｜", label + "｜", 1)
+            body = body.replace("title='OFFLINE_DEMO'", "title='FUTURE_LIVE'", 1)
+            body = body.replace("</head>", "<meta http-equiv='refresh' content='3'></head>", 1)
         body = body.encode(); start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"), ("Content-Length", str(len(body)))]); return [body]
     return app
