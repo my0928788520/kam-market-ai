@@ -162,7 +162,7 @@ def test_terminal_header_uses_read_only_market_snapshots_and_get_instrument_sele
     assert "TMF202610" in tmf and "24,108" in tmf and "82,514" in tmf
     assert "微型臺指期貨" in tmf and "休市" in tmf
     assert "微型臺指期貨・TMF｜TMF202610・202610｜最新 24,108・量 82,514" in tmf
-    assert "資料時間：2026-08-06 02:14｜休市｜帳戶未連線・券商未連線・唯讀模式・禁止真實下單" in tmf
+    assert "資料時間（台灣）：2026-08-06 10:14｜休市｜帳戶未連線・券商未連線・唯讀模式・禁止真實下單" in tmf
     assert "market-selector-chip active' href='/?instrument=TMF'" in tmf
 
     tx = get("instrument=TX")
@@ -179,6 +179,14 @@ def test_terminal_header_uses_read_only_market_snapshots_and_get_instrument_sele
     assert "account_connected=false" not in invalid and "broker_connected=false" not in invalid
     b"".join(app({"REQUEST_METHOD": "POST", "PATH_INFO": "/", "QUERY_STRING": "instrument=TX"}, start))
     assert response["status"] == "405 Method Not Allowed"
+
+
+def test_market_status_time_is_explicitly_converted_to_taipei() -> None:
+    tmf = OFFLINE_DEMO_MARKET_DATA_SOURCE.read_snapshot("TMF")
+    html = render_operator_html(_view(), tmf)
+
+    assert "資料時間（台灣）：2026-08-06 10:14" in html
+    assert "資料時間：2026-08-06 02:14" not in html
 
 
 def test_terminal_account_drawer_is_closed_by_default_and_reuses_get_only_account_center() -> None:
@@ -271,7 +279,7 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert ".next-card { grid-column: 3; grid-row: 3;" in css
     assert ".control-cells-unscored" in css
     assert "@media (max-height: 650px) and (min-width: 1001px)" in css
-    assert "grid-template-rows: minmax(130px, 150px) minmax(90px, 100px) minmax(78px, 88px) minmax(0, 1fr)" in css
+    assert "grid-template-rows: minmax(130px, 150px) minmax(110px, 116px) minmax(78px, 88px) minmax(0, 1fr)" in css
     assert "justify-content: center" in css and "border-radius: 7px" in css
     bull_rule = css.split(".control-cell.bull", 1)[1].split(".control-cell.bear", 1)[0]
     bear_rule = css.split(".control-cell.bear", 1)[1]

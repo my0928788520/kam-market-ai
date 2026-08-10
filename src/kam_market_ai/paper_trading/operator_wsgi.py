@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from datetime import datetime
 from decimal import Decimal
 from html import escape
 from pathlib import Path
 from typing import Callable, Iterable
 from urllib.parse import parse_qs
+from zoneinfo import ZoneInfo
 
 from kam_market_ai.live_read_only.market_snapshot import (
     DEFAULT_MARKET_PRODUCT,
@@ -286,7 +288,11 @@ def _market_status_line(snapshot: MarketSnapshot) -> str:
     if snapshot.status is MarketSnapshotStatus.INVALID_PRODUCT:
         return "商品代碼無效｜帳戶未連線・券商未連線・唯讀模式・禁止真實下單"
     session = {"DAY": "日盤", "NIGHT": "夜盤", "CLOSED": "休市", "UNKNOWN": "資料不足／無法判讀"}[snapshot.trading_session.value]
-    return f"{snapshot.instrument_name}・{snapshot.product_code}｜{snapshot.contract_code}・{snapshot.contract_month}｜最新 {_money(snapshot.last_price)}・量 {_money(snapshot.volume)}<br>資料時間：{str(snapshot.timestamp or '—')[:16].replace('T', ' ')}｜{session}｜帳戶未連線・券商未連線・唯讀模式・禁止真實下單"
+    timestamp = snapshot.timestamp
+    display_time = "—"
+    if isinstance(timestamp, datetime) and timestamp.tzinfo is not None:
+        display_time = timestamp.astimezone(ZoneInfo("Asia/Taipei")).strftime("%Y-%m-%d %H:%M")
+    return f"{snapshot.instrument_name}・{snapshot.product_code}｜{snapshot.contract_code}・{snapshot.contract_month}｜最新 {_money(snapshot.last_price)}・量 {_money(snapshot.volume)}<br>資料時間（台灣）：{display_time}｜{session}｜帳戶未連線・券商未連線・唯讀模式・禁止真實下單"
 
 
 def _account_drawer_html() -> str:

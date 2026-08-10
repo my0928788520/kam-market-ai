@@ -28,7 +28,7 @@ from kam_market_ai.paper_trading.operator_presenter import PaperTradingOperatorV
 
 def _empty_view() -> PaperTradingOperatorView:
     return PaperTradingOperatorView(
-        "KAM 模擬交易操作台",
+        "KAM 交易決策操作台",
         "尚未載入模擬委託建議。本機頁面目前為唯讀模式。",
         {"status": "尚無委託建議"},
         {"state": "尚無結果"},
@@ -39,7 +39,7 @@ def _empty_view() -> PaperTradingOperatorView:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="本機唯讀 KAM 模擬交易操作台")
+    parser = argparse.ArgumentParser(description="本機唯讀 KAM 交易決策操作台")
     parser.add_argument("--demo", action="store_true", help="載入明確標示的離線示範資料")
     parser.add_argument("--kam-rule-demo", action="store_true", help="載入 KAM 規則離線示範資料")
     parser.add_argument(

@@ -125,6 +125,8 @@ def _load_operator_cli_module():
 def test_cli_parser_defaults_and_rejects_invalid_market_source():
     module = _load_operator_cli_module()
     parser = module.build_parser()
+    assert module._empty_view().title == "KAM 交易決策操作台"
+    assert parser.description == "本機唯讀 KAM 交易決策操作台"
     assert parser.parse_args([]).market_source == "offline-demo"
     assert parser.parse_args(["--market-source", "fake-live"]).market_source == "fake-live"
     assert parser.parse_args(["--market-source", "fugle-live"]).market_source == "fugle-live"
