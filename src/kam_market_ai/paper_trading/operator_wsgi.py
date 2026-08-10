@@ -389,7 +389,7 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
     )
     trigger = "<button id='account-drawer-trigger' class='account-chip account-drawer-trigger' type='button' aria-expanded='false' aria-controls='account-drawer'>期貨帳戶｜資金安全</button>"
     html = html.replace("<a class='account-chip' href='/account'>期貨帳戶｜資金安全</a>", trigger, 1)
-    html = html.replace(trigger, trigger + "<a class='account-chip' href='/help'>使用說明｜SOP</a>", 1)
+    html = html.replace(trigger, trigger + "<a class='account-chip' href='/charts'>多週期 K 線</a><a class='account-chip' href='/help'>使用說明｜SOP</a>", 1)
     html = html.replace("<span class='header-readonly-note'>帳戶未連線・券商未連線・唯讀模式・模擬執行・禁止真實下單</span>", "", 1)
     banner_start = html.index("<div class='banner'>")
     banner_end = html.index("</div>", banner_start) + len("</div>")
@@ -404,12 +404,14 @@ def _runtime_source_status(source: object) -> object:
     return getter() if callable(getter) else getattr(source, "status", "READY")
 
 
-def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], account_source: AccountReadOnlySource = DEMO_ACCOUNT_SOURCE, account_thresholds: CapitalSafetyThresholds = DEMO_ACCOUNT_THRESHOLDS, margin_source: MarginRequirementSource = DEMO_MARGIN_SOURCE, market_data_source: MarketDataReadOnlySource = OFFLINE_DEMO_MARKET_DATA_SOURCE, public_embed_config=None) -> Callable[..., Iterable[bytes]]:
+def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], account_source: AccountReadOnlySource = DEMO_ACCOUNT_SOURCE, account_thresholds: CapitalSafetyThresholds = DEMO_ACCOUNT_THRESHOLDS, margin_source: MarginRequirementSource = DEMO_MARGIN_SOURCE, market_data_source: MarketDataReadOnlySource = OFFLINE_DEMO_MARKET_DATA_SOURCE, public_embed_config=None, chart_data_source=None) -> Callable[..., Iterable[bytes]]:
     from kam_market_ai.live_read_only.decision_presentation import SelectedSnapshotDecisionPresenter
     from kam_market_ai.paper_trading.embed_presenter import EmbedPagePresenter
     from kam_market_ai.paper_trading.public_routes import build_health_response
+    from kam_market_ai.paper_trading.multi_timeframe_chart import EMPTY_CHART_DATA_SOURCE, render_multi_timeframe_chart_html
     from kam_market_ai.public_deployment import PublicEmbedConfig
     public_embed_config = public_embed_config or PublicEmbedConfig()
+    chart_data_source = chart_data_source or EMPTY_CHART_DATA_SOURCE
     css_path = Path(__file__).with_name("static") / "operator.css"
     def app(environ: dict[str, object], start_response: Callable[..., object]) -> Iterable[bytes]:
         path, method = str(environ.get("PATH_INFO", "/")), str(environ.get("REQUEST_METHOD", "GET"))
@@ -452,6 +454,15 @@ def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], a
             return [body]
         if path == "/help":
             body = render_help_html().encode()
+            start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"), ("Content-Length", str(len(body))), *headers])
+            return [body]
+        if path == "/charts":
+            query = parse_qs(str(environ.get("QUERY_STRING", "")), keep_blank_values=True)
+            body = render_multi_timeframe_chart_html(
+                chart_data_source,
+                instrument=query.get("instrument", [DEFAULT_MARKET_PRODUCT])[0],
+                timeframe=query.get("timeframe", ["60m"])[0],
+            ).encode()
             start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"), ("Content-Length", str(len(body))), *headers])
             return [body]
         if path != "/":
