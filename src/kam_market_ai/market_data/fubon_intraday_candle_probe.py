@@ -73,8 +73,8 @@ class FubonIntradayCandleProbe:
         interval_minutes: int,
         after_hours: bool = False,
     ) -> FubonIntradayCandleProbeReport:
-        if instrument not in {Instrument.TX, Instrument.MTX}:
-            raise ValueError("intraday candle probe supports TX or MTX only")
+        if instrument not in {Instrument.TX, Instrument.MTX, Instrument.TMF}:
+            raise ValueError("intraday candle probe supports TX, MTX, or TMF only")
         if not symbol or symbol.strip() != symbol:
             raise ValueError("a verified provider symbol is required")
         contract = ResolvedFuturesContract(instrument, symbol, after_hours)

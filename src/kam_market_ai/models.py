@@ -1,11 +1,13 @@
 """Shared normalized domain models; no broker-order model exists."""
 from __future__ import annotations
+
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import Mapping
 
-class Instrument(StrEnum): TAIEX="TAIEX"; TX="TX"; MTX="MTX"
+
+class Instrument(StrEnum): TAIEX="TAIEX"; TX="TX"; MTX="MTX"; TMF="TMF"
 class SessionKind(StrEnum): DAY="DAY"; NIGHT="NIGHT"; CLOSED="CLOSED"
 class MarketRegime(StrEnum):
     TREND_UP="TREND_UP"; TREND_DOWN="TREND_DOWN"; CONSOLIDATION="CONSOLIDATION"; UNKNOWN="UNKNOWN"

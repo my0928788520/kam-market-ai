@@ -118,7 +118,7 @@ class InstrumentResolver(Protocol):
 
 
 class VerifiedContractResolver:
-    """Uses only externally verified, injected TX/MTX mappings; never guesses months."""
+    """Uses only externally verified, injected TX/MTX/TMF mappings; never guesses months."""
 
     def __init__(self, contracts: Sequence[ResolvedFuturesContract]) -> None:
         self._contracts = {(contract.instrument, contract.after_hours): contract for contract in contracts}
@@ -185,8 +185,8 @@ class FubonIntradayCandlesAdapter:
         *,
         after_hours: bool = False,
     ) -> list[Candle]:
-        if instrument not in {Instrument.TX, Instrument.MTX}:
-            raise IntradayCandleContractError("intraday futures candles support TX or MTX only")
+        if instrument not in {Instrument.TX, Instrument.MTX, Instrument.TMF}:
+            raise IntradayCandleContractError("intraday futures candles support TX, MTX, or TMF only")
         if not isinstance(spec, OfficialIntradayCandleSpec):
             raise IntradayCandleContractError("OfficialIntradayCandleSpec is required")
         contract = self._resolver.resolve(instrument, after_hours=after_hours)

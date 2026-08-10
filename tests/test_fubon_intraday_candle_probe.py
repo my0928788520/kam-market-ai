@@ -69,6 +69,21 @@ def test_probe_invokes_exactly_one_documented_endpoint_and_returns_only_summary(
     assert "data" not in payload
 
 
+def test_probe_preserves_tmf_identity_for_verified_micro_taiex_contract() -> None:
+    authorized, intraday = clients()
+    report = FubonIntradayCandleProbe(authorized).run(
+        instrument=Instrument.TMF,
+        symbol="TMFH6",
+        session="AFTERHOURS",
+        timeframe="1",
+        interval_minutes=1,
+        after_hours=True,
+    )
+    assert report.instrument is Instrument.TMF
+    assert report.safe_payload()["instrument"] == "TMF"
+    assert intraday.calls == [{"symbol": "TMFH6", "session": "AFTERHOURS", "timeframe": "1"}]
+
+
 class NeverBootstrap:
     def run(self, *_args, **_kwargs):
         raise AssertionError("bootstrap must not run without --live")
@@ -117,3 +132,28 @@ def test_cli_runs_one_sanitized_offline_fixture(monkeypatch, capsys) -> None:
     assert payload["symbol"] == "TXFH6"
     assert payload["account_connected"] is False
     assert intraday.calls == [{"symbol": "TXFH6", "session": "AFTERHOURS", "timeframe": "15"}]
+
+
+def test_cli_accepts_verified_tmf_contract_without_relabeling_as_mtx(monkeypatch, capsys) -> None:
+    authorized, intraday = clients()
+    monkeypatch.setattr(
+        "kam_market_ai.market_data.fubon_intraday_candle_probe_cli.Settings.load",
+        lambda _path: object(),
+    )
+    monkeypatch.setattr(
+        "kam_market_ai.market_data.fubon_intraday_candle_probe_cli.AuthorizationSettings.from_local_env",
+        lambda _path: object(),
+    )
+    code = main(
+        [
+            "--live", "--env", "fixture.env", "--instrument", "TMF", "--symbol", "TMFH6",
+            "--session", "AFTERHOURS", "--timeframe", "1", "--interval-minutes", "1",
+            "--after-hours",
+        ],
+        bootstrap=Bootstrap(authorized),
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert payload["instrument"] == "TMF"
+    assert payload["symbol"] == "TMFH6"
+    assert intraday.calls == [{"symbol": "TMFH6", "session": "AFTERHOURS", "timeframe": "1"}]

@@ -22,7 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="KAM 富邦單次期權日內 K 線唯讀驗證")
     parser.add_argument("--live", action="store_true", help="明確允許本次本機行情授權與單次請求")
     parser.add_argument("--env", default=".env", help="本機 .env 路徑；內容永不輸出")
-    parser.add_argument("--instrument", choices=("TX", "MTX"), required=True)
+    parser.add_argument("--instrument", choices=("TX", "MTX", "TMF"), required=True)
     parser.add_argument("--symbol", required=True, help="已核實的富邦期貨商品代碼")
     parser.add_argument("--session", required=True, help="已由官方文件核實的 session token")
     parser.add_argument("--timeframe", required=True, help="已由官方文件核實的 timeframe token")
