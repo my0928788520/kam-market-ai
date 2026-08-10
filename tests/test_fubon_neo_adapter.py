@@ -1,14 +1,15 @@
-import asyncio
 import ast
+import asyncio
 import json
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from kam_market_ai.market_data.fubon_neo import (
     AuthorizedMarketDataClients,
     FubonFuturesDiscovery,
     FubonNeoMarketDataAdapter,
+    HistoricalMappingRequiredError,
     MarketDataBoundaryError,
     ResolvedFuturesContract,
     VerifiedContractResolver,
@@ -87,7 +88,7 @@ class FixtureRequestMapper:
 class FixtureDecoder:
     def decode(self, instrument: Instrument, payload: object) -> list[Candle]:
         assert payload == {"fixture": True}
-        start = datetime(2026, 7, 14, 1, tzinfo=timezone.utc)
+        start = datetime(2026, 7, 14, 1, tzinfo=UTC)
         return [Candle(instrument, start, start, 1, 2, 1, 2, 3)]
 
 
@@ -151,13 +152,16 @@ class FubonNeoAdapterTests(unittest.TestCase):
         self.assertEqual(stock_ws.unsubscriptions, stock_ws.subscriptions)
         self.assertEqual(stock_ws.disconnect_calls, 1)
 
-    def test_historical_port_uses_injected_verified_mapping(self) -> None:
+    def test_historical_port_stays_disabled_when_official_contract_is_intraday_only(self) -> None:
         adapter, _, _, rest = build_adapter()
-        candles = asyncio.run(adapter.historical_candles(
-            Instrument.MTX, datetime(2026, 1, 1), datetime(2026, 1, 2), 60
-        ))
-        self.assertEqual(rest.historical.params, {"verified_symbol": "VERIFIED_MTX_DAY", "fixture_interval": 60})
-        self.assertEqual((len(candles), candles[0].instrument), (1, Instrument.MTX))
+        with self.assertRaisesRegex(HistoricalMappingRequiredError, "intraday-only"):
+            asyncio.run(adapter.historical_candles(
+                Instrument.MTX,
+                datetime(2026, 1, 1, tzinfo=UTC),
+                datetime(2026, 1, 2, tzinfo=UTC),
+                60,
+            ))
+        self.assertIsNone(rest.historical.params)
 
     def test_discovery_is_explicit_and_does_not_map_contracts(self) -> None:
         _, _, _, rest = build_adapter()

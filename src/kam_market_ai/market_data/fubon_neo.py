@@ -17,7 +17,6 @@ from typing import Any, Protocol
 from kam_market_ai.market_data.base import MarketDataProvider
 from kam_market_ai.models import Candle, Instrument, Tick
 
-
 TAIEX_INDEX_SYMBOL = "IR0001"
 
 
@@ -180,7 +179,7 @@ def _timestamp(value: object) -> datetime:
     if isinstance(value, datetime):
         return value.astimezone(UTC) if value.tzinfo else value.replace(tzinfo=UTC)
     if not isinstance(value, (int, float)):
-        raise ValueError("market-data time must be a datetime or numeric epoch")
+        raise TypeError("market-data time must be a datetime or numeric epoch")
     numeric = float(value)
     if numeric > 100_000_000_000_000:
         numeric /= 1_000_000  # SDK examples use microseconds.
@@ -274,12 +273,11 @@ class FubonNeoMarketDataAdapter(MarketDataProvider):
         end: datetime,
         interval_minutes: int,
     ) -> list[Candle]:
-        if instrument not in {Instrument.TX, Instrument.MTX}:
-            raise ValueError("Fubon futures historical endpoint supports only TX/MTX in V0.1")
-        contract = self._resolver.resolve(instrument, after_hours=False)
-        params = self._request_mapper.build(contract, start, end, interval_minutes)
-        payload = self._clients.futopt_rest.historical.candles(**params)
-        return self._candle_decoder.decode(instrument, payload)
+        del instrument, start, end, interval_minutes
+        raise HistoricalMappingRequiredError(
+            "Fubon officially documents futures candles as intraday-only; "
+            "the futopt historical endpoint remains disabled"
+        )
 
     @staticmethod
     def _as_message(message: str | Mapping[str, Any]) -> Mapping[str, Any] | None:

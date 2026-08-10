@@ -29,6 +29,50 @@ _FORBIDDEN_LITERAL_PARTS = ("account", "apikey", "cert", "password", "secret", "
 _SAFE_PACKAGE_VALUE = re.compile(r"^[A-Za-z0-9_.+-]{1,80}$")
 
 
+def _official_futures_contract_evidence() -> Mapping[str, Any]:
+    """Return the allow-listed support boundary published by Fubon.
+
+    The official futures/option Web API documentation currently advertises
+    intraday data only.  Its candle contract therefore cannot authorize the
+    SDK's otherwise-undocumented ``futopt.historical`` surface.
+    """
+    return {
+        "publisher": "Fubon Securities",
+        "documentation_checked_on": "2026-08-10",
+        "getting_started_url": (
+            "https://www.fbs.com.tw/TradeAPI/docs/market-data-future/"
+            "http-api/getting-started/"
+        ),
+        "candles_url": (
+            "https://www.fbs.com.tw/TradeAPI/docs/market-data-future/"
+            "http-api/intraday/candles/"
+        ),
+        "documented_data_types": ["intraday"],
+        "documented_candles_endpoint": "intraday/candles/{symbol}",
+        "documented_request_parameters": ["symbol", "session", "timeframe"],
+        "documented_response_fields": [
+            "date",
+            "type",
+            "exchange",
+            "market",
+            "symbol",
+            "timeframe",
+            "data",
+        ],
+        "documented_candle_fields": [
+            "date",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "average",
+        ],
+        "historical_candles_documented": False,
+        "historical_adapter_authorized": False,
+    }
+
+
 def _public_members(value: object) -> tuple[str, ...]:
     try:
         names = dir(value)
@@ -196,6 +240,7 @@ class HistoricalContractFingerprint:
     candles_instructions: tuple[Mapping[str, Any], ...]
     candles_documentation: Mapping[str, Any]
     sdk_package_evidence: Mapping[str, Any]
+    official_futures_contract_evidence: Mapping[str, Any]
     request_evidence: Mapping[str, Any]
     config_members: tuple[str, ...]
     fingerprint_sha256: str
@@ -212,6 +257,9 @@ class HistoricalContractFingerprint:
             "candles_instructions": [dict(item) for item in self.candles_instructions],
             "candles_documentation": dict(self.candles_documentation),
             "sdk_package_evidence": dict(self.sdk_package_evidence),
+            "official_futures_contract_evidence": dict(
+                self.official_futures_contract_evidence
+            ),
             "request_evidence": dict(self.request_evidence),
             "config_members": list(self.config_members),
             "fingerprint_sha256": self.fingerprint_sha256,
@@ -237,16 +285,18 @@ def probe_fubon_historical_contract(
     candles_instructions = _instruction_evidence(candles)
     candles_documentation = _documentation_evidence(candles)
     sdk_package_evidence = _sdk_package_evidence()
+    official_futures_contract_evidence = _official_futures_contract_evidence()
     request_evidence = _callable_evidence(request, error_prefix="REQUEST")
     config_members = _public_members(config)
     canonical = {
-        "schema_version": "4.0",
+        "schema_version": "5.0",
         "historical_members": list(members),
         "candles_parameters": [dict(item) for item in parameters],
         "candles_evidence": candles_evidence,
         "candles_instructions": [dict(item) for item in candles_instructions],
         "candles_documentation": candles_documentation,
         "sdk_package_evidence": sdk_package_evidence,
+        "official_futures_contract_evidence": official_futures_contract_evidence,
         "request_evidence": request_evidence,
         "config_members": list(config_members),
     }
@@ -254,7 +304,7 @@ def probe_fubon_historical_contract(
         json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
     return HistoricalContractFingerprint(
-        schema_version="4.0",
+        schema_version="5.0",
         mode="read_only_contract_probe",
         trading_enabled=False,
         endpoint_invoked=False,
@@ -264,6 +314,7 @@ def probe_fubon_historical_contract(
         candles_instructions=candles_instructions,
         candles_documentation=candles_documentation,
         sdk_package_evidence=sdk_package_evidence,
+        official_futures_contract_evidence=official_futures_contract_evidence,
         request_evidence=request_evidence,
         config_members=config_members,
         fingerprint_sha256=digest,

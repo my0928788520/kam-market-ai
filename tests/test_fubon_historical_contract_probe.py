@@ -55,7 +55,7 @@ def test_probe_records_signature_without_invoking_endpoint() -> None:
     assert history.calls == 0
     assert result.endpoint_invoked is False
     assert result.trading_enabled is False
-    assert result.schema_version == "4.0"
+    assert result.schema_version == "5.0"
     assert [item["name"] for item in result.candles_parameters] == ["symbol", "timeframe"]
     assert result.candles_parameters[0]["required"] == "true"
     assert len(result.fingerprint_sha256) == 64
@@ -64,6 +64,18 @@ def test_probe_records_signature_without_invoking_endpoint() -> None:
     assert result.request_evidence["parameters"][0]["name"] == "method"
     assert "base_url" in result.config_members
     assert result.candles_instructions
+
+
+def test_probe_records_official_intraday_only_futures_boundary() -> None:
+    authorized, history = clients()
+    result = probe_fubon_historical_contract(authorized)
+    evidence = result.official_futures_contract_evidence
+    assert history.calls == 0
+    assert evidence["documented_data_types"] == ["intraday"]
+    assert evidence["documented_candles_endpoint"] == "intraday/candles/{symbol}"
+    assert evidence["documented_request_parameters"] == ["symbol", "session", "timeframe"]
+    assert evidence["historical_candles_documented"] is False
+    assert evidence["historical_adapter_authorized"] is False
 
 
 def test_probe_records_hashed_documentation_without_retaining_prose() -> None:
