@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -19,6 +20,10 @@ from .fubon_neo import AuthorizedMarketDataClients
 
 class HistoricalContractProbeError(RuntimeError):
     """Raised when the SDK does not expose the expected read-only surface."""
+
+
+_SAFE_LITERAL = re.compile(r"^[A-Za-z0-9_./{}:+-]{1,120}$")
+_FORBIDDEN_LITERAL_PARTS = ("account", "apikey", "cert", "password", "secret", "token")
 
 
 def _public_members(value: object) -> tuple[str, ...]:
@@ -48,6 +53,49 @@ def _safe_signature(value: object) -> tuple[Mapping[str, str], ...]:
     return tuple(parameters)
 
 
+def _callable_evidence(value: object, *, error_prefix: str) -> Mapping[str, Any]:
+    """Return deterministic code metadata without retaining or invoking ``value``."""
+    if not callable(value):
+        raise HistoricalContractProbeError(f"{error_prefix}_NOT_CALLABLE")
+    evidence: dict[str, Any] = {
+        "module": str(getattr(value, "__module__", "")),
+        "qualname": str(getattr(value, "__qualname__", "")),
+        "type_module": type(value).__module__,
+        "type_qualname": type(value).__qualname__,
+        "parameters": [dict(item) for item in _safe_signature(value)],
+    }
+    code = getattr(value, "__code__", None)
+    if code is None:
+        evidence.update({"code_available": False, "code_names": [], "safe_code_strings": []})
+        return evidence
+    code_names = sorted({str(name) for name in code.co_names if str(name).isidentifier()})
+    safe_strings = sorted(
+        {
+            item
+            for item in code.co_consts
+            if isinstance(item, str)
+            and _SAFE_LITERAL.fullmatch(item)
+            and not item.lower().startswith(("http:", "https:"))
+            and not any(part in item.lower() for part in _FORBIDDEN_LITERAL_PARTS)
+        }
+    )
+    evidence.update(
+        {
+            "code_available": True,
+            "code_names": code_names,
+            "safe_code_strings": safe_strings,
+            "bytecode_sha256": hashlib.sha256(code.co_code).hexdigest(),
+        }
+    )
+    try:
+        source = inspect.getsource(value)
+    except (OSError, TypeError):
+        evidence["source_sha256"] = None
+    else:
+        evidence["source_sha256"] = hashlib.sha256(source.encode("utf-8")).hexdigest()
+    return evidence
+
+
 @dataclass(frozen=True, slots=True)
 class HistoricalContractFingerprint:
     schema_version: str
@@ -56,6 +104,9 @@ class HistoricalContractFingerprint:
     endpoint_invoked: bool
     historical_members: tuple[str, ...]
     candles_parameters: tuple[Mapping[str, str], ...]
+    candles_evidence: Mapping[str, Any]
+    request_evidence: Mapping[str, Any]
+    config_members: tuple[str, ...]
     fingerprint_sha256: str
 
     def safe_payload(self) -> dict[str, Any]:
@@ -66,6 +117,9 @@ class HistoricalContractFingerprint:
             "endpoint_invoked": self.endpoint_invoked,
             "historical_members": list(self.historical_members),
             "candles_parameters": [dict(item) for item in self.candles_parameters],
+            "candles_evidence": dict(self.candles_evidence),
+            "request_evidence": dict(self.request_evidence),
+            "config_members": list(self.config_members),
             "fingerprint_sha256": self.fingerprint_sha256,
         }
 
@@ -79,25 +133,36 @@ def probe_fubon_historical_contract(
     try:
         historical = clients.futopt_rest.historical
         candles = historical.candles
+        request = historical.request
+        config = historical.config
     except Exception as error:
         raise HistoricalContractProbeError("HISTORICAL_CANDLES_UNAVAILABLE") from error
     members = _public_members(historical)
     parameters = _safe_signature(candles)
+    candles_evidence = _callable_evidence(candles, error_prefix="CANDLES")
+    request_evidence = _callable_evidence(request, error_prefix="REQUEST")
+    config_members = _public_members(config)
     canonical = {
-        "schema_version": "1.0",
+        "schema_version": "2.0",
         "historical_members": list(members),
         "candles_parameters": [dict(item) for item in parameters],
+        "candles_evidence": candles_evidence,
+        "request_evidence": request_evidence,
+        "config_members": list(config_members),
     }
     digest = hashlib.sha256(
         json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
     return HistoricalContractFingerprint(
-        schema_version="1.0",
+        schema_version="2.0",
         mode="read_only_contract_probe",
         trading_enabled=False,
         endpoint_invoked=False,
         historical_members=members,
         candles_parameters=parameters,
+        candles_evidence=candles_evidence,
+        request_evidence=request_evidence,
+        config_members=config_members,
         fingerprint_sha256=digest,
     )
 

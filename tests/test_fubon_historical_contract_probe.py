@@ -21,6 +21,11 @@ class WebSocket:
 class Historical:
     def __init__(self) -> None:
         self.calls = 0
+        self.config = type("Config", (), {"base_url": "fixture"})()
+
+    def request(self, method: str, path: str, **params: object) -> object:
+        self.calls += 1
+        raise AssertionError("probe must not invoke request")
 
     def candles(self, symbol: str, *, timeframe: str = "60") -> object:
         self.calls += 1
@@ -50,9 +55,14 @@ def test_probe_records_signature_without_invoking_endpoint() -> None:
     assert history.calls == 0
     assert result.endpoint_invoked is False
     assert result.trading_enabled is False
+    assert result.schema_version == "2.0"
     assert [item["name"] for item in result.candles_parameters] == ["symbol", "timeframe"]
     assert result.candles_parameters[0]["required"] == "true"
     assert len(result.fingerprint_sha256) == 64
+    assert result.candles_evidence["qualname"].endswith("Historical.candles")
+    assert result.candles_evidence["code_available"] is True
+    assert result.request_evidence["parameters"][0]["name"] == "method"
+    assert "base_url" in result.config_members
 
 
 def test_probe_is_deterministic_and_contains_no_runtime_objects() -> None:
@@ -64,16 +74,58 @@ def test_probe_is_deterministic_and_contains_no_runtime_objects() -> None:
     json.dumps(left)
     assert "password" not in json.dumps(left).lower()
     assert "account" not in json.dumps(left).lower()
+    assert "fixture" not in json.dumps(left).lower()
 
 
 def test_probe_fails_closed_when_candles_is_not_callable() -> None:
-    authorized = AuthorizedMarketDataClients(WebSocket(), Rest(type("History", (), {"candles": 1})()), WebSocket(), StockRest())
+    authorized = AuthorizedMarketDataClients(
+        WebSocket(),
+        Rest(type("History", (), {"candles": 1, "request": lambda: None, "config": object()})()),
+        WebSocket(),
+        StockRest(),
+    )
     try:
         probe_fubon_historical_contract(authorized)
     except HistoricalContractProbeError as error:
         assert str(error) == "CANDLES_NOT_CALLABLE"
     else:
         raise AssertionError("expected fail-closed error")
+
+
+def test_probe_filters_code_strings_without_invoking_callable() -> None:
+    class EvidenceHistorical(Historical):
+        def candles(self, **params: object) -> object:
+            endpoint = "/historical/candles/{symbol}"
+            secret_label = "api_token"
+            url = "https://marketdata.example.invalid"
+            raise AssertionError((endpoint, secret_label, url, params))
+
+    authorized, history = clients(EvidenceHistorical())
+    result = probe_fubon_historical_contract(authorized)
+    strings = result.candles_evidence["safe_code_strings"]
+    assert history.calls == 0
+    assert "/historical/candles/{symbol}" in strings
+    assert "api_token" not in strings
+    assert not any(value.startswith("https:") for value in strings)
+
+
+def test_probe_fails_closed_when_request_is_not_callable() -> None:
+    history = Historical()
+    history.request = 1  # type: ignore[method-assign]
+    authorized, _ = clients(history)
+    try:
+        probe_fubon_historical_contract(authorized)
+    except HistoricalContractProbeError as error:
+        assert str(error) == "REQUEST_NOT_CALLABLE"
+    else:
+        raise AssertionError("expected fail-closed error")
+
+
+def test_probe_never_serializes_config_values() -> None:
+    authorized, _ = clients()
+    payload = json.dumps(probe_fubon_historical_contract(authorized).safe_payload())
+    assert "base_url" in payload
+    assert "fixture" not in payload
 
 
 class Bootstrap:
