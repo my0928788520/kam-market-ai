@@ -55,6 +55,7 @@ def test_help_page_contains_sop_horizons_rollover_and_risk_boundaries() -> None:
         )
     ).decode()
     assert response["status"] == "200 OK" and "KAM 使用說明｜SOP" in body
+    assert "class=\'help-page-root\'" in body and "class=\'help-page\'" in body
 
 
 def test_account_page_is_get_only_demo_data_and_never_exposes_trading_endpoints() -> None:
@@ -296,6 +297,8 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert "footer { grid-row: 4; position: static;" in css
     assert ".risk-disclaimer" in css and ".footer-metrics" in css
     assert "font-size: 11px" in css and ".risk-disclaimer span { display: block; }" in css
+    assert ".help-page-root, .help-page" in css and "overflow-y: auto" in css
+    assert ".help-main { display: block;" in css
     assert ".cycle-chart svg" in css and "height: 180px" in css
     assert "marker-breathe 5s" in css
     assert ".proposal dd, .matching dd" in css and "text-overflow: ellipsis" in css

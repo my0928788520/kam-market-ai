@@ -29,7 +29,8 @@ footer { grid-row: 4; position: static; display: grid; align-content: center; ga
 .account-chip { padding: 5px 8px; border: 1px solid #a04f6366; border-radius: 10px; color: #ffdbe2; font-size: 11px; text-decoration: none; background: #43182866; }.account-chip:hover { border-color: #ea6b8666; }
 
 /* GET-only operating guide */
-.help-main { min-height: 100vh; height: auto; max-width: none; overflow: visible; background: #080b12; color: #f1f4f8; }
+.help-page-root, .help-page { height: auto; min-height: 100%; overflow-x: hidden; overflow-y: auto; }
+.help-main { display: block; min-height: 100vh; height: auto; max-width: none; overflow: visible; background: #080b12; color: #f1f4f8; }
 .help-main > header { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 58px; height: auto; padding: 9px 16px; background: #0d111bcc; backdrop-filter: blur(12px); }
 .help-main > header h1 { margin: 0; font-size: 20px; }.help-main > header small { color: #9ca7b8; }.help-nav { display: flex; gap: 7px; margin-left: auto; }
 .help-banner { padding: 12px 18px; border-block: 1px solid #a04f6344; background: linear-gradient(90deg,#32131f,#181019); color: #ffd9e1; font-size: 13px; line-height: 1.6; }
