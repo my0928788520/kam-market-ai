@@ -41,6 +41,11 @@ def test_wsgi_is_get_only_escapes_html_and_serves_static_css() -> None:
 
 def test_help_page_contains_sop_horizons_rollover_and_risk_boundaries() -> None:
     html = render_help_html()
+    assert "<html class='help-page'" in html and "<body class='help-page'>" in html
+    assert "KAM 是交易決策作業系統，不是承諾獲利的交易指示工具" in html
+    assert "當前是否具備交易條件，以及下一步應採取什麼行動" in html
+    assert "喊單工具" not in html
+    assert "後端可以複雜" not in html
     for text in (
         "每日使用 SOP", "週期與預期持有時間", "長週期", "中期波段", "當沖",
         "第三個星期三", "到期前 5 個營業日開始提醒", "不是交易所強制換倉日",
@@ -55,7 +60,12 @@ def test_help_page_contains_sop_horizons_rollover_and_risk_boundaries() -> None:
         )
     ).decode()
     assert response["status"] == "200 OK" and "KAM 使用說明｜SOP" in body
-    assert "class=\'help-page-root\'" in body and "class=\'help-page\'" in body
+
+
+def test_help_page_uses_document_flow_instead_of_dashboard_grid() -> None:
+    css = Path("src/kam_market_ai/paper_trading/static/operator.css").read_text(encoding="utf-8")
+    assert "html.help-page, body.help-page" in css
+    assert ".help-main { display: block;" in css
 
 
 def test_account_page_is_get_only_demo_data_and_never_exposes_trading_endpoints() -> None:
@@ -297,8 +307,6 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert "footer { grid-row: 4; position: static;" in css
     assert ".risk-disclaimer" in css and ".footer-metrics" in css
     assert "font-size: 11px" in css and ".risk-disclaimer span { display: block; }" in css
-    assert ".help-page-root, .help-page" in css and "overflow-y: auto" in css
-    assert ".help-main { display: block;" in css
     assert ".cycle-chart svg" in css and "height: 180px" in css
     assert "marker-breathe 5s" in css
     assert ".proposal dd, .matching dd" in css and "text-overflow: ellipsis" in css
