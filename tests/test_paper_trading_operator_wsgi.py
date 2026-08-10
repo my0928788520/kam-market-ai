@@ -238,6 +238,14 @@ def test_dashboard_renders_real_control_cells_and_coloured_cycle_structure() -> 
     assert len(view.demo["timeframes"]) == 5
     for footer_field in ("已實現損益", "未實現損益", "緊急停止"):
         assert footer_field in html
+    for disclaimer_text in (
+        "僅供研究、模擬與決策輔助",
+        "不構成投資建議、獲利保證或代客操作",
+        "模擬績效不代表未來結果",
+        "可能產生超過原始保證金之損失",
+        "交易結果與損益由使用者自行承擔",
+    ):
+        assert disclaimer_text in html
     for label in ("低檔確認", "起漲形成", "多方延伸", "高檔回落", "起跌形成", "空方延伸", "低點止跌"):
         assert label in html
 
@@ -266,6 +274,7 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert "height: 100vh" in css and "overflow: hidden" in css
     assert "grid-template-rows: minmax(160px, 205px) minmax(110px, 128px) minmax(96px, 110px) minmax(0, 1fr)" in css
     assert "footer { grid-row: 4; position: static;" in css
+    assert ".risk-disclaimer" in css and ".footer-metrics" in css
     assert ".cycle-chart svg" in css and "height: 180px" in css
     assert "marker-breathe 5s" in css
     assert ".proposal dd, .matching dd" in css and "text-overflow: ellipsis" in css
