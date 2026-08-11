@@ -17,6 +17,7 @@ from types import MappingProxyType
 from kam_market_ai.models import Candle, Instrument
 
 from .fubon_neo import FubonIntradayCandlesAdapter, OfficialIntradayCandleSpec
+from .verified_higher_timeframe_batch import VerifiedHigherTimeframeBatchResult
 
 
 class FiveTimeframe(StrEnum):
@@ -86,6 +87,81 @@ class FiveTimeframeCandleResult:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class CompleteFiveTimeframeCandleResult:
+    instrument: Instrument
+    session: str
+    series: Mapping[FiveTimeframe, tuple[Candle, ...]]
+    endpoint_call_count: int
+    status: str = "READY_VERIFIED_FIVE_TIMEFRAMES"
+    market_data_only: bool = True
+    manual_trigger_only: bool = True
+    trading_enabled: bool = False
+    raw_payload_retained: bool = False
+
+    def __post_init__(self) -> None:
+        if tuple(self.series) != REQUIRED_FIVE_TIMEFRAMES:
+            raise ValueError("complete five-timeframe series must be canonical")
+        if any(not values for values in self.series.values()):
+            raise ValueError("complete five-timeframe series cannot contain empty slices")
+        if any(
+            candle.instrument is not self.instrument
+            for values in self.series.values()
+            for candle in values
+        ):
+            raise ValueError("complete five-timeframe series cannot mix instruments")
+        if self.endpoint_call_count != 3:
+            raise ValueError("complete five-timeframe result requires three intraday endpoint calls")
+        if self.status != "READY_VERIFIED_FIVE_TIMEFRAMES":
+            raise ValueError("complete five-timeframe result requires verified READY status")
+        if (
+            not self.market_data_only
+            or not self.manual_trigger_only
+            or self.trading_enabled
+            or self.raw_payload_retained
+        ):
+            raise ValueError("complete five-timeframe result violates read-only boundary")
+
+    def safe_payload(self) -> dict[str, object]:
+        return {
+            "success": True,
+            "status": self.status,
+            "instrument": self.instrument.value,
+            "session": self.session,
+            "required_timeframes": [item.value for item in REQUIRED_FIVE_TIMEFRAMES],
+            "loaded_timeframes": [item.value for item in self.series],
+            "missing_timeframes": [],
+            "candle_counts": {item.value: len(values) for item, values in self.series.items()},
+            "endpoint_call_count": self.endpoint_call_count,
+            "market_data_only": self.market_data_only,
+            "manual_trigger_only": self.manual_trigger_only,
+            "trading_enabled": self.trading_enabled,
+            "raw_payload_retained": self.raw_payload_retained,
+        }
+
+
+def complete_with_verified_higher_timeframes(
+    partial: FiveTimeframeCandleResult,
+    higher: VerifiedHigherTimeframeBatchResult,
+) -> CompleteFiveTimeframeCandleResult:
+    """Join minute slices only with an independently verified day/week batch."""
+    if not isinstance(partial, FiveTimeframeCandleResult):
+        raise TypeError("FiveTimeframeCandleResult is required")
+    if not isinstance(higher, VerifiedHigherTimeframeBatchResult):
+        raise TypeError("VerifiedHigherTimeframeBatchResult is required")
+    if partial.instrument is not higher.instrument:
+        raise ValueError("FIVE_TIMEFRAME_INSTRUMENT_IDENTITY_MISMATCH")
+    series = dict(partial.series)
+    series[FiveTimeframe.DAY] = higher.day_candles
+    series[FiveTimeframe.WEEK] = higher.week_candles
+    return CompleteFiveTimeframeCandleResult(
+        instrument=partial.instrument,
+        session=partial.session,
+        series=MappingProxyType(series),
+        endpoint_call_count=partial.endpoint_call_count,
+    )
+
+
 class FubonFiveTimeframeCandlePipeline:
     """Fetch only the three officially supported KAM minute slices on demand."""
 
@@ -125,7 +201,9 @@ class FubonFiveTimeframeCandlePipeline:
 __all__ = [
     "REQUIRED_FIVE_TIMEFRAMES",
     "VERIFIED_INTRADAY_SPECS",
+    "CompleteFiveTimeframeCandleResult",
     "FiveTimeframe",
     "FiveTimeframeCandleResult",
     "FubonFiveTimeframeCandlePipeline",
+    "complete_with_verified_higher_timeframes",
 ]
