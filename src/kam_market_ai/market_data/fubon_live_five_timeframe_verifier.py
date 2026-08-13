@@ -44,7 +44,7 @@ class FubonLiveFiveTimeframeVerifier:
         self,
         *,
         symbol: str,
-        session: str,
+        session: str | None,
         after_hours: bool = False,
         classifications: tuple[CandleClassification, ...] = (),
         complete_trading_dates: tuple[date, ...] = (),

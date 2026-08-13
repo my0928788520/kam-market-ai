@@ -174,17 +174,22 @@ class FubonFiveTimeframeCandlePipeline:
         self,
         instrument: Instrument,
         *,
-        session: str,
+        session: str | None,
         after_hours: bool = False,
     ) -> FiveTimeframeCandleResult:
         if instrument not in {Instrument.TX, Instrument.MTX, Instrument.TMF}:
             raise ValueError("five-timeframe futures bridge supports TX, MTX, or TMF only")
-        if not session or session.strip() != session:
-            raise ValueError("verified official session token is required")
+        if session is not None and (not session or session.strip() != session):
+            raise ValueError("verified official session token must be non-empty when provided")
         series: dict[FiveTimeframe, tuple[Candle, ...]] = {}
         for timeframe in REQUIRED_FIVE_TIMEFRAMES[:3]:
             verified = VERIFIED_INTRADAY_SPECS[timeframe]
-            spec = OfficialIntradayCandleSpec(session, verified.timeframe, verified.interval_minutes)
+            provider_session = "afterhours" if after_hours else None
+            spec = OfficialIntradayCandleSpec(
+                provider_session,
+                verified.timeframe,
+                verified.interval_minutes,
+            )
             candles = self._adapter.fetch(instrument, spec, after_hours=after_hours)
             if not candles:
                 raise ValueError(f"FIVE_TIMEFRAME_EMPTY_{timeframe.value.upper()}")

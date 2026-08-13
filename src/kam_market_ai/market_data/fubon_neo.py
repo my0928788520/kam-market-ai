@@ -156,13 +156,17 @@ class OfficialIntradayCandleSpec:
     the verified candle duration used for normalization.
     """
 
-    session: str
+    session: str | None
     timeframe: str
     interval_minutes: int
 
     def __post_init__(self) -> None:
-        if not self.session or self.session.strip() != self.session:
-            raise IntradayCandleContractError("official session token is required")
+        if self.session is not None and (
+            not self.session or self.session.strip() != self.session
+        ):
+            raise IntradayCandleContractError(
+                "official session token must be non-empty when provided"
+            )
         if not self.timeframe or self.timeframe.strip() != self.timeframe:
             raise IntradayCandleContractError("official timeframe token is required")
         if isinstance(self.interval_minutes, bool) or self.interval_minutes <= 0:
@@ -190,11 +194,14 @@ class FubonIntradayCandlesAdapter:
         if not isinstance(spec, OfficialIntradayCandleSpec):
             raise IntradayCandleContractError("OfficialIntradayCandleSpec is required")
         contract = self._resolver.resolve(instrument, after_hours=after_hours)
-        payload = self._intraday.candles(
-            symbol=contract.symbol,
-            session=spec.session,
-            timeframe=spec.timeframe,
-        )
+        request = {
+            "symbol": contract.symbol,
+            "timeframe": spec.timeframe,
+        }
+        if spec.session is not None:
+            request["session"] = spec.session
+
+        payload = self._intraday.candles(**request)
         return self._decode(instrument, contract.symbol, spec, payload)
 
     @staticmethod

@@ -53,9 +53,9 @@ def test_bridge_fetches_only_verified_minute_frames_and_blocks_incomplete_covera
     result = pipeline(intraday).run(Instrument.TMF, session="AFTERHOURS", after_hours=True)
 
     assert intraday.calls == [
-        {"symbol": "TMFH6", "session": "AFTERHOURS", "timeframe": "5"},
-        {"symbol": "TMFH6", "session": "AFTERHOURS", "timeframe": "15"},
-        {"symbol": "TMFH6", "session": "AFTERHOURS", "timeframe": "60"},
+        {"symbol": "TMFH6", "session": "afterhours", "timeframe": "5"},
+        {"symbol": "TMFH6", "session": "afterhours", "timeframe": "15"},
+        {"symbol": "TMFH6", "session": "afterhours", "timeframe": "60"},
     ]
     assert tuple(result.series) == REQUIRED_FIVE_TIMEFRAMES[:3]
     assert result.missing_timeframes == REQUIRED_FIVE_TIMEFRAMES[3:]

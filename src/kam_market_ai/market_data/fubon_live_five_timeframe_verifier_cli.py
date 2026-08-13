@@ -33,7 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--live", action="store_true")
     parser.add_argument("--env", default=".env")
     parser.add_argument("--symbol", required=True, help="已核實的富邦 TMF 契約代碼")
-    parser.add_argument("--session", required=True, help="已核實的官方 session token")
+    parser.add_argument("--session", default=None, help="已核實的官方 session token")
     parser.add_argument("--after-hours", action="store_true")
     parser.add_argument(
         "--classify",

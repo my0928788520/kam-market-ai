@@ -24,7 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--env", default=".env", help="本機 .env 路徑；內容永不輸出")
     parser.add_argument("--instrument", choices=("TX", "MTX", "TMF"), required=True)
     parser.add_argument("--symbol", required=True, help="已核實的富邦期貨商品代碼")
-    parser.add_argument("--session", required=True, help="已由官方文件核實的 session token")
+    parser.add_argument("--session", default=None, help="已由官方文件核實的 session token")
     parser.add_argument("--timeframe", required=True, help="已由官方文件核實的 timeframe token")
     parser.add_argument("--interval-minutes", type=int, required=True)
     parser.add_argument("--after-hours", action="store_true")

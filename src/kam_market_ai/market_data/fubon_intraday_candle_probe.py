@@ -20,7 +20,7 @@ from .fubon_neo import (
 class FubonIntradayCandleProbeReport:
     instrument: Instrument
     symbol: str
-    session: str
+    session: str | None
     timeframe: str
     interval_minutes: int
     candle_count: int
@@ -68,7 +68,7 @@ class FubonIntradayCandleProbe:
         *,
         instrument: Instrument,
         symbol: str,
-        session: str,
+        session: str | None,
         timeframe: str,
         interval_minutes: int,
         after_hours: bool = False,

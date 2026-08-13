@@ -46,10 +46,12 @@ class Rest:
         self.historical = object()
 
 
-def verifier():
+def verifier(*, after_hours: bool = False):
     intraday = Intraday()
     clients = AuthorizedMarketDataClients(WebSocket(), Rest(intraday), WebSocket(), Rest(Intraday()))
-    resolver = VerifiedContractResolver((ResolvedFuturesContract(Instrument.TMF, "TMFH6", False),))
+    resolver = VerifiedContractResolver((
+        ResolvedFuturesContract(Instrument.TMF, "TMFH6", after_hours),
+    ))
     pipeline = FubonFiveTimeframeCandlePipeline(FubonIntradayCandlesAdapter(clients, resolver))
     return FubonLiveFiveTimeframeVerifier(pipeline), intraday
 
@@ -120,3 +122,32 @@ def test_live_verifier_contains_no_account_or_order_capability() -> None:
     source = Path(module.__file__).read_text(encoding="utf-8").lower()
     assert "place_order" not in source
     assert "subscribe(" not in source
+
+def test_regular_session_omits_provider_session_from_all_requests() -> None:
+    target, intraday = verifier()
+
+    payload = target.run(symbol="TMFH6", session=None)
+
+    assert payload["session"] is None
+    assert intraday.calls == [
+        {"symbol": "TMFH6", "timeframe": "5"},
+        {"symbol": "TMFH6", "timeframe": "15"},
+        {"symbol": "TMFH6", "timeframe": "60"},
+    ]
+
+
+def test_after_hours_session_passes_official_token_to_all_requests() -> None:
+    target, intraday = verifier(after_hours=True)
+
+    payload = target.run(
+        symbol="TMFH6",
+        session="afterhours",
+        after_hours=True,
+    )
+
+    assert payload["session"] == "afterhours"
+    assert intraday.calls == [
+        {"symbol": "TMFH6", "timeframe": "5", "session": "afterhours"},
+        {"symbol": "TMFH6", "timeframe": "15", "session": "afterhours"},
+        {"symbol": "TMFH6", "timeframe": "60", "session": "afterhours"},
+    ]
