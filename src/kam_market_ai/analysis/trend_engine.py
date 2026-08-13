@@ -148,16 +148,16 @@ class TrendEngineConfig:
         """PROVISIONAL engineering defaults; not validated trading rules."""
 
         return cls(
-            lookback_by_timeframe={PositionTimeframe.M15: 64, PositionTimeframe.M60: 48, PositionTimeframe.D1: 60, PositionTimeframe.W1: 52},
-            minimum_closed_candles_by_timeframe={PositionTimeframe.M15: 32, PositionTimeframe.M60: 24, PositionTimeframe.D1: 30, PositionTimeframe.W1: 26},
+            lookback_by_timeframe={PositionTimeframe.M5: 96, PositionTimeframe.M15: 64, PositionTimeframe.M60: 48, PositionTimeframe.D1: 60, PositionTimeframe.W1: 52},
+            minimum_closed_candles_by_timeframe={PositionTimeframe.M5: 48, PositionTimeframe.M15: 32, PositionTimeframe.M60: 24, PositionTimeframe.D1: 30, PositionTimeframe.W1: 26},
             pivot_left_window_by_timeframe={item: 2 for item in ALL_TIMEFRAMES},
             pivot_right_window_by_timeframe={item: 2 for item in ALL_TIMEFRAMES},
-            minimum_anchor_separation_by_timeframe={PositionTimeframe.M15: 4, PositionTimeframe.M60: 3, PositionTimeframe.D1: 3, PositionTimeframe.W1: 2},
-            maximum_anchor_age_by_timeframe={PositionTimeframe.M15: timedelta(days=2), PositionTimeframe.M60: timedelta(days=5), PositionTimeframe.D1: timedelta(days=180), PositionTimeframe.W1: timedelta(days=730)},
+            minimum_anchor_separation_by_timeframe={PositionTimeframe.M5: 4, PositionTimeframe.M15: 4, PositionTimeframe.M60: 3, PositionTimeframe.D1: 3, PositionTimeframe.W1: 2},
+            maximum_anchor_age_by_timeframe={PositionTimeframe.M5: timedelta(days=1), PositionTimeframe.M15: timedelta(days=2), PositionTimeframe.M60: timedelta(days=5), PositionTimeframe.D1: timedelta(days=180), PositionTimeframe.W1: timedelta(days=730)},
             tolerance_value_by_timeframe={item: Decimal("0.10") for item in ALL_TIMEFRAMES},
-            break_confirmation_bars_by_timeframe={PositionTimeframe.M15: 2, PositionTimeframe.M60: 2, PositionTimeframe.D1: 2, PositionTimeframe.W1: 1},
-            retest_max_bars_by_timeframe={PositionTimeframe.M15: 8, PositionTimeframe.M60: 6, PositionTimeframe.D1: 5, PositionTimeframe.W1: 4},
-            stale_after_by_timeframe={PositionTimeframe.M15: timedelta(minutes=30), PositionTimeframe.M60: timedelta(hours=2), PositionTimeframe.D1: timedelta(days=2), PositionTimeframe.W1: timedelta(days=14)},
+            break_confirmation_bars_by_timeframe={PositionTimeframe.M5: 2, PositionTimeframe.M15: 2, PositionTimeframe.M60: 2, PositionTimeframe.D1: 2, PositionTimeframe.W1: 1},
+            retest_max_bars_by_timeframe={PositionTimeframe.M5: 12, PositionTimeframe.M15: 8, PositionTimeframe.M60: 6, PositionTimeframe.D1: 5, PositionTimeframe.W1: 4},
+            stale_after_by_timeframe={PositionTimeframe.M5: timedelta(minutes=10), PositionTimeframe.M15: timedelta(minutes=30), PositionTimeframe.M60: timedelta(hours=2), PositionTimeframe.D1: timedelta(days=2), PositionTimeframe.W1: timedelta(days=14)},
         )
 
 
