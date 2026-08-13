@@ -15,6 +15,10 @@ from kam_market_ai.authorization.bootstrap import (
 from kam_market_ai.config import Settings, UnsafeConfigurationError
 from kam_market_ai.models import Instrument
 
+from .five_timeframe_attestation_file import (
+    load_verified_attestation,
+    write_attestation_template,
+)
 from .fubon_five_timeframe_pipeline import FubonFiveTimeframeCandlePipeline
 from .fubon_live_five_timeframe_verifier import (
     CandleClassification,
@@ -43,6 +47,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--complete-trading-date", action="append", default=[])
     parser.add_argument("--complete-week-start", action="append", default=[])
+    parser.add_argument("--attestation-file", help="已人工核實的 JSON 認證檔")
+    parser.add_argument("--write-attestation-template", help="將待核實認證草稿寫入此路徑")
     return parser
 
 
@@ -67,9 +73,19 @@ def main(
         print(json.dumps({"success": False, "failure_stage": "LIVE_FLAG_REQUIRED"}))
         return 2
     try:
-        classifications = tuple(_classification(value) for value in args.classify)
-        complete_dates = tuple(date.fromisoformat(value) for value in args.complete_trading_date)
-        complete_weeks = tuple(date.fromisoformat(value) for value in args.complete_week_start)
+        if args.attestation_file and (
+            args.classify or args.complete_trading_date or args.complete_week_start
+        ):
+            raise ValueError("ATTESTATION_FILE_CANNOT_BE_COMBINED_WITH_INLINE_VALUES")
+        if args.attestation_file:
+            attestation = load_verified_attestation(args.attestation_file)
+            classifications = attestation.classifications
+            complete_dates = attestation.complete_trading_dates
+            complete_weeks = attestation.complete_week_starts
+        else:
+            classifications = tuple(_classification(value) for value in args.classify)
+            complete_dates = tuple(date.fromisoformat(value) for value in args.complete_trading_date)
+            complete_weeks = tuple(date.fromisoformat(value) for value in args.complete_week_start)
         Settings.load(args.env)
         result = (bootstrap or AuthorizationBootstrap()).run(
             AuthorizationSettings.from_local_env(args.env),
@@ -102,6 +118,13 @@ def main(
     except Exception:  # noqa: BLE001
         print(json.dumps({"success": False, "failure_stage": "CANDLE_ENDPOINT_ERROR"}))
         return 1
+    if args.write_attestation_template:
+        try:
+            target = write_attestation_template(args.write_attestation_template, payload)
+        except (OSError, TypeError, ValueError):
+            print(json.dumps({"success": False, "failure_stage": "ATTESTATION_TEMPLATE_ERROR"}))
+            return 1
+        payload["attestation_template_written"] = str(target)
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     return 0 if payload["success"] else 3
 
