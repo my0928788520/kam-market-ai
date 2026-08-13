@@ -62,11 +62,10 @@ def test_probe_stops_at_attestation_required_and_exposes_safe_source_identity() 
 
     assert payload["success"] is False
     assert payload["status"] == "ATTESTATION_REQUIRED"
-    assert payload["decision_preview"]["decision_status"] == "BLOCKED"
+    assert payload["decision_preview"]["decision_status"] == "OBSERVATION_ONLY"
     assert payload["decision_preview"]["action"] == "HOLD"
-    assert payload["decision_preview"]["blockers"] == [
-        "FIVE_TIMEFRAME_DATA_INCOMPLETE"
-    ]
+    assert payload["decision_preview"]["direction"] == "觀望"
+    assert payload["decision_preview"]["live_order_allowed"] is False
     assert payload["analysis_preview"]["analysis_status"] == "provisional_current_periods"
     assert payload["analysis_preview"]["three_second_summary"]["headline"] == "日週線形成中"
     assert "CURRENT_DAY_WEEK_BARS_ARE_PROVISIONAL" in payload["analysis_preview"]["blockers"]
@@ -99,16 +98,15 @@ def test_exact_operator_attestation_reaches_ready_five_timeframes() -> None:
 
     assert payload["success"] is True
     assert payload["status"] == "READY_VERIFIED_FIVE_TIMEFRAMES"
-    assert payload["decision_preview"]["decision_status"] == "BLOCKED"
+    assert payload["decision_preview"]["decision_status"] == "OBSERVATION_ONLY"
     assert payload["decision_preview"]["action"] == "HOLD"
-    assert payload["decision_preview"]["blockers"] == [
-        "TIMEFRAME_STATE_CLASSIFICATION_REQUIRED"
-    ]
+    assert payload["decision_preview"]["direction"] in {"偏多", "偏空", "觀望"}
+    assert payload["decision_preview"]["mapping_version"] == "five-timeframe-kam-state-v1.0"
     assert payload["analysis_preview"]["decision_status"] == "BLOCKED"
     assert payload["analysis_preview"]["action"] == "HOLD"
     assert payload["analysis_preview"]["timeframes"]["5m"]["status"] != "unsupported"
     assert "M5_ANALYSIS_ENGINE_REQUIRED" not in payload["analysis_preview"]["blockers"]
-    assert "TRADING_DECISION_MAPPING_NOT_APPROVED" in payload["analysis_preview"]["blockers"]
+    assert "TRADING_DECISION_MAPPING_NOT_APPROVED" not in payload["analysis_preview"]["blockers"]
     assert payload["analysis_preview"]["decision_diagnostics"]["observation_only"] is True
     assert payload["analysis_preview"]["three_second_summary"]["action"] == "HOLD"
     assert payload["analysis_preview"]["three_second_summary"]["decision_status"] == "BLOCKED"
