@@ -14,6 +14,9 @@ from kam_market_ai.authorization.bootstrap import (
 )
 from kam_market_ai.config import Settings, UnsafeConfigurationError
 from kam_market_ai.models import Instrument
+from kam_market_ai.live_read_only.five_timeframe_snapshot import (
+    write_five_timeframe_snapshot,
+)
 
 from .five_timeframe_attestation_file import (
     load_verified_attestation,
@@ -49,6 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--complete-week-start", action="append", default=[])
     parser.add_argument("--attestation-file", help="已人工核實的 JSON 認證檔")
     parser.add_argument("--write-attestation-template", help="將待核實認證草稿寫入此路徑")
+    parser.add_argument("--output", help="將安全分析快照原子寫入此 JSON 路徑")
     return parser
 
 
@@ -125,6 +129,13 @@ def main(
             print(json.dumps({"success": False, "failure_stage": "ATTESTATION_TEMPLATE_ERROR"}))
             return 1
         payload["attestation_template_written"] = str(target)
+    if args.output:
+        try:
+            target = write_five_timeframe_snapshot(args.output, payload)
+        except (OSError, TypeError, ValueError):
+            print(json.dumps({"success": False, "failure_stage": "SNAPSHOT_WRITE_ERROR"}))
+            return 1
+        payload["snapshot_written"] = str(target)
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     return 0 if payload["success"] else 3
 
