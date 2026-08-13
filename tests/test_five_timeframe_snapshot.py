@@ -23,8 +23,16 @@ def safe_payload() -> dict[str, object]:
         "analysis_preview": {
             "decision_status": "BLOCKED",
             "action": "HOLD",
-            "three_second_summary": {"headline": "日週線形成中", "direction": "neutral"},
-            "timeframes": {"5m": {"trend": "<unsafe>", "status": "ok"}},
+            "three_second_summary": {"headline": "日週線形成中", "direction": "觀望"},
+            "timeframes": {"5m": {"trend": "<unsafe>", "position": "neutral", "structure": "neutral", "timing": "waiting", "status": "ok"}},
+            "kam_rule_decision": {
+                "direction": "觀望",
+                "primary_next_action": "等待週線與日線方向一致",
+                "decision_status": "OBSERVATION_ONLY",
+                "action": "HOLD",
+                "mapping_version": "five-timeframe-kam-state-v1.0",
+                "states": {"5m": {"code": "NF"}},
+            },
         },
     }
 
@@ -88,6 +96,13 @@ def test_dashboard_renders_safe_three_second_view_without_trade_controls(tmp_pat
     assert "TMFH6" in body
     assert "&lt;unsafe&gt;" in body
     assert "禁止真實下單" in body
+    assert "KAM 市場方向" in body
+    assert "觀望" in body
+    assert "唯一下一步" in body
+    assert "等待週線與日線方向一致" in body
+    assert "NF" in body
+    assert "中性・形成中" in body
+    assert "five-timeframe-kam-state-v1.0" in body
     assert "place_order" not in body.lower()
 
 
