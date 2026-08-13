@@ -67,6 +67,10 @@ def test_probe_stops_at_attestation_required_and_exposes_safe_source_identity() 
     assert payload["decision_preview"]["blockers"] == [
         "FIVE_TIMEFRAME_DATA_INCOMPLETE"
     ]
+    assert payload["analysis_preview"]["analysis_status"] == "provisional_current_periods"
+    assert payload["analysis_preview"]["three_second_summary"]["headline"] == "日週線形成中"
+    assert "CURRENT_DAY_WEEK_BARS_ARE_PROVISIONAL" in payload["analysis_preview"]["blockers"]
+    assert payload["analysis_preview"]["decision_status"] == "BLOCKED"
     assert payload["external_endpoint_call_count"] == 3
     assert payload["symbol"] == "TMFH6"
     assert len(payload["source_candle_starts"]) == 2
