@@ -105,27 +105,41 @@ def render_five_timeframe_html(payload: dict[str, object]) -> str:
     diagnostics = diagnostics if isinstance(diagnostics, dict) else {}
     timeframes = preview.get("timeframes")
     timeframes = timeframes if isinstance(timeframes, dict) else {}
+    kam = preview.get("kam_rule_decision")
+    kam = kam if isinstance(kam, dict) else {}
+    kam_states = kam.get("states")
+    kam_states = kam_states if isinstance(kam_states, dict) else {}
 
     def text(value: object) -> str:
         return html.escape(str(value if value is not None else "—"))
 
     cards = []
     labels = {"5m": "5 分", "15m": "15 分", "60m": "60 分", "1d": "日線", "1w": "週線"}
+    state_labels = {
+        "AU": "偏多・已確認", "AF": "偏多・形成中", "AD": "偏多・資料失效",
+        "NU": "中性・已確認", "NF": "中性・形成中", "ND": "中性・資料失效",
+        "BU": "偏空・已確認", "BF": "偏空・形成中", "BD": "偏空・資料失效",
+    }
     for key in ("5m", "15m", "60m", "1d", "1w"):
         frame = timeframes.get(key)
         frame = frame if isinstance(frame, dict) else {}
+        state = kam_states.get(key)
+        state = state if isinstance(state, dict) else {}
+        code = state.get("code")
+        state_text = state_labels.get(str(code), "尚未判讀")
         cards.append(
             f'<section class="card timeframe"><h2>{labels[key]}</h2>'
-            f'<p class="headline">{text(frame.get("trend"))}</p>'
-            f'<p>位置 {text(frame.get("position"))} · 結構 {text(frame.get("structure"))}</p>'
+            f'<p class="kam-state"><strong>{text(code)}</strong><span>{text(state_text)}</span></p>'
+            f'<p>趨勢 {text(frame.get("trend"))} · 位置 {text(frame.get("position"))}</p>'
+            f'<p>結構 {text(frame.get("structure"))} · 時機 {text(frame.get("timing"))}</p>'
             f'<small>資料狀態：{text(frame.get("status"))}</small></section>'
         )
     return f'''<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="60"><title>空明・五週期市場覺察</title><link rel="stylesheet" href="/static/dashboard.css"></head><body><main>
 <header class="status-bar"><div class="brand">空明・五週期市場覺察</div><dl class="status-meta"><div><dt>商品</dt><dd>{text(payload.get("symbol"))}</dd></div><div><dt>盤別</dt><dd>{text(payload.get("session") or "日盤")}</dd></div><div><dt>資料狀態</dt><dd>{text(payload.get("status"))}</dd></div><div><dt>模式</dt><dd>唯讀觀察</dd></div></dl></header>
 <section class="card market-direction"><h1>{text(summary.get("headline", "等待資料"))}</h1><p>{text(summary.get("message"))}</p></section>
-<section class="decision-grid"><section class="card"><h2>方向</h2><p class="headline">{text(summary.get("direction"))}</p></section><section class="card"><h2>信心</h2><p class="headline">{text(summary.get("confidence"))}</p></section><section class="card"><h2>風險</h2><p class="headline">{text(summary.get("risk"))}</p></section><section class="card next-step"><h2>下一步</h2><p class="headline">{text(summary.get("next_step"))}</p></section></section>
+<section class="decision-grid"><section class="card"><h2>KAM 市場方向</h2><p class="headline">{text(kam.get("direction", summary.get("direction")))}</p></section><section class="card"><h2>信心</h2><p class="headline">{text(summary.get("confidence"))}</p></section><section class="card"><h2>風險</h2><p class="headline">{text(summary.get("risk"))}</p></section><section class="card next-step"><h2>唯一下一步</h2><p class="headline">{text(kam.get("primary_next_action", summary.get("next_step")))}</p></section></section>
 <section class="timeframe-grid">{''.join(cards)}</section>
-<section class="card"><h2>安全狀態</h2><p>決策 {text(preview.get("decision_status"))} · 動作 {text(preview.get("action"))} · 觀察模式 {text(diagnostics.get("observation_only"))}</p><p>禁止真實下單</p></section>
+<section class="card"><h2>安全狀態</h2><p>決策 {text(kam.get("decision_status", preview.get("decision_status")))} · 動作 {text(kam.get("action", preview.get("action")))} · 觀察模式 {text(diagnostics.get("observation_only"))}</p><p>唯讀分析・禁止真實下單・映射版本 {text(kam.get("mapping_version"))}</p></section>
 </main></body></html>'''
 
 
