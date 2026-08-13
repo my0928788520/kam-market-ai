@@ -50,7 +50,11 @@ def test_preview_runs_all_five_timeframes_and_remains_fail_closed() -> None:
     assert payload["decision_status"] == "BLOCKED"
     assert payload["action"] == "HOLD"
     assert "M5_ANALYSIS_ENGINE_REQUIRED" not in payload["blockers"]
-    assert "TRADING_DECISION_MAPPING_NOT_APPROVED" in payload["blockers"]
+    assert "TRADING_DECISION_MAPPING_NOT_APPROVED" not in payload["blockers"]
+    assert payload["kam_rule_decision"]["mapping_version"] == "five-timeframe-kam-state-v1.0"
+    assert set(payload["kam_rule_decision"]["states"]) == {"5m", "15m", "60m", "1d", "1w"}
+    assert payload["kam_rule_decision"]["action"] == "HOLD"
+    assert payload["kam_rule_decision"]["live_order_allowed"] is False
     assert set(payload["decision_diagnostics"]) == {
         "direction",
         "confidence_score",
@@ -67,7 +71,8 @@ def test_preview_runs_all_five_timeframes_and_remains_fail_closed() -> None:
     assert payload["decision_diagnostics"]["observation_only"] is True
     assert payload["three_second_summary"]["action"] == "HOLD"
     assert payload["three_second_summary"]["decision_status"] == "BLOCKED"
-    assert payload["three_second_summary"]["direction"] == payload["decision_diagnostics"]["direction"]
+    assert payload["three_second_summary"]["direction"] in {"偏多", "偏空", "觀望"}
+    assert payload["three_second_summary"]["direction"] == payload["kam_rule_decision"]["direction"]
     assert payload["three_second_summary"]["risk"] == payload["decision_diagnostics"]["risk_level"]
     assert payload["market_data_only"] is True
     assert payload["live_order_allowed"] is False
