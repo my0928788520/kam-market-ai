@@ -38,6 +38,7 @@ def write_five_timeframe_snapshot(path: str | Path, payload: Mapping[str, object
     """Replace one local safe snapshot without retaining provider payloads."""
     target = Path(path)
     safe = _validate(payload)
+    target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_suffix(target.suffix + ".tmp")
     temporary.write_text(json.dumps(safe, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
     temporary.replace(target)
