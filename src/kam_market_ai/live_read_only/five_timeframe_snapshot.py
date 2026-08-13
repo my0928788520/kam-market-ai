@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from pathlib import Path
 
 _FORBIDDEN_KEYS = frozenset({"candles", "series", "raw_payload", "orders", "positions"})
@@ -38,6 +39,8 @@ def write_five_timeframe_snapshot(path: str | Path, payload: Mapping[str, object
     """Replace one local safe snapshot without retaining provider payloads."""
     target = Path(path)
     safe = _validate(payload)
+    safe["snapshot_schema_version"] = "1.0"
+    safe["snapshot_written_at"] = datetime.now(UTC).isoformat()
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_suffix(target.suffix + ".tmp")
     temporary.write_text(json.dumps(safe, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
@@ -49,4 +52,31 @@ def read_five_timeframe_snapshot(path: str | Path) -> dict[str, object]:
     return _validate(json.loads(Path(path).read_text(encoding="utf-8")))
 
 
-__all__ = ["read_five_timeframe_snapshot", "write_five_timeframe_snapshot"]
+def five_timeframe_snapshot_age_seconds(
+    payload: Mapping[str, object],
+    *,
+    now: datetime | None = None,
+) -> float:
+    raw = payload.get("snapshot_written_at")
+    if not isinstance(raw, str):
+        raise ValueError("FIVE_TIMEFRAME_SNAPSHOT_TIMESTAMP_REQUIRED")
+    try:
+        written_at = datetime.fromisoformat(raw)
+    except ValueError as error:
+        raise ValueError("FIVE_TIMEFRAME_SNAPSHOT_TIMESTAMP_INVALID") from error
+    if written_at.tzinfo is None or written_at.utcoffset() is None:
+        raise ValueError("FIVE_TIMEFRAME_SNAPSHOT_TIMESTAMP_TIMEZONE_REQUIRED")
+    observed_at = now or datetime.now(UTC)
+    if observed_at.tzinfo is None or observed_at.utcoffset() is None:
+        raise ValueError("FIVE_TIMEFRAME_SNAPSHOT_NOW_TIMEZONE_REQUIRED")
+    age = (observed_at - written_at).total_seconds()
+    if age < 0:
+        raise ValueError("FIVE_TIMEFRAME_SNAPSHOT_TIMESTAMP_IN_FUTURE")
+    return age
+
+
+__all__ = [
+    "five_timeframe_snapshot_age_seconds",
+    "read_five_timeframe_snapshot",
+    "write_five_timeframe_snapshot",
+]
