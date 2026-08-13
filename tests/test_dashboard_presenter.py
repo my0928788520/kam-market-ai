@@ -21,8 +21,8 @@ def test_presenter_builds_fixed_order_safe_template_context():
     assert view.page_title == "KAM Trade V3"
     assert view.page_subtitle == "Trading Decision Operating System"
     assert view.theme_state is DashboardThemeState.CALM
-    assert [card["timeframe"] for card in view.timeframe_cards] == ["15m", "60m", "1d", "1w"]
-    assert len(view.module_sections) == 16
+    assert [card["timeframe"] for card in view.timeframe_cards] == ["5m", "15m", "60m", "1d", "1w"]
+    assert len(view.module_sections) == 20
     assert view.template_context["accessibility"]["language"] == "zh-TW"
     assert view.template_context["header"]["badge_class"].startswith("state-")
 
