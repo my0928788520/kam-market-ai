@@ -101,3 +101,33 @@ class FubonTmfContractProbe:
         if not candidates:
             raise FubonTmfContractProbeError("NO_VERIFIED_TMF_CONTRACT")
         return FubonTmfContractProbeReport(session, tuple(candidates))
+
+    def resolve_active(
+        self,
+        *,
+        after_hours: bool = False,
+        today: date | None = None,
+    ) -> FubonTmfContractCandidate:
+        """Resolve one active TMF contract by documented quote volume."""
+        report = self.run(after_hours=after_hours, today=today)
+        ranked: list[tuple[int, FubonTmfContractCandidate]] = []
+        for candidate in report.candidates:
+            params: dict[str, object] = {"symbol": candidate.symbol}
+            if after_hours:
+                params["session"] = "afterhours"
+            try:
+                payload = self._intraday.quote(**params)
+            except Exception:  # noqa: BLE001
+                raise FubonTmfContractProbeError("QUOTE_ENDPOINT_ERROR") from None
+            total = payload.get("total") if isinstance(payload, Mapping) else None
+            volume = total.get("tradeVolume") if isinstance(total, Mapping) else None
+            if isinstance(volume, bool) or not isinstance(volume, (int, float)) or volume < 0:
+                continue
+            ranked.append((int(volume), candidate))
+        if not ranked:
+            raise FubonTmfContractProbeError("NO_VERIFIED_TMF_QUOTE_VOLUME")
+        maximum = max(volume for volume, _ in ranked)
+        selected = tuple(candidate for volume, candidate in ranked if volume == maximum)
+        if len(selected) != 1:
+            raise FubonTmfContractProbeError("AMBIGUOUS_ACTIVE_TMF_CONTRACT")
+        return selected[0]
