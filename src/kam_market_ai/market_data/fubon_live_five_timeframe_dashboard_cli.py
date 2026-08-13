@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import threading
+import webbrowser
 from collections.abc import Sequence
 from pathlib import Path
 from time import monotonic
@@ -68,6 +69,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--refresh-seconds", type=int, default=60)
     parser.add_argument("--snapshot", default="debug/five_timeframe/live.json")
+    parser.add_argument("--open-browser", action="store_true")
     return parser
 
 
@@ -143,6 +145,8 @@ def main(
             args.port,
             DashboardApp(five_timeframe_snapshot_path=args.snapshot),
         ) as server:
+            if args.open_browser:
+                webbrowser.open(f"http://{args.host}:{args.port}/five-timeframe")
             server.serve_forever()
     except KeyboardInterrupt:
         return 0
