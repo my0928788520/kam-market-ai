@@ -16,7 +16,7 @@ class DashboardReadModelConfig:
  supported_contract_versions:frozenset[str]=frozenset({DECISION_INPUT_CONTRACT_VERSION}); supported_confidence_versions:frozenset[str]=frozenset({DECISION_CONFIDENCE_ENGINE_VERSION}); supported_risk_versions:frozenset[str]=frozenset({RISK_ENGINE_VERSION}); supported_next_step_versions:frozenset[str]=frozenset({NEXT_STEP_ENGINE_VERSION}); timeframe_order:tuple[PositionTimeframe,...]=ALL_TIMEFRAMES; display_labels:Mapping[PositionTimeframe,str]=None; warning_limit:int=32; secondary_reason_limit:int=3; supporting_factor_limit:int=3; show_raw_state:bool=True; show_source_versions:bool=True; allow_partial_timeframes:bool=True
  def __post_init__(self):
   if not all((self.supported_contract_versions,self.supported_confidence_versions,self.supported_risk_versions,self.supported_next_step_versions)) or tuple(dict.fromkeys(self.timeframe_order))!=ALL_TIMEFRAMES or min(self.warning_limit,self.secondary_reason_limit,self.supporting_factor_limit)<=0:raise ValueError("Dashboard config must contain versions, fixed timeframe order and positive limits.")
-  if self.display_labels is None:object.__setattr__(self,"display_labels",{PositionTimeframe.M15:"15m",PositionTimeframe.M60:"60m",PositionTimeframe.D1:"1d",PositionTimeframe.W1:"1w"})
+  if self.display_labels is None:object.__setattr__(self,"display_labels",{PositionTimeframe.M5:"5m",PositionTimeframe.M15:"15m",PositionTimeframe.M60:"60m",PositionTimeframe.D1:"1d",PositionTimeframe.W1:"1w"})
  @classmethod
  def provisional(cls)->"DashboardReadModelConfig":return cls()
 @dataclass(frozen=True,slots=True)
