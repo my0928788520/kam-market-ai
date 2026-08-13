@@ -7,6 +7,8 @@ import json
 import threading
 import webbrowser
 from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from time import monotonic
 from wsgiref.simple_server import make_server
@@ -31,6 +33,24 @@ from .fubon_neo import (
 from .fubon_tmf_contract_probe import FubonTmfContractProbe
 
 
+@dataclass(frozen=True, slots=True)
+class RefreshHealth:
+    successful_refreshes: int
+    consecutive_failures: int
+    last_success_at: datetime | None
+    last_failure_at: datetime | None
+    status: str
+
+    def safe_payload(self) -> dict[str, object]:
+        return {
+            "successful_refreshes": self.successful_refreshes,
+            "consecutive_failures": self.consecutive_failures,
+            "last_success_at": self.last_success_at.isoformat() if self.last_success_at else None,
+            "last_failure_at": self.last_failure_at.isoformat() if self.last_failure_at else None,
+            "status": self.status,
+        }
+
+
 class LiveFiveTimeframeSnapshotRefresher:
     def __init__(
         self,
@@ -48,6 +68,20 @@ class LiveFiveTimeframeSnapshotRefresher:
         self.session = session
         self.after_hours = after_hours
         self.snapshot_path = Path(snapshot_path)
+        self._successful_refreshes = 0
+        self._consecutive_failures = 0
+        self._last_success_at: datetime | None = None
+        self._last_failure_at: datetime | None = None
+
+    @property
+    def health(self) -> RefreshHealth:
+        return RefreshHealth(
+            self._successful_refreshes,
+            self._consecutive_failures,
+            self._last_success_at,
+            self._last_failure_at,
+            "READY" if self._consecutive_failures == 0 and self._last_success_at else "DEGRADED",
+        )
 
     def refresh_once(self) -> dict[str, object]:
         payload = self.verifier.run(
@@ -56,7 +90,20 @@ class LiveFiveTimeframeSnapshotRefresher:
             after_hours=self.after_hours,
         )
         write_five_timeframe_snapshot(self.snapshot_path, payload)
+        self._successful_refreshes += 1
+        self._consecutive_failures = 0
+        self._last_success_at = datetime.now(UTC)
         return payload
+
+    def refresh_safely(self) -> bool:
+        """Retry on the next cycle without replacing the last verified snapshot."""
+        try:
+            self.refresh_once()
+        except Exception:  # noqa: BLE001
+            self._consecutive_failures += 1
+            self._last_failure_at = datetime.now(UTC)
+            return False
+        return True
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -130,10 +177,7 @@ def main(
     def refresh_loop() -> None:
         deadline = monotonic() + args.refresh_seconds
         while not stop.wait(max(0.0, deadline - monotonic())):
-            try:
-                refresher.refresh_once()
-            except Exception:  # noqa: BLE001
-                pass
+            refresher.refresh_safely()
             deadline += args.refresh_seconds
 
     worker = threading.Thread(target=refresh_loop, name="kam-five-timeframe-refresh", daemon=True)
@@ -172,4 +216,4 @@ if __name__ == "__main__":
     raise SystemExit(main())
 
 
-__all__ = ["LiveFiveTimeframeSnapshotRefresher", "build_parser", "main"]
+__all__ = ["LiveFiveTimeframeSnapshotRefresher", "RefreshHealth", "build_parser", "main"]
