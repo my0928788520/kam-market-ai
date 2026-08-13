@@ -46,6 +46,10 @@ from kam_market_ai.market_data.fubon_five_timeframe_pipeline import (
     FiveTimeframeCandleResult,
 )
 from kam_market_ai.models import Candle
+from .five_timeframe_kam_rule_bridge import (
+    KAM_STATE_MAPPING_VERSION,
+    evaluate_five_timeframe_kam_rules,
+)
 
 _ENGINE_TIMEFRAMES = {
     FiveTimeframe.M5: PositionTimeframe.M5,
@@ -63,6 +67,7 @@ class VerifiedFiveTimeframeAnalysisPreview:
     timeframe_analysis: dict[str, dict[str, object]]
     decision_diagnostics: dict[str, object]
     three_second_summary: dict[str, object]
+    kam_rule_decision: dict[str, object]
     blockers: tuple[str, ...]
     decision_status: str = "BLOCKED"
     action: str = "HOLD"
@@ -80,6 +85,7 @@ class VerifiedFiveTimeframeAnalysisPreview:
             "timeframes": self.timeframe_analysis,
             "decision_diagnostics": self.decision_diagnostics,
             "three_second_summary": self.three_second_summary,
+            "kam_rule_decision": self.kam_rule_decision,
             "market_data_only": self.market_data_only,
             "live_order_allowed": self.live_order_allowed,
             "raw_candles_retained": False,
@@ -183,7 +189,8 @@ def build_verified_five_timeframe_analysis_preview(
         blockers.append("CURRENT_DAY_WEEK_BARS_ARE_PROVISIONAL")
     if contract.overall_status.value != "ready":
         blockers.append("ANALYSIS_INPUT_NOT_READY")
-    blockers.append("TRADING_DECISION_MAPPING_NOT_APPROVED")
+    mapped_states, kam_decision = evaluate_five_timeframe_kam_rules(analysis)
+    blockers.extend(kam_decision.blockers)
     diagnostics: dict[str, object] = {
         "direction": confidence.overall_direction.value,
         "confidence_score": str(confidence.overall_confidence_score),
@@ -203,10 +210,10 @@ def build_verified_five_timeframe_analysis_preview(
             if provisional
             else "等待資料確認" if contract.overall_status.value != "ready" else "五週期分析已更新"
         ),
-        "direction": confidence.overall_direction.value,
+        "direction": kam_decision.direction,
         "confidence": str(confidence.overall_confidence_score),
         "risk": risk.overall_risk_level.value,
-        "next_step": next_step.next_step.value,
+        "next_step": kam_decision.primary_next_action,
         "action": "HOLD",
         "decision_status": "BLOCKED",
         "message": (
@@ -214,15 +221,21 @@ def build_verified_five_timeframe_analysis_preview(
             if provisional
             else "資料尚未完整，維持觀察。"
             if contract.overall_status.value != "ready"
-            else "分析僅供觀察，尚未核准交易決策映射。"
+            else "KAM 九狀態映射已完成；決策維持唯讀觀察。"
         ),
     }
+    kam_payload = kam_decision.safe_payload()
+    kam_payload.update({
+        "mapping_version": KAM_STATE_MAPPING_VERSION,
+        "states": {item.timeframe: item.safe_payload() for item in mapped_states},
+    })
     return VerifiedFiveTimeframeAnalysisPreview(
         evaluated_at=evaluated_at,
         overall_status=("provisional_current_periods" if provisional else contract.overall_status.value),
         timeframe_analysis=analysis,
         decision_diagnostics=diagnostics,
         three_second_summary=summary,
+        kam_rule_decision=kam_payload,
         blockers=tuple(blockers),
     )
 
