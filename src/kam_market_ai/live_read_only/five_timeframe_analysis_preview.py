@@ -60,6 +60,7 @@ class VerifiedFiveTimeframeAnalysisPreview:
     overall_status: str
     timeframe_analysis: dict[str, dict[str, object]]
     decision_diagnostics: dict[str, object]
+    three_second_summary: dict[str, object]
     blockers: tuple[str, ...]
     decision_status: str = "BLOCKED"
     action: str = "HOLD"
@@ -76,6 +77,7 @@ class VerifiedFiveTimeframeAnalysisPreview:
             "blockers": list(self.blockers),
             "timeframes": self.timeframe_analysis,
             "decision_diagnostics": self.decision_diagnostics,
+            "three_second_summary": self.three_second_summary,
             "market_data_only": self.market_data_only,
             "live_order_allowed": self.live_order_allowed,
             "raw_candles_retained": False,
@@ -174,11 +176,26 @@ def build_verified_five_timeframe_analysis_preview(
         "next_step_priority": next_step.priority.value,
         "observation_only": True,
     }
+    summary: dict[str, object] = {
+        "headline": "等待資料確認" if contract.overall_status.value != "ready" else "五週期分析已更新",
+        "direction": confidence.overall_direction.value,
+        "confidence": str(confidence.overall_confidence_score),
+        "risk": risk.overall_risk_level.value,
+        "next_step": next_step.next_step.value,
+        "action": "HOLD",
+        "decision_status": "BLOCKED",
+        "message": (
+            "資料尚未完整，維持觀察。"
+            if contract.overall_status.value != "ready"
+            else "分析僅供觀察，尚未核准交易決策映射。"
+        ),
+    }
     return VerifiedFiveTimeframeAnalysisPreview(
         evaluated_at=evaluated_at,
         overall_status=contract.overall_status.value,
         timeframe_analysis=analysis,
         decision_diagnostics=diagnostics,
+        three_second_summary=summary,
         blockers=tuple(blockers),
     )
 
