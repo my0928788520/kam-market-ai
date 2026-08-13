@@ -25,6 +25,18 @@ class FixtureVerifier(FubonLiveFiveTimeframeVerifier):
         }
 
 
+class RecoveringVerifier(FixtureVerifier):
+    def __init__(self) -> None:
+        super().__init__()
+        self.fail = False
+
+    def run(self, **values):
+        if self.fail:
+            self.calls.append(values)
+            raise ConnectionError("fixture transport interruption")
+        return super().run(**values)
+
+
 def test_refresher_writes_only_safe_snapshot(tmp_path) -> None:
     verifier = FixtureVerifier()
     target = tmp_path / "nested" / "live.json"
@@ -41,6 +53,53 @@ def test_refresher_writes_only_safe_snapshot(tmp_path) -> None:
     assert target.is_file()
     assert payload["analysis_preview"]["action"] == "HOLD"
     assert verifier.calls == [{"symbol": "TMFH6", "session": None, "after_hours": False}]
+    assert refresher.health.status == "READY"
+    assert refresher.health.successful_refreshes == 1
+
+
+def test_refresh_failure_preserves_last_good_snapshot_and_next_cycle_recovers(tmp_path) -> None:
+    verifier = RecoveringVerifier()
+    target = tmp_path / "live.json"
+    refresher = LiveFiveTimeframeSnapshotRefresher(
+        verifier,
+        symbol="TMFH6",
+        session=None,
+        after_hours=False,
+        snapshot_path=target,
+    )
+    assert refresher.refresh_safely() is True
+    good = target.read_bytes()
+
+    verifier.fail = True
+    assert refresher.refresh_safely() is False
+    assert target.read_bytes() == good
+    assert refresher.health.status == "DEGRADED"
+    assert refresher.health.consecutive_failures == 1
+    assert refresher.health.last_failure_at is not None
+
+    verifier.fail = False
+    assert refresher.refresh_safely() is True
+    assert refresher.health.status == "READY"
+    assert refresher.health.consecutive_failures == 0
+    assert refresher.health.successful_refreshes == 2
+
+
+def test_many_consecutive_failures_do_not_publish_unverified_data(tmp_path) -> None:
+    verifier = RecoveringVerifier()
+    verifier.fail = True
+    target = tmp_path / "live.json"
+    refresher = LiveFiveTimeframeSnapshotRefresher(
+        verifier,
+        symbol="TMFH6",
+        session=None,
+        after_hours=False,
+        snapshot_path=target,
+    )
+    for _ in range(100):
+        assert refresher.refresh_safely() is False
+    assert not target.exists()
+    assert refresher.health.consecutive_failures == 100
+    assert refresher.health.safe_payload()["status"] == "DEGRADED"
 
 
 def test_service_requires_live_flag_and_loopback_host(capsys) -> None:
