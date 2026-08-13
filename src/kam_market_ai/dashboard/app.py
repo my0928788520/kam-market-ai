@@ -14,7 +14,10 @@ from .payload import build_dashboard_payload
 from .presenter import DashboardPresenterView
 from .ui_contract import DashboardUIConfig, render_dashboard_ui
 from .wsgi_adapter import DashboardWSGIAdapterConfig, build_dashboard_wsgi_context
-from kam_market_ai.live_read_only.five_timeframe_snapshot import read_five_timeframe_snapshot
+from kam_market_ai.live_read_only.five_timeframe_snapshot import (
+    five_timeframe_snapshot_age_seconds,
+    read_five_timeframe_snapshot,
+)
 
 
 _STATIC = Path(__file__).with_name("static")
@@ -127,9 +130,12 @@ def render_five_timeframe_html(payload: dict[str, object]) -> str:
 
 
 class DashboardApp:
-    def __init__(self, snapshot_path: str | Path = "debug/position/dashboard_position_snapshot.json", *, five_timeframe_snapshot_path: str | Path | None = None, presenter: DashboardPresenterView | None = None, ui_config: DashboardUIConfig | None = None, adapter_config: DashboardWSGIAdapterConfig | None = None) -> None:
+    def __init__(self, snapshot_path: str | Path = "debug/position/dashboard_position_snapshot.json", *, five_timeframe_snapshot_path: str | Path | None = None, five_timeframe_max_age_seconds: int = 180, presenter: DashboardPresenterView | None = None, ui_config: DashboardUIConfig | None = None, adapter_config: DashboardWSGIAdapterConfig | None = None) -> None:
         self.snapshot_path = Path(snapshot_path)
         self.five_timeframe_snapshot_path = Path(five_timeframe_snapshot_path) if five_timeframe_snapshot_path else None
+        if five_timeframe_max_age_seconds <= 0:
+            raise ValueError("five_timeframe_max_age_seconds must be positive")
+        self.five_timeframe_max_age_seconds = five_timeframe_max_age_seconds
         self.presenter = presenter
         self.ui_config = ui_config or DashboardUIConfig.provisional()
         self.adapter_config = adapter_config or DashboardWSGIAdapterConfig.provisional()
@@ -149,6 +155,8 @@ class DashboardApp:
                 if self.five_timeframe_snapshot_path is None:
                     raise FileNotFoundError
                 payload = read_five_timeframe_snapshot(self.five_timeframe_snapshot_path)
+                if five_timeframe_snapshot_age_seconds(payload) > self.five_timeframe_max_age_seconds:
+                    raise ValueError("STALE_FIVE_TIMEFRAME_SNAPSHOT")
                 status = "200 OK"
             except (OSError, TypeError, ValueError, json.JSONDecodeError):
                 payload = {
@@ -167,6 +175,8 @@ class DashboardApp:
                 if self.five_timeframe_snapshot_path is None:
                     raise FileNotFoundError
                 payload = read_five_timeframe_snapshot(self.five_timeframe_snapshot_path)
+                if five_timeframe_snapshot_age_seconds(payload) > self.five_timeframe_max_age_seconds:
+                    raise ValueError("STALE_FIVE_TIMEFRAME_SNAPSHOT")
                 body = render_five_timeframe_html(payload).encode("utf-8")
                 status = "200 OK"
             except (OSError, TypeError, ValueError, json.JSONDecodeError):
