@@ -6,8 +6,8 @@ from kam_market_ai.live_read_only.five_timeframe_kam_rule_bridge import (
 )
 
 
-def frame(position="neutral", trend="neutral", structure="neutral", timing="confirmed", status="ready"):
-    return {"position": position, "trend": trend, "structure": structure, "timing": timing, "status": status}
+def frame(position="neutral", trend="neutral", structure="neutral", timing="confirmed", status="ready", *, usable=True, error_codes=None):
+    return {"position": position, "trend": trend, "structure": structure, "timing": timing, "status": status, "usable": usable, "error_codes": [] if error_codes is None else error_codes}
 
 
 @pytest.mark.parametrize(
@@ -49,3 +49,24 @@ def test_bearish_and_conflicting_higher_timeframes_fail_closed():
     _, mixed = evaluate_five_timeframe_kam_rules(bearish)
     assert mixed.direction == "觀望"
     assert mixed.primary_next_action == "等待週線與日線方向一致"
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"usable": False},
+        {"error_codes": ["SOURCE_GAP"]},
+    ],
+)
+def test_unusable_or_error_frame_is_always_degraded(changes):
+    value = frame("bullish", "bullish", "supportive", **changes)
+    mapped = map_analysis_frame_to_kam_state("60m", value)
+    assert mapped.code == "AD"
+    assert mapped.lifecycle_axis == "D"
+
+
+def test_mapping_rejects_missing_safety_metadata():
+    value = frame()
+    value.pop("usable")
+    with pytest.raises(ValueError, match="usable flag"):
+        map_analysis_frame_to_kam_state("5m", value)
