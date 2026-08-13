@@ -43,7 +43,9 @@ from kam_market_ai.decision.risk_engine import RiskEngineConfig, evaluate_risk
 from kam_market_ai.market_data.fubon_five_timeframe_pipeline import (
     CompleteFiveTimeframeCandleResult,
     FiveTimeframe,
+    FiveTimeframeCandleResult,
 )
+from kam_market_ai.models import Candle
 
 _ENGINE_TIMEFRAMES = {
     FiveTimeframe.M5: PositionTimeframe.M5,
@@ -85,18 +87,35 @@ class VerifiedFiveTimeframeAnalysisPreview:
 
 
 def build_verified_five_timeframe_analysis_preview(
-    value: CompleteFiveTimeframeCandleResult,
+    value: CompleteFiveTimeframeCandleResult | FiveTimeframeCandleResult,
     *,
     evaluated_at: datetime,
 ) -> VerifiedFiveTimeframeAnalysisPreview:
-    """Run all five analysis slices while keeping decisions fail-closed."""
-    if not isinstance(value, CompleteFiveTimeframeCandleResult):
-        raise TypeError("CompleteFiveTimeframeCandleResult is required")
+    """Run five analysis slices while distinguishing verified and forming bars."""
+    if not isinstance(value, (CompleteFiveTimeframeCandleResult, FiveTimeframeCandleResult)):
+        raise TypeError("five-timeframe candle result is required")
     if evaluated_at.tzinfo is None or evaluated_at.utcoffset() is None:
         raise ValueError("evaluated_at must be timezone-aware")
 
+    provisional = isinstance(value, FiveTimeframeCandleResult)
+    series = dict(value.series)
+    if provisional:
+        source = series[FiveTimeframe.M60]
+        first, last = source[0], source[-1]
+        forming = Candle(
+            instrument=first.instrument,
+            start=first.start,
+            end=last.end,
+            open=first.open,
+            high=max(item.high for item in source),
+            low=min(item.low for item in source),
+            close=last.close,
+            volume=sum(item.volume for item in source),
+        )
+        series[FiveTimeframe.DAY] = (forming,)
+        series[FiveTimeframe.WEEK] = (forming,)
     candles = {
-        engine: value.series[source]
+        engine: series[source]
         for source, engine in _ENGINE_TIMEFRAMES.items()
     }
     current_prices = {
@@ -160,6 +179,8 @@ def build_verified_five_timeframe_analysis_preview(
         }
 
     blockers: list[str] = []
+    if provisional:
+        blockers.append("CURRENT_DAY_WEEK_BARS_ARE_PROVISIONAL")
     if contract.overall_status.value != "ready":
         blockers.append("ANALYSIS_INPUT_NOT_READY")
     blockers.append("TRADING_DECISION_MAPPING_NOT_APPROVED")
@@ -177,7 +198,11 @@ def build_verified_five_timeframe_analysis_preview(
         "observation_only": True,
     }
     summary: dict[str, object] = {
-        "headline": "等待資料確認" if contract.overall_status.value != "ready" else "五週期分析已更新",
+        "headline": (
+            "日週線形成中"
+            if provisional
+            else "等待資料確認" if contract.overall_status.value != "ready" else "五週期分析已更新"
+        ),
         "direction": confidence.overall_direction.value,
         "confidence": str(confidence.overall_confidence_score),
         "risk": risk.overall_risk_level.value,
@@ -185,14 +210,16 @@ def build_verified_five_timeframe_analysis_preview(
         "action": "HOLD",
         "decision_status": "BLOCKED",
         "message": (
-            "資料尚未完整，維持觀察。"
+            "日線與週線仍在形成，僅顯示觀察結果。"
+            if provisional
+            else "資料尚未完整，維持觀察。"
             if contract.overall_status.value != "ready"
             else "分析僅供觀察，尚未核准交易決策映射。"
         ),
     }
     return VerifiedFiveTimeframeAnalysisPreview(
         evaluated_at=evaluated_at,
-        overall_status=contract.overall_status.value,
+        overall_status=("provisional_current_periods" if provisional else contract.overall_status.value),
         timeframe_analysis=analysis,
         decision_diagnostics=diagnostics,
         three_second_summary=summary,
