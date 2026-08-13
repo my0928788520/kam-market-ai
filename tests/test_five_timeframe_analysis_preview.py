@@ -51,6 +51,20 @@ def test_preview_runs_all_five_timeframes_and_remains_fail_closed() -> None:
     assert payload["action"] == "HOLD"
     assert "M5_ANALYSIS_ENGINE_REQUIRED" not in payload["blockers"]
     assert "TRADING_DECISION_MAPPING_NOT_APPROVED" in payload["blockers"]
+    assert set(payload["decision_diagnostics"]) == {
+        "direction",
+        "confidence_score",
+        "confidence_state",
+        "alignment_state",
+        "risk_score",
+        "risk_level",
+        "risk_state",
+        "next_step",
+        "next_step_state",
+        "next_step_priority",
+        "observation_only",
+    }
+    assert payload["decision_diagnostics"]["observation_only"] is True
     assert payload["market_data_only"] is True
     assert payload["live_order_allowed"] is False
     assert payload["raw_candles_retained"] is False
