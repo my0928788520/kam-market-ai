@@ -32,7 +32,7 @@ def _value(v:Any,c:DashboardSerializationConfig)->Any:
  raise TypeError(f"Unsupported payload value: {type(v).__name__}")
 def serialize_dashboard_read_model(model:DashboardReadModel,config:DashboardSerializationConfig)->dict[str,Any]:
  if not isinstance(model,DashboardReadModel) or model.version not in config.supported_read_model_versions:raise ValueError("Unsupported Dashboard Read Model")
- payload=_value(model,config); frames=payload.pop("timeframes"); payload["timeframe_views"]=[frames[key] for key in ("15m","60m","1d","1w")]
+ payload=_value(model,config); frames=payload.pop("timeframes"); payload["timeframe_views"]=[frames[key] for key in ("5m","15m","60m","1d","1w")]
  payload={"serialization_version":DASHBOARD_SERIALIZATION_VERSION,"read_model_version":model.version,"generated_from":"dashboard_read_model",**payload}
  return payload
 def dashboard_payload_to_canonical_json(payload:dict[str,Any],config:DashboardSerializationConfig)->str:
