@@ -48,6 +48,11 @@ def map_analysis_frame_to_kam_state(
     required = ("status", "position", "trend", "structure", "timing")
     if any(not isinstance(frame.get(name), str) for name in required):
         raise ValueError("normalized timeframe analysis fields are required")
+    if not isinstance(frame.get("usable"), bool):
+        raise ValueError("normalized timeframe usable flag is required")
+    error_codes = frame.get("error_codes")
+    if not isinstance(error_codes, list) or not all(isinstance(item, str) for item in error_codes):
+        raise ValueError("normalized timeframe error_codes must be a string list")
 
     directional = tuple(str(frame[name]) for name in ("position", "trend", "structure"))
     bullish = sum(item in _BULLISH for item in directional)
@@ -61,7 +66,12 @@ def map_analysis_frame_to_kam_state(
         direction = "N"
 
     status, timing = str(frame["status"]), str(frame["timing"])
-    if status in {"stale", "invalid", "unavailable", "calculation_error", "ambiguous"} or timing in _DEGRADED:
+    if (
+        frame["usable"] is False
+        or bool(error_codes)
+        or status in {"stale", "invalid", "unavailable", "calculation_error", "ambiguous"}
+        or timing in _DEGRADED
+    ):
         lifecycle = "D"
     elif status == "ready" and timing == "confirmed":
         lifecycle = "U"
@@ -72,7 +82,7 @@ def map_analysis_frame_to_kam_state(
         direction + lifecycle,
         direction,
         lifecycle,
-        directional + (timing, status),
+        directional + (timing, status) + tuple(error_codes),
     )
 
 
