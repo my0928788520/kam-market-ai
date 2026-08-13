@@ -1,8 +1,8 @@
 """Read-only analysis preview for verified five-timeframe candles.
 
-The existing KAM analysis engines cover 15m, 60m, 1d, and 1w.  No approved
-5m analysis engine exists yet, so this boundary exposes that gap explicitly
-and never turns provisional analysis into a trading decision.
+All five verified candle slices are evaluated with centralized provisional
+parameters.  This boundary never turns provisional analysis into a trading
+decision.
 """
 
 from __future__ import annotations
@@ -37,6 +37,7 @@ from kam_market_ai.market_data.fubon_five_timeframe_pipeline import (
 )
 
 _ENGINE_TIMEFRAMES = {
+    FiveTimeframe.M5: PositionTimeframe.M5,
     FiveTimeframe.M15: PositionTimeframe.M15,
     FiveTimeframe.M60: PositionTimeframe.M60,
     FiveTimeframe.DAY: PositionTimeframe.D1,
@@ -75,7 +76,7 @@ def build_verified_five_timeframe_analysis_preview(
     *,
     evaluated_at: datetime,
 ) -> VerifiedFiveTimeframeAnalysisPreview:
-    """Run existing analysis engines without inventing a 5m classifier."""
+    """Run all five analysis slices while keeping decisions fail-closed."""
     if not isinstance(value, CompleteFiveTimeframeCandleResult):
         raise TypeError("CompleteFiveTimeframeCandleResult is required")
     if evaluated_at.tzinfo is None or evaluated_at.utcoffset() is None:
@@ -121,12 +122,7 @@ def build_verified_five_timeframe_analysis_preview(
         DecisionInputConfig.provisional(),
     )
 
-    analysis: dict[str, dict[str, object]] = {
-        FiveTimeframe.M5.value: {
-            "status": "unsupported",
-            "blocker": "M5_ANALYSIS_ENGINE_REQUIRED",
-        }
-    }
+    analysis: dict[str, dict[str, object]] = {}
     for source, engine in _ENGINE_TIMEFRAMES.items():
         frame = contract.timeframes[engine]
         analysis[source.value] = {
@@ -139,7 +135,7 @@ def build_verified_five_timeframe_analysis_preview(
             "error_codes": list(frame.error_codes),
         }
 
-    blockers = ["M5_ANALYSIS_ENGINE_REQUIRED"]
+    blockers: list[str] = []
     if contract.overall_status.value != "ready":
         blockers.append("ANALYSIS_INPUT_NOT_READY")
     blockers.append("TRADING_DECISION_MAPPING_NOT_APPROVED")
