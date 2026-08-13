@@ -30,6 +30,10 @@ class Intraday:
             {"symbol": "TMFG6", "name": "微型臺指期貨076", "endDate": "2026-07-15"},
         ]}
 
+    def quote(self, **params: object) -> dict[str, object]:
+        self.calls.append(dict(params))
+        return {"total": {"tradeVolume": {"TMFH6": 500, "TMFI6": 100}[str(params["symbol"])]}}
+
 
 class Rest:
     def __init__(self, intraday: Intraday) -> None:
@@ -55,6 +59,15 @@ def test_probe_calls_tickers_once_and_returns_only_verified_tmf_candidates() -> 
     assert payload["quote_endpoint_invoked"] is False
     assert payload["raw_payload_retained"] is False
     assert payload["trading_enabled"] is False
+
+
+def test_probe_resolves_unique_active_contract_by_documented_quote_volume() -> None:
+    authorized, intraday = clients()
+
+    active = FubonTmfContractProbe(authorized).resolve_active(today=date(2026, 8, 10))
+
+    assert active.symbol == "TMFH6"
+    assert intraday.calls[1:] == [{"symbol": "TMFH6"}, {"symbol": "TMFI6"}]
 
 
 class NeverBootstrap:
