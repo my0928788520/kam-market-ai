@@ -103,6 +103,77 @@ class KamRuleAuditEvent:
     event_type: str = "kam_rule_evaluated"
 
 
+@dataclass(frozen=True, slots=True)
+class KamReadOnlyDecision:
+    """Non-executable KAM interpretation of five canonical timeframe states."""
+
+    direction: str
+    primary_next_action: str
+    timeframe_states: tuple[str, ...]
+    blockers: tuple[str, ...]
+    decision_status: str = "OBSERVATION_ONLY"
+    action: str = "HOLD"
+    market_data_only: bool = True
+    live_order_allowed: bool = False
+
+    def safe_payload(self) -> dict[str, object]:
+        return {
+            "direction": self.direction,
+            "primary_next_action": self.primary_next_action,
+            "timeframe_states": list(self.timeframe_states),
+            "blockers": list(self.blockers),
+            "decision_status": self.decision_status,
+            "action": self.action,
+            "market_data_only": self.market_data_only,
+            "live_order_allowed": self.live_order_allowed,
+        }
+
+
+def evaluate_kam_read_only_states(
+    weekly: KamTimeframeState,
+    daily: KamTimeframeState,
+    m60: KamTimeframeState,
+    m15: KamTimeframeState,
+    m5: KamTimeframeState,
+) -> KamReadOnlyDecision:
+    """Evaluate mapped states without constructing an order proposal."""
+    states = (weekly, daily, m60, m15, m5)
+    if not all(isinstance(item, KamTimeframeState) for item in states):
+        raise TypeError("five KamTimeframeState values are required")
+    codes = tuple(item.code for item in states)
+    higher = tuple(code[0] for code in codes[:2])
+    blockers: list[str] = []
+
+    if any(code[1] == "D" for code in codes):
+        direction = "觀望"
+        next_action = "等待失效週期資料恢復"
+        blockers.append("DEGRADED_TIMEFRAME_STATE")
+    elif higher == ("A", "A"):
+        direction = "偏多"
+        first_unready = next((index for index, code in enumerate(codes) if code != "AU"), None)
+        labels = ("週線", "日線", "60 分", "15 分", "5 分")
+        next_action = (
+            "五週期偏多一致，等待人工確認"
+            if first_unready is None
+            else f"等待{labels[first_unready]}偏多狀態確認"
+        )
+    elif higher == ("B", "B"):
+        direction = "偏空"
+        next_action = "等待空方策略核准，維持觀望"
+        blockers.append("SHORT_STRATEGY_NOT_APPROVED")
+    else:
+        direction = "觀望"
+        next_action = "等待週線與日線方向一致"
+        blockers.append("HIGHER_TIMEFRAME_NOT_ALIGNED")
+
+    return KamReadOnlyDecision(
+        direction,
+        next_action,
+        codes,
+        tuple(blockers),
+    )
+
+
 def evaluate_kam_rules(value: KamRuleAdapterInput) -> KamRuleDecision:
     """Apply fixed precedence; never infer a trade from short-term state alone."""
     if not isinstance(value, KamRuleAdapterInput): raise TypeError("KamRuleAdapterInput is required.")
