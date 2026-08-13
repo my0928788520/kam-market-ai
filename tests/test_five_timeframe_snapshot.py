@@ -1,9 +1,11 @@
 import json
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from kam_market_ai.dashboard.app import DashboardApp
 from kam_market_ai.live_read_only.five_timeframe_snapshot import (
+    five_timeframe_snapshot_age_seconds,
     read_five_timeframe_snapshot,
     write_five_timeframe_snapshot,
 )
@@ -30,7 +32,10 @@ def safe_payload() -> dict[str, object]:
 def test_safe_snapshot_round_trip(tmp_path) -> None:
     path = write_five_timeframe_snapshot(tmp_path / "live.json", safe_payload())
 
-    assert read_five_timeframe_snapshot(path) == safe_payload()
+    loaded = read_five_timeframe_snapshot(path)
+    assert {key: loaded[key] for key in safe_payload()} == safe_payload()
+    assert loaded["snapshot_schema_version"] == "1.0"
+    assert five_timeframe_snapshot_age_seconds(loaded) >= 0
     assert not path.with_suffix(".json.tmp").exists()
 
 
@@ -84,3 +89,19 @@ def test_dashboard_renders_safe_three_second_view_without_trade_controls(tmp_pat
     assert "&lt;unsafe&gt;" in body
     assert "禁止真實下單" in body
     assert "place_order" not in body.lower()
+
+
+def test_dashboard_rejects_stale_snapshot(tmp_path) -> None:
+    path = write_five_timeframe_snapshot(tmp_path / "live.json", safe_payload())
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["snapshot_written_at"] = (datetime.now(UTC) - timedelta(minutes=10)).isoformat()
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    response = {}
+
+    body = b"".join(DashboardApp(five_timeframe_snapshot_path=path)(
+        {"PATH_INFO": "/api/five-timeframe", "REQUEST_METHOD": "GET"},
+        lambda status, headers: response.update(status=status),
+    ))
+
+    assert response["status"] == "503 Service Unavailable"
+    assert json.loads(body)["status"] == "SNAPSHOT_UNAVAILABLE"
