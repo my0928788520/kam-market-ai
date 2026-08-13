@@ -16,10 +16,13 @@ def safe_payload() -> dict[str, object]:
         "market_data_only": True,
         "trading_enabled": False,
         "live_order_allowed": False,
+        "symbol": "TMFH6",
+        "session": None,
         "analysis_preview": {
             "decision_status": "BLOCKED",
             "action": "HOLD",
-            "three_second_summary": {"headline": "日週線形成中"},
+            "three_second_summary": {"headline": "日週線形成中", "direction": "neutral"},
+            "timeframes": {"5m": {"trend": "<unsafe>", "status": "ok"}},
         },
     }
 
@@ -65,3 +68,19 @@ def test_dashboard_fails_closed_when_snapshot_is_missing(tmp_path) -> None:
 
     assert response["status"] == "503 Service Unavailable"
     assert json.loads(body)["status"] == "SNAPSHOT_UNAVAILABLE"
+
+
+def test_dashboard_renders_safe_three_second_view_without_trade_controls(tmp_path) -> None:
+    path = write_five_timeframe_snapshot(tmp_path / "live.json", safe_payload())
+    response = {}
+    body = b"".join(DashboardApp(five_timeframe_snapshot_path=path)(
+        {"PATH_INFO": "/five-timeframe", "REQUEST_METHOD": "GET"},
+        lambda status, headers: response.update(status=status),
+    )).decode("utf-8")
+
+    assert response["status"] == "200 OK"
+    assert "日週線形成中" in body
+    assert "TMFH6" in body
+    assert "&lt;unsafe&gt;" in body
+    assert "禁止真實下單" in body
+    assert "place_order" not in body.lower()
