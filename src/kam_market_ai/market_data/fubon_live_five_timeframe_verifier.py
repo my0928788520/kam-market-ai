@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from kam_market_ai.live_read_only.five_timeframe_analysis_preview import (
     build_verified_five_timeframe_analysis_preview,
@@ -55,6 +56,7 @@ class FubonLiveFiveTimeframeVerifier:
         classifications: tuple[CandleClassification, ...] = (),
         complete_trading_dates: tuple[date, ...] = (),
         complete_week_starts: tuple[date, ...] = (),
+        verified_at: datetime | None = None,
     ) -> dict[str, object]:
         if not symbol or symbol.strip() != symbol:
             raise ValueError("LIVE_VERIFIER_VERIFIED_SYMBOL_REQUIRED")
@@ -87,6 +89,14 @@ class FubonLiveFiveTimeframeVerifier:
             return base
         if not classifications or not complete_trading_dates or not complete_week_starts:
             raise ValueError("LIVE_VERIFIER_COMPLETE_ATTESTATION_REQUIRED")
+        observed_at = verified_at or datetime.now(UTC)
+        if observed_at.tzinfo is None or observed_at.utcoffset() is None:
+            raise ValueError("LIVE_VERIFIER_VERIFIED_AT_TIMEZONE_REQUIRED")
+        local_date = observed_at.astimezone(ZoneInfo("Asia/Taipei")).date()
+        if any(item >= local_date for item in complete_trading_dates):
+            raise ValueError("LIVE_VERIFIER_CURRENT_TRADING_DATE_CANNOT_BE_COMPLETE")
+        if any(item + timedelta(days=7) > local_date for item in complete_week_starts):
+            raise ValueError("LIVE_VERIFIER_CURRENT_TRADING_WEEK_CANNOT_BE_COMPLETE")
         by_start = {item.candle_start: item for item in classifications}
         if len(by_start) != len(classifications):
             raise ValueError("LIVE_VERIFIER_DUPLICATE_CLASSIFICATION")
