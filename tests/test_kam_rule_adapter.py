@@ -2,7 +2,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from hashlib import sha256
 
-from kam_market_ai.paper_trading.kam_rule_adapter import KamRuleAdapterInput, KamTimeframeState, build_kam_rule_proposal, evaluate_kam_rules
+from kam_market_ai.paper_trading.kam_rule_adapter import KamRuleAdapterInput, KamTimeframeState, build_kam_rule_proposal, evaluate_kam_read_only_states, evaluate_kam_rules
 from kam_market_ai.paper_trading.order_proposal import PaperOrderProposalAction
 
 
@@ -27,3 +27,10 @@ def test_hold_proposal_has_no_executable_order_fields():
     decision, proposal, _ = build_kam_rule_proposal(_input(u_curve_stage="U0"))
     assert decision.proposal_action is PaperOrderProposalAction.HOLD
     assert proposal.proposal.input.order_type is None and proposal.proposal.input.quantity is None
+
+def test_read_only_state_engine_reports_bias_without_order_capability():
+    bearish = evaluate_kam_read_only_states(*([KamTimeframeState("BU")] * 5))
+    assert bearish.direction == "偏空"
+    assert bearish.action == "HOLD"
+    assert bearish.live_order_allowed is False
+    assert bearish.blockers == ("SHORT_STRATEGY_NOT_APPROVED",)
