@@ -55,8 +55,8 @@ class StructureEngineConfig:
         if not self.ambiguity_score_gap.is_finite() or self.ambiguity_score_gap<0: raise ValueError("ambiguity_score_gap must be finite and non-negative.")
     @classmethod
     def provisional(cls) -> "StructureEngineConfig":
-        def m(a,b,c,d): return {PositionTimeframe.M15:a,PositionTimeframe.M60:b,PositionTimeframe.D1:c,PositionTimeframe.W1:d}
-        return cls(m(96,72,90,78),m(48,36,45,39),m(5,5,5,5),m(Decimal("0.30"),Decimal("0.35"),Decimal("0.50"),Decimal("0.75")),m(Decimal("0.30"),Decimal("0.35"),Decimal("0.50"),Decimal("0.75")),m(Decimal("0.10"),Decimal("0.12"),Decimal("0.20"),Decimal("0.30")),m(Decimal("0.25"),Decimal("0.30"),Decimal("0.45"),Decimal("0.70")),m(Decimal("0.40"),Decimal("0.50"),Decimal("1.00"),Decimal("2.00")),m(3,3,3,2),m(32,24,30,20),m(2,2,2,1),m(24,18,15,10),m(timedelta(minutes=30),timedelta(hours=2),timedelta(days=2),timedelta(days=14)))
+        def m(a,b,c,d,e): return {PositionTimeframe.M5:a,PositionTimeframe.M15:b,PositionTimeframe.M60:c,PositionTimeframe.D1:d,PositionTimeframe.W1:e}
+        return cls(m(120,96,72,90,78),m(60,48,36,45,39),m(5,5,5,5,5),m(Decimal("0.25"),Decimal("0.30"),Decimal("0.35"),Decimal("0.50"),Decimal("0.75")),m(Decimal("0.25"),Decimal("0.30"),Decimal("0.35"),Decimal("0.50"),Decimal("0.75")),m(Decimal("0.08"),Decimal("0.10"),Decimal("0.12"),Decimal("0.20"),Decimal("0.30")),m(Decimal("0.20"),Decimal("0.25"),Decimal("0.30"),Decimal("0.45"),Decimal("0.70")),m(Decimal("0.30"),Decimal("0.40"),Decimal("0.50"),Decimal("1.00"),Decimal("2.00")),m(3,3,3,3,2),m(48,32,24,30,20),m(2,2,2,2,1),m(36,24,18,15,10),m(timedelta(minutes=10),timedelta(minutes=30),timedelta(hours=2),timedelta(days=2),timedelta(days=14)))
 
 @dataclass(frozen=True, slots=True)
 class SwingPoint:
