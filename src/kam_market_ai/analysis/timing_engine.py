@@ -72,9 +72,9 @@ class TimingEngineConfig:
         if self.future_timestamp_tolerance < timedelta(0) or self.session_transition_grace < timedelta(0): raise ValueError("Timing tolerances cannot be negative.")
     @classmethod
     def provisional(cls) -> "TimingEngineConfig":
-        m=lambda a,b,c,d:{PositionTimeframe.M15:a,PositionTimeframe.M60:b,PositionTimeframe.D1:c,PositionTimeframe.W1:d}
+        m=lambda a,b,c,d,e:{PositionTimeframe.M5:a,PositionTimeframe.M15:b,PositionTimeframe.M60:c,PositionTimeframe.D1:d,PositionTimeframe.W1:e}
         schedule=SessionSchedule()
-        return cls(TAIPEI,schedule,15,15,15,m(timedelta(minutes=5),timedelta(minutes=15),timedelta(hours=6),timedelta(days=2)),m(timedelta(minutes=30),timedelta(hours=2),timedelta(days=2),timedelta(days=14)),m(timedelta(minutes=2),timedelta(minutes=5),timedelta(hours=1),timedelta(days=1)),m(True,True,False,False))
+        return cls(TAIPEI,schedule,15,15,15,m(timedelta(minutes=2),timedelta(minutes=5),timedelta(minutes=15),timedelta(hours=6),timedelta(days=2)),m(timedelta(minutes=10),timedelta(minutes=30),timedelta(hours=2),timedelta(days=2),timedelta(days=14)),m(timedelta(minutes=1),timedelta(minutes=2),timedelta(minutes=5),timedelta(hours=1),timedelta(days=1)),m(True,True,True,False,False))
 
 @dataclass(frozen=True, slots=True)
 class TimingResult:
