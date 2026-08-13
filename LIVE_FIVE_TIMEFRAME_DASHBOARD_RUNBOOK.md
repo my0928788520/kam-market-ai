@@ -9,13 +9,13 @@
 日盤：
 
 ```powershell
-.\tools\start_fubon_five_timeframe_dashboard.ps1 -Symbol TMFH6
+.\tools\start_fubon_five_timeframe_dashboard.ps1
 ```
 
 夜盤：
 
 ```powershell
-.\tools\start_fubon_five_timeframe_dashboard.ps1 -Symbol TMFH6 -Session afterhours
+.\tools\start_fubon_five_timeframe_dashboard.ps1 -Session afterhours
 ```
 
 啟動成功後會自動開啟：
@@ -24,6 +24,7 @@
 - 安全 JSON：`http://127.0.0.1:8765/api/five-timeframe`
 
 服務預設每 60 秒更新一次。按 `Ctrl+C` 可安全停止。
+啟動器會用富邦官方商品清單與報價成交量解析唯一活動 TMF 契約；無資料或同量歧義時直接停止，不猜契約月份。需要重現特定契約時仍可加上 `-Symbol TMFH6`。
 
 ## 安全邊界
 
