@@ -105,6 +105,7 @@ def test_exact_operator_attestation_reaches_ready_five_timeframes() -> None:
     assert payload["analysis_preview"]["timeframes"]["5m"]["status"] != "unsupported"
     assert "M5_ANALYSIS_ENGINE_REQUIRED" not in payload["analysis_preview"]["blockers"]
     assert "TRADING_DECISION_MAPPING_NOT_APPROVED" in payload["analysis_preview"]["blockers"]
+    assert payload["analysis_preview"]["decision_diagnostics"]["observation_only"] is True
     assert payload["analysis_preview"]["raw_candles_retained"] is False
     assert payload["loaded_timeframes"] == ["5m", "15m", "60m", "1d", "1w"]
     assert payload["verified_trading_dates"] == ["2026-08-03"]
