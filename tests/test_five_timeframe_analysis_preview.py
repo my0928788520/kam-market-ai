@@ -65,6 +65,10 @@ def test_preview_runs_all_five_timeframes_and_remains_fail_closed() -> None:
         "observation_only",
     }
     assert payload["decision_diagnostics"]["observation_only"] is True
+    assert payload["three_second_summary"]["action"] == "HOLD"
+    assert payload["three_second_summary"]["decision_status"] == "BLOCKED"
+    assert payload["three_second_summary"]["direction"] == payload["decision_diagnostics"]["direction"]
+    assert payload["three_second_summary"]["risk"] == payload["decision_diagnostics"]["risk_level"]
     assert payload["market_data_only"] is True
     assert payload["live_order_allowed"] is False
     assert payload["raw_candles_retained"] is False
