@@ -152,7 +152,10 @@ def main(
         with make_server(
             args.host,
             args.port,
-            DashboardApp(five_timeframe_snapshot_path=args.snapshot),
+            DashboardApp(
+                five_timeframe_snapshot_path=args.snapshot,
+                five_timeframe_max_age_seconds=max(180, args.refresh_seconds * 3),
+            ),
         ) as server:
             if args.open_browser:
                 webbrowser.open(f"http://{args.host}:{args.port}/five-timeframe")
