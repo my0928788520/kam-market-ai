@@ -12,6 +12,7 @@ from ..models import Candle
 
 
 class PositionTimeframe(StrEnum):
+    M5 = "5m"
     M15 = "15m"
     M60 = "60m"
     D1 = "1d"
@@ -44,6 +45,7 @@ class DuplicateTimestampPolicy(StrEnum):
 
 
 ALL_TIMEFRAMES = (
+    PositionTimeframe.M5,
     PositionTimeframe.M15,
     PositionTimeframe.M60,
     PositionTimeframe.D1,
@@ -105,18 +107,21 @@ class PositionEngineConfig:
 
         return cls(
             lookback_by_timeframe={
+                PositionTimeframe.M5: 48,
                 PositionTimeframe.M15: 32,
                 PositionTimeframe.M60: 24,
                 PositionTimeframe.D1: 20,
                 PositionTimeframe.W1: 16,
             },
             minimum_closed_candles_by_timeframe={
+                PositionTimeframe.M5: 24,
                 PositionTimeframe.M15: 16,
                 PositionTimeframe.M60: 12,
                 PositionTimeframe.D1: 10,
                 PositionTimeframe.W1: 8,
             },
             stale_after_by_timeframe={
+                PositionTimeframe.M5: timedelta(minutes=10),
                 PositionTimeframe.M15: timedelta(minutes=30),
                 PositionTimeframe.M60: timedelta(hours=2),
                 PositionTimeframe.D1: timedelta(days=2),
