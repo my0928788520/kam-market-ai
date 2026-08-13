@@ -20,8 +20,9 @@ def test_installed_commands_include_live_read_only_workflows() -> None:
 
 
 def test_dashboard_parser_keeps_browser_launch_explicit_and_local() -> None:
-    args = build_parser().parse_args(["--symbol", "TMFH6"])
+    args = build_parser().parse_args([])
     assert args.host == "127.0.0.1"
+    assert args.symbol is None
     assert args.open_browser is False
 
     args = build_parser().parse_args(["--symbol", "TMFH6", "--open-browser"])
@@ -36,6 +37,7 @@ def test_windows_launcher_preserves_read_only_local_boundary() -> None:
     assert "--live" in source
     assert "127.0.0.1" in source
     assert "--open-browser" in source
+    assert "[parameter(mandatory = $true)]" not in source
     assert "place_order" not in source
     assert "0.0.0.0" not in source
     assert "git push" not in source
