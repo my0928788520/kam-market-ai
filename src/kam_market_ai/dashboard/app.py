@@ -14,6 +14,7 @@ from .payload import build_dashboard_payload
 from .presenter import DashboardPresenterView
 from .ui_contract import DashboardUIConfig, render_dashboard_ui
 from .wsgi_adapter import DashboardWSGIAdapterConfig, build_dashboard_wsgi_context
+from kam_market_ai.live_read_only.five_timeframe_snapshot import read_five_timeframe_snapshot
 
 
 _STATIC = Path(__file__).with_name("static")
@@ -92,8 +93,9 @@ def render_html(payload: dict[str, object]) -> str:
 
 
 class DashboardApp:
-    def __init__(self, snapshot_path: str | Path = "debug/position/dashboard_position_snapshot.json", *, presenter: DashboardPresenterView | None = None, ui_config: DashboardUIConfig | None = None, adapter_config: DashboardWSGIAdapterConfig | None = None) -> None:
+    def __init__(self, snapshot_path: str | Path = "debug/position/dashboard_position_snapshot.json", *, five_timeframe_snapshot_path: str | Path | None = None, presenter: DashboardPresenterView | None = None, ui_config: DashboardUIConfig | None = None, adapter_config: DashboardWSGIAdapterConfig | None = None) -> None:
         self.snapshot_path = Path(snapshot_path)
+        self.five_timeframe_snapshot_path = Path(five_timeframe_snapshot_path) if five_timeframe_snapshot_path else None
         self.presenter = presenter
         self.ui_config = ui_config or DashboardUIConfig.provisional()
         self.adapter_config = adapter_config or DashboardWSGIAdapterConfig.provisional()
@@ -107,6 +109,24 @@ class DashboardApp:
         if path == "/api/dashboard":
             body = json.dumps(build_dashboard_payload(self.snapshot_path), ensure_ascii=False).encode("utf-8")
             start_response("200 OK", [("Content-Type", "application/json; charset=utf-8"), ("Content-Length", str(len(body)))])
+            return [body]
+        if path == "/api/five-timeframe":
+            try:
+                if self.five_timeframe_snapshot_path is None:
+                    raise FileNotFoundError
+                payload = read_five_timeframe_snapshot(self.five_timeframe_snapshot_path)
+                status = "200 OK"
+            except (OSError, TypeError, ValueError, json.JSONDecodeError):
+                payload = {
+                    "success": False,
+                    "status": "SNAPSHOT_UNAVAILABLE",
+                    "market_data_only": True,
+                    "trading_enabled": False,
+                    "live_order_allowed": False,
+                }
+                status = "503 Service Unavailable"
+            body = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+            start_response(status, [("Content-Type", "application/json; charset=utf-8"), ("Cache-Control", "no-store"), ("Content-Length", str(len(body)))])
             return [body]
         if path == "/static/dashboard.css":
             body = (_STATIC / "dashboard.css").read_bytes()
