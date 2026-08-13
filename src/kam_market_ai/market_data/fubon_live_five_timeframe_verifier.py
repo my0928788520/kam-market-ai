@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
+from kam_market_ai.live_read_only.five_timeframe_analysis_preview import (
+    build_verified_five_timeframe_analysis_preview,
+)
 from kam_market_ai.live_read_only.five_timeframe_decision_gate import (
     evaluate_live_five_timeframe_readiness,
 )
@@ -122,6 +125,10 @@ class FubonLiveFiveTimeframeVerifier:
         })
         payload["decision_preview"] = evaluate_live_five_timeframe_readiness(
             payload
+        ).safe_payload()
+        payload["analysis_preview"] = build_verified_five_timeframe_analysis_preview(
+            complete,
+            evaluated_at=datetime.now(UTC),
         ).safe_payload()
         return payload
 
