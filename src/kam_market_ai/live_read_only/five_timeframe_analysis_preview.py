@@ -31,6 +31,15 @@ from kam_market_ai.decision.decision_contract import (
     DecisionInputConfig,
     build_decision_input_contract,
 )
+from kam_market_ai.decision.decision_confidence import (
+    DecisionConfidenceConfig,
+    evaluate_decision_confidence,
+)
+from kam_market_ai.decision.next_step_engine import (
+    NextStepEngineConfig,
+    evaluate_next_step,
+)
+from kam_market_ai.decision.risk_engine import RiskEngineConfig, evaluate_risk
 from kam_market_ai.market_data.fubon_five_timeframe_pipeline import (
     CompleteFiveTimeframeCandleResult,
     FiveTimeframe,
@@ -50,6 +59,7 @@ class VerifiedFiveTimeframeAnalysisPreview:
     evaluated_at: datetime
     overall_status: str
     timeframe_analysis: dict[str, dict[str, object]]
+    decision_diagnostics: dict[str, object]
     blockers: tuple[str, ...]
     decision_status: str = "BLOCKED"
     action: str = "HOLD"
@@ -65,6 +75,7 @@ class VerifiedFiveTimeframeAnalysisPreview:
             "action": self.action,
             "blockers": list(self.blockers),
             "timeframes": self.timeframe_analysis,
+            "decision_diagnostics": self.decision_diagnostics,
             "market_data_only": self.market_data_only,
             "live_order_allowed": self.live_order_allowed,
             "raw_candles_retained": False,
@@ -121,6 +132,17 @@ def build_verified_five_timeframe_analysis_preview(
         evaluated_at,
         DecisionInputConfig.provisional(),
     )
+    confidence = evaluate_decision_confidence(
+        contract,
+        DecisionConfidenceConfig.provisional(),
+    )
+    risk = evaluate_risk(contract, confidence, RiskEngineConfig.provisional())
+    next_step = evaluate_next_step(
+        contract,
+        confidence,
+        risk,
+        NextStepEngineConfig.provisional(),
+    )
 
     analysis: dict[str, dict[str, object]] = {}
     for source, engine in _ENGINE_TIMEFRAMES.items():
@@ -139,10 +161,24 @@ def build_verified_five_timeframe_analysis_preview(
     if contract.overall_status.value != "ready":
         blockers.append("ANALYSIS_INPUT_NOT_READY")
     blockers.append("TRADING_DECISION_MAPPING_NOT_APPROVED")
+    diagnostics: dict[str, object] = {
+        "direction": confidence.overall_direction.value,
+        "confidence_score": str(confidence.overall_confidence_score),
+        "confidence_state": confidence.overall_confidence_state.value,
+        "alignment_state": confidence.alignment_state.value,
+        "risk_score": str(risk.overall_risk_score),
+        "risk_level": risk.overall_risk_level.value,
+        "risk_state": risk.operational_state.value,
+        "next_step": next_step.next_step.value,
+        "next_step_state": next_step.operational_state.value,
+        "next_step_priority": next_step.priority.value,
+        "observation_only": True,
+    }
     return VerifiedFiveTimeframeAnalysisPreview(
         evaluated_at=evaluated_at,
         overall_status=contract.overall_status.value,
         timeframe_analysis=analysis,
+        decision_diagnostics=diagnostics,
         blockers=tuple(blockers),
     )
 
