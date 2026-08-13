@@ -86,6 +86,10 @@ class FubonLiveFiveTimeframeVerifier:
             base["decision_preview"] = evaluate_live_five_timeframe_readiness(
                 base
             ).safe_payload()
+            base["analysis_preview"] = build_verified_five_timeframe_analysis_preview(
+                partial,
+                evaluated_at=datetime.now(UTC),
+            ).safe_payload()
             return base
         if not classifications or not complete_trading_dates or not complete_week_starts:
             raise ValueError("LIVE_VERIFIER_COMPLETE_ATTESTATION_REQUIRED")
