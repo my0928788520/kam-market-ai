@@ -37,20 +37,20 @@ def complete_result() -> CompleteFiveTimeframeCandleResult:
     )
 
 
-def test_preview_runs_existing_engines_and_keeps_five_minute_gap_explicit() -> None:
+def test_preview_runs_all_five_timeframes_and_remains_fail_closed() -> None:
     payload = build_verified_five_timeframe_analysis_preview(
         complete_result(),
         evaluated_at=NOW,
     ).safe_payload()
 
     assert list(payload["timeframes"]) == ["5m", "15m", "60m", "1d", "1w"]
-    assert payload["timeframes"]["5m"] == {
-        "status": "unsupported",
-        "blocker": "M5_ANALYSIS_ENGINE_REQUIRED",
+    assert set(payload["timeframes"]["5m"]) == {
+        "status", "usable", "position", "trend", "structure", "timing", "error_codes",
     }
     assert payload["decision_status"] == "BLOCKED"
     assert payload["action"] == "HOLD"
-    assert "M5_ANALYSIS_ENGINE_REQUIRED" in payload["blockers"]
+    assert "M5_ANALYSIS_ENGINE_REQUIRED" not in payload["blockers"]
+    assert "TRADING_DECISION_MAPPING_NOT_APPROVED" in payload["blockers"]
     assert payload["market_data_only"] is True
     assert payload["live_order_allowed"] is False
     assert payload["raw_candles_retained"] is False
