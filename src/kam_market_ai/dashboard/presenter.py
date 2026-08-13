@@ -38,7 +38,7 @@ class DashboardSectionKey(StrEnum):
     FOOTER = "footer"
 
 
-_TIMEFRAMES = ("15m", "60m", "1d", "1w")
+_TIMEFRAMES = ("5m", "15m", "60m", "1d", "1w")
 _MODULES = ("position", "trend", "structure", "timing")
 _DISPLAY_CLASSES = {
     "ready": "state-ready", "observing": "state-observing", "waiting": "state-waiting",
@@ -167,7 +167,7 @@ def _theme(display_state: str, risk_level: str) -> DashboardThemeState:
 def _invalid_view(config: DashboardPresenterConfig, code: str) -> DashboardPresenterView:
     state, attention, theme = "invalid", "immediate", DashboardThemeState.UNAVAILABLE
     header = {"title": config.page_title, "subtitle": config.page_subtitle, "product_name": "KAM Trade V3", "product_type": "read-only", "evaluated_at_text": "—", "market_status_text": "invalid", "display_state": state, "attention_level": attention, "badge_text": "資料不可用", "badge_class": "state-invalid"}
-    accessibility = {"page_landmark_label": "KAM Trade V3 dashboard", "summary_aria_label": "市場摘要", "decision_aria_label": "市場決策", "timeframe_group_label": "四個週期", "module_group_label": "四個分析模組", "message_region_label": "系統訊息", "status_live_mode": "assertive", "language": config.language, "heading_order_valid": True}
+    accessibility = {"page_landmark_label": "KAM Trade V3 dashboard", "summary_aria_label": "市場摘要", "decision_aria_label": "市場決策", "timeframe_group_label": "五個週期", "module_group_label": "四個分析模組", "message_region_label": "系統訊息", "status_live_mode": "assertive", "language": config.language, "heading_order_valid": True}
     context = {"section_order": tuple(x.value for x in config.section_order), "header": header, "market_overview": {}, "summary": {}, "decision": {}, "timeframe_cards": (), "module_sections": (), "message_banner": {"visible": True, "severity": "critical", "title": "資料不可用", "short_text": "展示資料無法驗證。", "source_text": "presenter", "timeframe_text": "—", "state_class": "state-invalid", "aria_live": "assertive", "dismissible": False}, "messages": ("展示資料無法驗證。",), "footer": {"presenter_version": config.presenter_version}, "accessibility": accessibility, "theme_state": theme.value}
     return DashboardPresenterView(config.presenter_version, None, config.page_title, config.page_subtitle, state, attention, theme, {}, {}, (), (), {}, context["message_banner"], context["messages"], context["footer"], accessibility, context, False, (), (code,))
 
@@ -188,7 +188,7 @@ def build_dashboard_presenter(source: DashboardReadModel | Mapping[str, Any], co
         if serialization_version not in config.supported_serialization_versions or read_model_version not in config.supported_read_model_versions:
             raise ValueError("source_version_mismatch")
         frames = payload.get("timeframe_views")
-        if not isinstance(frames, list) or [f.get("timeframe") for f in frames if isinstance(f, Mapping)] != list(config.timeframe_order) or len(frames) != 4:
+        if not isinstance(frames, list) or [f.get("timeframe") for f in frames if isinstance(f, Mapping)] != list(config.timeframe_order) or len(frames) != 5:
             raise ValueError("invalid_timeframes")
         state = str(payload.get("display_state"))
         attention = str(payload.get("attention"))
@@ -218,7 +218,7 @@ def build_dashboard_presenter(source: DashboardReadModel | Mapping[str, Any], co
         errors = tuple(_text(x) for x in payload.get("error_codes", ()))
         severity = "critical" if state in {"invalid", "calculation_error", "stale", "blocked"} or risk_level == "critical" else "warning" if warnings else "info"
         banner = {"visible": bool(warnings or errors or severity == "critical"), "severity": severity, "title": "系統訊息", "short_text": (errors + warnings + ("—",))[0], "source_text": source_kind, "timeframe_text": "—", "state_class": _class(_DISPLAY_CLASSES, state), "aria_live": "assertive" if severity == "critical" else "polite" if severity == "warning" else "off", "dismissible": False}
-        accessibility = {"page_landmark_label": "KAM Trade V3 dashboard", "summary_aria_label": "市場三秒摘要", "decision_aria_label": "市場決策", "timeframe_group_label": "四個週期", "module_group_label": "四個分析模組", "message_region_label": "系統訊息", "status_live_mode": banner["aria_live"], "language": config.language, "heading_order_valid": True}
+        accessibility = {"page_landmark_label": "KAM Trade V3 dashboard", "summary_aria_label": "市場三秒摘要", "decision_aria_label": "市場決策", "timeframe_group_label": "五個週期", "module_group_label": "四個分析模組", "message_region_label": "系統訊息", "status_live_mode": banner["aria_live"], "language": config.language, "heading_order_valid": True}
         footer = {"presenter_version": config.presenter_version, "source_version": read_model_version if config.show_source_versions else "—", "serialization_version": serialization_version if config.show_source_versions else "—"}
         safe_overview = {k: _text(v) for k, v in overview.items() if not isinstance(v, (dict, list, tuple))}
         context = {"section_order": tuple(x.value for x in config.section_order), "header": header, "market_overview": safe_overview, "summary": summary, "decision": decision_view, "timeframe_cards": tuple(cards), "module_sections": tuple(modules), "message_banner": banner, "messages": warnings + errors, "footer": footer, "accessibility": accessibility, "theme_state": theme.value}
