@@ -12,7 +12,7 @@ SECTION_IDS = (
     "dashboard-messages", "dashboard-footer",
 )
 DECISION_IDS = ("decision-direction", "decision-confidence", "decision-risk", "decision-next-step")
-TIMEFRAME_IDS = ("timeframe-15m", "timeframe-60m", "timeframe-1d", "timeframe-1w")
+TIMEFRAME_IDS = ("timeframe-5m", "timeframe-15m", "timeframe-60m", "timeframe-1d", "timeframe-1w")
 MODULE_IDS = ("module-position", "module-trend", "module-structure", "module-timing")
 CSS_TOKENS = ("--page-bg", "--panel-bg", "--text-primary", "--text-secondary", "--border", "--focus", "--state-normal", "--state-waiting", "--state-caution", "--state-danger", "--state-unavailable")
 
@@ -98,9 +98,9 @@ def render_dashboard_ui(template_context: Mapping[str, Any], config: DashboardUI
     frames = template_context["timeframe_cards"]
     invalid_page = _text(header.get("display_state")) == "invalid"
     if invalid_page and not frames:
-        frames = tuple({"display_label": label, "state_class": "state-invalid", "direction_text": "—", "confidence_score_text": "—", "risk_score_text": "—", "next_step_text": "—"} for label in ("15m", "60m", "1d", "1w"))
-    if not isinstance(frames, (tuple, list)) or len(frames) != 4:
-        raise ValueError("The UI requires four timeframe cards")
+        frames = tuple({"display_label": label, "state_class": "state-invalid", "direction_text": "—", "confidence_score_text": "—", "risk_score_text": "—", "next_step_text": "—"} for label in ("5m", "15m", "60m", "1d", "1w"))
+    if not isinstance(frames, (tuple, list)) or len(frames) != 5:
+        raise ValueError("The UI requires five timeframe cards")
     frame_html = []
     for card, identifier in zip(frames, TIMEFRAME_IDS, strict=True):
         if not isinstance(card, Mapping):
