@@ -90,7 +90,7 @@ class FiveTimeframeCandleResult:
 @dataclass(frozen=True, slots=True)
 class CompleteFiveTimeframeCandleResult:
     instrument: Instrument
-    session: str
+    session: str | None
     series: Mapping[FiveTimeframe, tuple[Candle, ...]]
     endpoint_call_count: int
     status: str = "READY_VERIFIED_FIVE_TIMEFRAMES"

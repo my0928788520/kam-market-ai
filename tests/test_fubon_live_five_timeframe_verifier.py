@@ -62,6 +62,11 @@ def test_probe_stops_at_attestation_required_and_exposes_safe_source_identity() 
 
     assert payload["success"] is False
     assert payload["status"] == "ATTESTATION_REQUIRED"
+    assert payload["decision_preview"]["decision_status"] == "BLOCKED"
+    assert payload["decision_preview"]["action"] == "HOLD"
+    assert payload["decision_preview"]["blockers"] == [
+        "FIVE_TIMEFRAME_DATA_INCOMPLETE"
+    ]
     assert payload["external_endpoint_call_count"] == 3
     assert payload["symbol"] == "TMFH6"
     assert len(payload["source_candle_starts"]) == 2
@@ -90,6 +95,11 @@ def test_exact_operator_attestation_reaches_ready_five_timeframes() -> None:
 
     assert payload["success"] is True
     assert payload["status"] == "READY_VERIFIED_FIVE_TIMEFRAMES"
+    assert payload["decision_preview"]["decision_status"] == "BLOCKED"
+    assert payload["decision_preview"]["action"] == "HOLD"
+    assert payload["decision_preview"]["blockers"] == [
+        "TIMEFRAME_STATE_CLASSIFICATION_REQUIRED"
+    ]
     assert payload["loaded_timeframes"] == ["5m", "15m", "60m", "1d", "1w"]
     assert payload["verified_trading_dates"] == ["2026-08-03"]
 

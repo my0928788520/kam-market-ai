@@ -5,6 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime
 
+from kam_market_ai.live_read_only.five_timeframe_decision_gate import (
+    evaluate_live_five_timeframe_readiness,
+)
 from kam_market_ai.models import Instrument
 
 from .fubon_five_timeframe_pipeline import (
@@ -75,6 +78,9 @@ class FubonLiveFiveTimeframeVerifier:
             "live_order_allowed": False,
         }
         if not classifications and not complete_trading_dates and not complete_week_starts:
+            base["decision_preview"] = evaluate_live_five_timeframe_readiness(
+                base
+            ).safe_payload()
             return base
         if not classifications or not complete_trading_dates or not complete_week_starts:
             raise ValueError("LIVE_VERIFIER_COMPLETE_ATTESTATION_REQUIRED")
@@ -114,6 +120,9 @@ class FubonLiveFiveTimeframeVerifier:
             "broker_connected": False,
             "live_order_allowed": False,
         })
+        payload["decision_preview"] = evaluate_live_five_timeframe_readiness(
+            payload
+        ).safe_payload()
         return payload
 
 
