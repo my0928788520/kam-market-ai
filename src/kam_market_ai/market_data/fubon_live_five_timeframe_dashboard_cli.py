@@ -131,7 +131,8 @@ def main(
     print(json.dumps({
         "success": True,
         "mode": "local_read_only_five_timeframe_dashboard",
-        "url": f"http://{args.host}:{args.port}/api/five-timeframe",
+        "url": f"http://{args.host}:{args.port}/five-timeframe",
+        "api_url": f"http://{args.host}:{args.port}/api/five-timeframe",
         "refresh_seconds": args.refresh_seconds,
         "trading_enabled": False,
         "live_order_allowed": False,
