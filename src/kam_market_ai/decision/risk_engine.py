@@ -20,7 +20,7 @@ class RiskEngineConfig:
     risk_thresholds:tuple[Decimal,Decimal,Decimal,Decimal,Decimal]=(Decimal("15"),Decimal("30"),Decimal("50"),Decimal("70"),Decimal("85")); stale_floor:Decimal=Decimal("65"); conflict_floor:Decimal=Decimal("50"); missing_direction_floor:Decimal=Decimal("40"); wait_for_close_floor:Decimal=Decimal("30"); decimal_precision:int=2
     def __post_init__(self)->None:
         if self.category_weights is None: object.__setattr__(self,"category_weights",{RiskCategory.DATA_QUALITY:Decimal(".20"),RiskCategory.TIMING:Decimal(".15"),RiskCategory.POSITION:Decimal(".15"),RiskCategory.TREND:Decimal(".10"),RiskCategory.STRUCTURE:Decimal(".15"),RiskCategory.MODULE_CONFLICT:Decimal(".15"),RiskCategory.COVERAGE:Decimal(".10")})
-        if self.timeframe_weights is None: object.__setattr__(self,"timeframe_weights",{PositionTimeframe.M15:Decimal(".15"),PositionTimeframe.M60:Decimal(".25"),PositionTimeframe.D1:Decimal(".35"),PositionTimeframe.W1:Decimal(".25")})
+        if self.timeframe_weights is None: object.__setattr__(self,"timeframe_weights",{PositionTimeframe.M5:Decimal(".10"),PositionTimeframe.M15:Decimal(".15"),PositionTimeframe.M60:Decimal(".25"),PositionTimeframe.D1:Decimal(".30"),PositionTimeframe.W1:Decimal(".20")})
         if sum(self.category_weights.values())!=Decimal("1") or sum(self.timeframe_weights.values())!=Decimal("1"): raise ValueError("Risk weights must total exactly 1.")
         if len(self.risk_thresholds)!=5 or not (Z<=self.risk_thresholds[0]<self.risk_thresholds[1]<self.risk_thresholds[2]<self.risk_thresholds[3]<self.risk_thresholds[4]<=H): raise ValueError("Invalid risk thresholds.")
     @classmethod
