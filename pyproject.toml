@@ -25,6 +25,9 @@ dev = [
 
 [project.scripts]
 kam-shadow = "kam_market_ai.app:main"
+kam-fubon-candles = "kam_market_ai.market_data.fubon_intraday_candle_probe_cli:main"
+kam-fubon-five-timeframe = "kam_market_ai.market_data.fubon_live_five_timeframe_verifier_cli:main"
+kam-fubon-dashboard = "kam_market_ai.market_data.fubon_live_five_timeframe_dashboard_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
