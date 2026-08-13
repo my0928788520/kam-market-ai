@@ -92,6 +92,40 @@ def render_html(payload: dict[str, object]) -> str:
 <body><main>{top_status}<div class="dashboard-grid"><section class="core-grid">{core_cards}</section><section class="timeframe-grid">{timeframe_cards}</section><section class="decision-grid">{decision_cards}</section></div></main></body></html>""".format(top_status=top_status, core_cards=core_cards, timeframe_cards=timeframe_cards, decision_cards=decision_cards)
 
 
+def render_five_timeframe_html(payload: dict[str, object]) -> str:
+    """Render only the allow-listed safe live analysis projection."""
+    preview = payload.get("analysis_preview")
+    preview = preview if isinstance(preview, dict) else {}
+    summary = preview.get("three_second_summary")
+    summary = summary if isinstance(summary, dict) else {}
+    diagnostics = preview.get("decision_diagnostics")
+    diagnostics = diagnostics if isinstance(diagnostics, dict) else {}
+    timeframes = preview.get("timeframes")
+    timeframes = timeframes if isinstance(timeframes, dict) else {}
+
+    def text(value: object) -> str:
+        return html.escape(str(value if value is not None else "—"))
+
+    cards = []
+    labels = {"5m": "5 分", "15m": "15 分", "60m": "60 分", "1d": "日線", "1w": "週線"}
+    for key in ("5m", "15m", "60m", "1d", "1w"):
+        frame = timeframes.get(key)
+        frame = frame if isinstance(frame, dict) else {}
+        cards.append(
+            f'<section class="card timeframe"><h2>{labels[key]}</h2>'
+            f'<p class="headline">{text(frame.get("trend"))}</p>'
+            f'<p>位置 {text(frame.get("position"))} · 結構 {text(frame.get("structure"))}</p>'
+            f'<small>資料狀態：{text(frame.get("status"))}</small></section>'
+        )
+    return f'''<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="60"><title>空明・五週期市場覺察</title><link rel="stylesheet" href="/static/dashboard.css"></head><body><main>
+<header class="status-bar"><div class="brand">空明・五週期市場覺察</div><dl class="status-meta"><div><dt>商品</dt><dd>{text(payload.get("symbol"))}</dd></div><div><dt>盤別</dt><dd>{text(payload.get("session") or "日盤")}</dd></div><div><dt>資料狀態</dt><dd>{text(payload.get("status"))}</dd></div><div><dt>模式</dt><dd>唯讀觀察</dd></div></dl></header>
+<section class="card market-direction"><h1>{text(summary.get("headline", "等待資料"))}</h1><p>{text(summary.get("message"))}</p></section>
+<section class="decision-grid"><section class="card"><h2>方向</h2><p class="headline">{text(summary.get("direction"))}</p></section><section class="card"><h2>信心</h2><p class="headline">{text(summary.get("confidence"))}</p></section><section class="card"><h2>風險</h2><p class="headline">{text(summary.get("risk"))}</p></section><section class="card next-step"><h2>下一步</h2><p class="headline">{text(summary.get("next_step"))}</p></section></section>
+<section class="timeframe-grid">{''.join(cards)}</section>
+<section class="card"><h2>安全狀態</h2><p>決策 {text(preview.get("decision_status"))} · 動作 {text(preview.get("action"))} · 觀察模式 {text(diagnostics.get("observation_only"))}</p><p>禁止真實下單</p></section>
+</main></body></html>'''
+
+
 class DashboardApp:
     def __init__(self, snapshot_path: str | Path = "debug/position/dashboard_position_snapshot.json", *, five_timeframe_snapshot_path: str | Path | None = None, presenter: DashboardPresenterView | None = None, ui_config: DashboardUIConfig | None = None, adapter_config: DashboardWSGIAdapterConfig | None = None) -> None:
         self.snapshot_path = Path(snapshot_path)
@@ -127,6 +161,18 @@ class DashboardApp:
                 status = "503 Service Unavailable"
             body = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
             start_response(status, [("Content-Type", "application/json; charset=utf-8"), ("Cache-Control", "no-store"), ("Content-Length", str(len(body)))])
+            return [body]
+        if path == "/five-timeframe":
+            try:
+                if self.five_timeframe_snapshot_path is None:
+                    raise FileNotFoundError
+                payload = read_five_timeframe_snapshot(self.five_timeframe_snapshot_path)
+                body = render_five_timeframe_html(payload).encode("utf-8")
+                status = "200 OK"
+            except (OSError, TypeError, ValueError, json.JSONDecodeError):
+                body = b"Five-timeframe snapshot unavailable"
+                status = "503 Service Unavailable"
+            start_response(status, [("Content-Type", "text/html; charset=utf-8"), ("Cache-Control", "no-store"), ("Content-Length", str(len(body)))])
             return [body]
         if path == "/static/dashboard.css":
             body = (_STATIC / "dashboard.css").read_bytes()
