@@ -28,6 +28,7 @@ from .fubon_neo import (
     ResolvedFuturesContract,
     VerifiedContractResolver,
 )
+from .fubon_tmf_contract_probe import FubonTmfContractProbe
 
 
 class LiveFiveTimeframeSnapshotRefresher:
@@ -62,7 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="KAM 富邦 TMF 本機五週期唯讀儀表板")
     parser.add_argument("--live", action="store_true")
     parser.add_argument("--env", default=".env")
-    parser.add_argument("--symbol", required=True)
+    parser.add_argument("--symbol", help="省略時以已驗證成交量自動解析活動 TMF 契約")
     parser.add_argument("--session", default=None)
     parser.add_argument("--after-hours", action="store_true")
     parser.add_argument("--host", default="127.0.0.1")
@@ -97,16 +98,23 @@ def main(
     if result.clients is None:
         print(json.dumps({"success": False, "failure_stage": "MARKET_CLIENTS_UNAVAILABLE"}))
         return 2
+    try:
+        symbol = args.symbol or FubonTmfContractProbe(result.clients).resolve_active(
+            after_hours=args.after_hours,
+        ).symbol
+    except Exception:  # noqa: BLE001
+        print(json.dumps({"success": False, "failure_stage": "ACTIVE_CONTRACT_RESOLUTION_ERROR"}))
+        return 1
 
     resolver = VerifiedContractResolver((
-        ResolvedFuturesContract(Instrument.TMF, args.symbol, args.after_hours),
+        ResolvedFuturesContract(Instrument.TMF, symbol, args.after_hours),
     ))
     verifier = FubonLiveFiveTimeframeVerifier(FubonFiveTimeframeCandlePipeline(
         FubonIntradayCandlesAdapter(result.clients, resolver),
     ))
     refresher = LiveFiveTimeframeSnapshotRefresher(
         verifier,
-        symbol=args.symbol,
+        symbol=symbol,
         session=args.session,
         after_hours=args.after_hours,
         snapshot_path=args.snapshot,
@@ -136,6 +144,7 @@ def main(
         "url": f"http://{args.host}:{args.port}/five-timeframe",
         "api_url": f"http://{args.host}:{args.port}/api/five-timeframe",
         "refresh_seconds": args.refresh_seconds,
+        "symbol": symbol,
         "trading_enabled": False,
         "live_order_allowed": False,
     }, ensure_ascii=False))
