@@ -41,6 +41,11 @@ dt { color: #91a0ae; } dd { margin: 0; text-align: right; font-variant-numeric: 
 .pnl { color: #73cbae; font-weight: 650; }
 .updated { color: #82919e; font-size: .75rem; margin-top: 8px; }
 .detail { color: #91a0ae; margin-top: 8px; font-size: .82rem; }
+.kam-state { display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px; }
+.kam-state strong { color: #eaf0f6; font-size: 1.35rem; letter-spacing: .04em; }
+.kam-state span { color: #9aabb9; font-size: .78rem; }
+.timeframe p + p { margin-top: 3px; color: #b7c6d5; font-size: .78rem; }
+.timeframe small { display: block; margin-top: 7px; color: #82919e; }
 
 @media (max-width: 960px) {
   body { overflow: auto; }
