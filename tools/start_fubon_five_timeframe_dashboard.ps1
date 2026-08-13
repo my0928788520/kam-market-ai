@@ -1,5 +1,4 @@
 param(
-    [Parameter(Mandatory = $true)]
     [ValidatePattern('^[A-Za-z0-9]+$')]
     [string]$Symbol,
 
@@ -29,13 +28,16 @@ $arguments = @(
     '-m', 'kam_market_ai.market_data.fubon_live_five_timeframe_dashboard_cli',
     '--live',
     '--env', $envFile,
-    '--symbol', $Symbol,
     '--host', '127.0.0.1',
     '--port', [string]$Port,
     '--refresh-seconds', [string]$RefreshSeconds,
     '--snapshot', (Join-Path $projectRoot 'debug\five_timeframe\live.json'),
     '--open-browser'
 )
+
+if ($Symbol) {
+    $arguments += @('--symbol', $Symbol)
+}
 
 if ($Session -eq 'afterhours') {
     $arguments += @('--session', 'afterhours', '--after-hours')
