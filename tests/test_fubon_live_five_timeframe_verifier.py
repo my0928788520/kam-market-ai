@@ -130,6 +130,31 @@ def test_missing_or_extra_classification_fails_closed() -> None:
         )
 
 
+def test_current_trading_day_cannot_be_attested_complete() -> None:
+    target, _ = verifier()
+    classified = tuple(
+        CandleClassification(
+            datetime.fromisoformat(item),
+            date(2026, 8, 13),
+            date(2026, 8, 10),
+        )
+        for item in (
+            "2026-08-03T01:00:00+00:00",
+            "2026-08-03T02:00:00+00:00",
+        )
+    )
+
+    with pytest.raises(ValueError, match="CURRENT_TRADING_DATE_CANNOT_BE_COMPLETE"):
+        target.run(
+            symbol="TMFH6",
+            session=None,
+            classifications=classified,
+            complete_trading_dates=(date(2026, 8, 13),),
+            complete_week_starts=(date(2026, 8, 10),),
+            verified_at=datetime.fromisoformat("2026-08-13T04:30:00+00:00"),
+        )
+
+
 def test_cli_requires_explicit_live_flag(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["--symbol", "TMFH6", "--session", "NORMAL"]) == 2
     assert json.loads(capsys.readouterr().out)["failure_stage"] == "LIVE_FLAG_REQUIRED"
