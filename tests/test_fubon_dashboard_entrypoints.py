@@ -1,0 +1,41 @@
+from pathlib import Path
+
+import tomllib
+
+from kam_market_ai.market_data.fubon_live_five_timeframe_dashboard_cli import build_parser
+
+
+ROOT = Path(__file__).parents[1]
+
+
+def test_installed_commands_include_live_read_only_workflows() -> None:
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+    assert project["project"]["scripts"]["kam-fubon-dashboard"].endswith(
+        "fubon_live_five_timeframe_dashboard_cli:main"
+    )
+    assert project["project"]["scripts"]["kam-fubon-five-timeframe"].endswith(
+        "fubon_live_five_timeframe_verifier_cli:main"
+    )
+
+
+def test_dashboard_parser_keeps_browser_launch_explicit_and_local() -> None:
+    args = build_parser().parse_args(["--symbol", "TMFH6"])
+    assert args.host == "127.0.0.1"
+    assert args.open_browser is False
+
+    args = build_parser().parse_args(["--symbol", "TMFH6", "--open-browser"])
+    assert args.open_browser is True
+
+
+def test_windows_launcher_preserves_read_only_local_boundary() -> None:
+    source = (ROOT / "tools" / "start_fubon_five_timeframe_dashboard.ps1").read_text(
+        encoding="utf-8"
+    ).lower()
+
+    assert "--live" in source
+    assert "127.0.0.1" in source
+    assert "--open-browser" in source
+    assert "place_order" not in source
+    assert "0.0.0.0" not in source
+    assert "git push" not in source
