@@ -9,7 +9,9 @@ param(
     [int]$RefreshSeconds = 3,
 
     [ValidateRange(1, 65535)]
-    [int]$Port = 8765
+    [int]$Port = 8765,
+
+    [switch]$PaperTestArmed
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,6 +54,13 @@ if ($Symbol) {
 
 if ($Session -eq 'afterhours') {
     $arguments += @('--session', 'afterhours', '--after-hours')
+}
+
+if ($PaperTestArmed) {
+    $arguments += @(
+        '--paper-test-armed',
+        '--paper-journal', (Join-Path $projectRoot 'debug\paper_trading\tmf_live_journal.json')
+    )
 }
 
 Push-Location $projectRoot

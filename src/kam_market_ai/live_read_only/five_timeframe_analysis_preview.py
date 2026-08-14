@@ -27,13 +27,13 @@ from kam_market_ai.analysis.trend_engine import (
     TrendEngineConfig,
     evaluate_all_trendlines,
 )
-from kam_market_ai.decision.decision_contract import (
-    DecisionInputConfig,
-    build_decision_input_contract,
-)
 from kam_market_ai.decision.decision_confidence import (
     DecisionConfidenceConfig,
     evaluate_decision_confidence,
+)
+from kam_market_ai.decision.decision_contract import (
+    DecisionInputConfig,
+    build_decision_input_contract,
 )
 from kam_market_ai.decision.next_step_engine import (
     NextStepEngineConfig,
@@ -47,8 +47,10 @@ from kam_market_ai.market_data.fubon_five_timeframe_pipeline import (
 )
 from kam_market_ai.models import Candle
 from kam_market_ai.paper_trading.five_timeframe_paper_direction import (
+    FiveTimeframePaperDirection,
     decide_five_timeframe_paper_direction,
 )
+
 from .five_timeframe_kam_rule_bridge import (
     KAM_STATE_MAPPING_VERSION,
     evaluate_five_timeframe_kam_rules,
@@ -71,6 +73,7 @@ class VerifiedFiveTimeframeAnalysisPreview:
     decision_diagnostics: dict[str, object]
     three_second_summary: dict[str, object]
     kam_rule_decision: dict[str, object]
+    paper_direction: FiveTimeframePaperDirection
     blockers: tuple[str, ...]
     decision_status: str = "BLOCKED"
     action: str = "HOLD"
@@ -241,6 +244,7 @@ def build_verified_five_timeframe_analysis_preview(
         decision_diagnostics=diagnostics,
         three_second_summary=summary,
         kam_rule_decision=kam_payload,
+        paper_direction=paper_direction,
         blockers=tuple(blockers),
     )
 

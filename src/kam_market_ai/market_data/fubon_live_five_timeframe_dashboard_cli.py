@@ -22,9 +22,16 @@ from kam_market_ai.dashboard.app import DashboardApp
 from kam_market_ai.live_read_only.five_timeframe_operator_view import (
     build_five_timeframe_operator_view,
 )
-from kam_market_ai.live_read_only.five_timeframe_snapshot import write_five_timeframe_snapshot
-from kam_market_ai.live_read_only.five_timeframe_snapshot import read_five_timeframe_snapshot
+from kam_market_ai.live_read_only.five_timeframe_snapshot import (
+    read_five_timeframe_snapshot,
+    write_five_timeframe_snapshot,
+)
 from kam_market_ai.models import Instrument
+from kam_market_ai.paper_trading.live_tmf_simulation import (
+    LiveTmfPaperSimulation,
+    TmfPaperJournalStore,
+    TmfPaperSimulationConfig,
+)
 from kam_market_ai.paper_trading.operator_app import create_operator_app
 
 from .fubon_five_timeframe_pipeline import FubonFiveTimeframeCandlePipeline
@@ -145,6 +152,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--snapshot", default="debug/five_timeframe/live.json")
     parser.add_argument("--chart-history", default="debug/five_timeframe/tmf_60m_history.json")
     parser.add_argument("--chart-history-15m", default="debug/five_timeframe/tmf_15m_history.json")
+    parser.add_argument(
+        "--paper-test-armed",
+        action="store_true",
+        help="人工授權本次工作階段自動留下 Paper Trading 紀錄；不啟用真實下單",
+    )
+    parser.add_argument(
+        "--paper-journal",
+        default="debug/paper_trading/tmf_live_journal.json",
+    )
     parser.add_argument("--open-browser", action="store_true")
     return parser
 
@@ -193,13 +209,47 @@ def main(
         history_path=args.chart_history,
         history_15m_path=args.chart_history_15m,
     )
+
+    paper_session: LiveTmfPaperSimulation | None = None
+    if args.paper_test_armed:
+        try:
+            paper_config = TmfPaperSimulationConfig(
+                instrument=symbol,
+                paper_trading_enabled=True,
+                manual_approval_granted=True,
+            )
+            paper_store = TmfPaperJournalStore(args.paper_journal)
+            paper_journal = paper_store.load(paper_config)
+            paper_store.save(paper_journal)
+            paper_session = LiveTmfPaperSimulation(
+                paper_config,
+                journal=paper_journal,
+                store=paper_store,
+            )
+        except (OSError, TypeError, ValueError):
+            print(json.dumps({"success": False, "failure_stage": "PAPER_JOURNAL_ERROR"}))
+            return 2
+
+    def capture_verified_refresh() -> None:
+        chart_source.capture_latest()
+        if paper_session is None or verifier.latest_candle_result is None:
+            return
+        try:
+            paper_session.process_candles(
+                verifier.latest_candle_result,
+                evaluated_at=datetime.now(UTC),
+            )
+        except (OSError, TypeError, ValueError):
+            # A paper-journal failure must never replace the last verified market snapshot.
+            return
+
     refresher = LiveFiveTimeframeSnapshotRefresher(
         verifier,
         symbol=symbol,
         session=args.session,
         after_hours=args.after_hours,
         snapshot_path=args.snapshot,
-        on_success=chart_source.capture_latest,
+        on_success=capture_verified_refresh,
     )
     try:
         refresher.refresh_once()
@@ -229,6 +279,12 @@ def main(
         "health_url": f"http://{args.host}:{args.port}/api/five-timeframe/health",
         "refresh_seconds": args.refresh_seconds,
         "symbol": symbol,
+        "paper_simulation_enabled": args.paper_test_armed,
+        "paper_manual_approval_granted": args.paper_test_armed,
+        "paper_journal": args.paper_journal if args.paper_test_armed else None,
+        "paper_stop_loss_points": 20 if args.paper_test_armed else None,
+        "paper_take_profit_points": 40 if args.paper_test_armed else None,
+        "paper_point_value": 10 if args.paper_test_armed else None,
         "trading_enabled": False,
         "live_order_allowed": False,
     }, ensure_ascii=False))

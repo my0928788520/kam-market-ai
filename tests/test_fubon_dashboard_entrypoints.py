@@ -1,12 +1,10 @@
-from pathlib import Path
-
 import tomllib
+from pathlib import Path
 
 from kam_market_ai.market_data.fubon_live_five_timeframe_dashboard_cli import (
     build_local_dashboard_router,
     build_parser,
 )
-
 
 ROOT = Path(__file__).parents[1]
 
@@ -28,9 +26,13 @@ def test_dashboard_parser_keeps_browser_launch_explicit_and_local() -> None:
     assert args.symbol is None
     assert args.open_browser is False
     assert args.refresh_seconds == 3
+    assert args.paper_test_armed is False
 
-    args = build_parser().parse_args(["--symbol", "TMFH6", "--open-browser"])
+    args = build_parser().parse_args([
+        "--symbol", "TMFH6", "--open-browser", "--paper-test-armed",
+    ])
     assert args.open_browser is True
+    assert args.paper_test_armed is True
 
 
 def test_live_dashboard_opens_the_established_operator_homepage() -> None:
@@ -84,3 +86,4 @@ def test_windows_launcher_preserves_read_only_local_boundary() -> None:
     assert "place_order" not in source
     assert "0.0.0.0" not in source
     assert "git push" not in source
+    assert "--paper-test-armed" in source
