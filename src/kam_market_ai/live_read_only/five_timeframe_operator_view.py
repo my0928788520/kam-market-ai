@@ -18,7 +18,7 @@ _PAPER_ACTION_LABELS = {
     "DISARMED": "尚未武裝",
     "WAITING_FOR_KAM": "等待 KAM 條件",
     "hold": "觀望／未建立模擬委託",
-    "pending_manual_confirmation": "等待 Paper 授權",
+    "pending_manual_confirmation": "等待模擬交易授權",
     "entry_filled": "模擬進場已成交",
     "position_marked": "模擬持倉追蹤中",
     "exit_filled": "模擬出場已成交",
@@ -29,7 +29,7 @@ _PAPER_REASON_LABELS = {
     "KAM_CONDITION_NOT_MET": "KAM 條件尚未成立",
     "KAM_BUY_CONDITION_NOT_MET": "KAM 買進條件尚未成立",
     "PAPER_SHORT_NOT_ENABLED": "模擬空單尚未啟用",
-    "PAPER_TRADING_NOT_ARMED": "自動 Paper 尚未武裝",
+    "PAPER_TRADING_NOT_ARMED": "自動模擬尚未啟用",
     "MANUAL_CONFIRMATION_REQUIRED": "本次工作階段尚未授權",
     "INSUFFICIENT_INITIAL_MARGIN": "模擬保證金不足",
     "QUOTE_STALE": "行情資料過期",
@@ -91,9 +91,9 @@ def build_five_timeframe_operator_view(
     demo = {
         "source_kind": "FUBON_LIVE_FIVE_TIMEFRAME",
         "banner": (
-            "自動 Paper 已武裝・KAM 條件成立後自動模擬執行・禁止真實下單"
+            "自動模擬已啟用・KAM 條件成立後自動模擬執行・禁止真實下單"
             if paper_armed
-            else "富邦即時行情・自動 Paper 未武裝・禁止真實下單"
+            else "富邦即時行情・自動模擬未啟用・禁止真實下單"
         ),
         "data_freshness": status,
         "instrument": str(payload.get("symbol", "TMF")),
@@ -124,7 +124,7 @@ def build_five_timeframe_operator_view(
         "automation_mode": "AUTO PAPER" if paper_armed else "未武裝",
     }
     proposal = {
-        "模式": "自動 Paper" if paper_armed else "關閉",
+        "模式": "自動模擬" if paper_armed else "關閉",
         "狀態": paper_action_label,
         "KAM 方向": str(paper.get("direction", direction)),
         "阻擋原因": "、".join(
