@@ -70,6 +70,29 @@ def test_chart_page_is_fail_closed_without_historical_source() -> None:
     assert "上升趨勢｜錨點不足" in html and "支撐壓力｜資料不足" in html
 
 
+def test_chart_page_shows_session_badges_from_source() -> None:
+    class SessionSource(FixtureChartSource):
+        def __init__(self, session: str) -> None:
+            self.session = session
+
+        def read_series(self, instrument: str, timeframe: str) -> ChartSeries:
+            series = super().read_series(instrument, timeframe)
+            return ChartSeries(
+                series.instrument,
+                series.timeframe,
+                series.candles,
+                series.source,
+                series.updated_at,
+                trading_session=self.session,
+            )
+
+    night_html = render_multi_timeframe_chart_html(SessionSource("afterhours"))
+    day_html = render_multi_timeframe_chart_html(SessionSource("regular"))
+
+    assert "chart-session-afterhours" in night_html and "夜盤" in night_html
+    assert "chart-session-regular" in day_html and "日盤" in day_html
+
+
 def test_chart_page_renders_injected_candles_ma20_volume_and_summary() -> None:
     html = render_multi_timeframe_chart_html(FixtureChartSource(), instrument="MTX", timeframe="1d")
     assert "<svg class='candlestick-chart'" in html
