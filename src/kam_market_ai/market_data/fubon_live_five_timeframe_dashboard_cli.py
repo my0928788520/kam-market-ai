@@ -36,7 +36,11 @@ from kam_market_ai.paper_trading.live_tmf_simulation import (
 from kam_market_ai.paper_trading.operator_app import create_operator_app
 
 from .fubon_five_timeframe_pipeline import FiveTimeframe, FubonFiveTimeframeCandlePipeline
-from .fubon_live_chart_source import FubonLiveChartSource, FubonLiveQuoteSource
+from .fubon_live_chart_source import (
+    FubonLiveChartSource,
+    FubonLiveDashboardMarketSource,
+    FubonLiveQuoteSource,
+)
 from .fubon_live_five_timeframe_verifier import FubonLiveFiveTimeframeVerifier
 from .fubon_neo import (
     FubonIntradayCandlesAdapter,
@@ -197,14 +201,15 @@ def main(
         print(json.dumps({"success": False, "failure_stage": "MARKET_CLIENTS_UNAVAILABLE"}))
         return 2
     try:
-        symbol = (
-            args.symbol
-            or FubonTmfContractProbe(result.clients)
-            .resolve_active(
+        if args.symbol:
+            symbol = args.symbol
+            contract_month = None
+        else:
+            active_contract = FubonTmfContractProbe(result.clients).resolve_active(
                 after_hours=args.after_hours,
             )
-            .symbol
-        )
+            symbol = active_contract.symbol
+            contract_month = active_contract.end_date.strftime("%Y%m")
     except Exception:  # noqa: BLE001
         print(json.dumps({"success": False, "failure_stage": "ACTIVE_CONTRACT_RESOLUTION_ERROR"}))
         return 1
@@ -220,6 +225,12 @@ def main(
     quote_source = FubonLiveQuoteSource(
         result.clients,
         symbol=symbol,
+        after_hours=args.after_hours,
+    )
+    dashboard_market_source = FubonLiveDashboardMarketSource(
+        quote_source,
+        symbol=symbol,
+        contract_month=contract_month,
         after_hours=args.after_hours,
     )
 
@@ -332,6 +343,7 @@ def main(
                 "symbol": symbol,
                 "live_quote_source": "FUBON_INTRADAY_QUOTE",
                 "live_quote_refresh_seconds": args.refresh_seconds,
+                "main_dashboard_live_quote_enabled": True,
                 "taifex_official_history_chart_enabled": True,
                 "taifex_official_history_kam_enabled": not args.after_hours,
                 "forming_day_week_chart_only": True,
@@ -356,6 +368,7 @@ def main(
         )
         operator_app = create_operator_app(
             lambda: build_five_timeframe_operator_view(read_five_timeframe_snapshot(args.snapshot)),
+            market_data_source=dashboard_market_source,
             chart_data_source=chart_source,
         )
 

@@ -191,7 +191,7 @@ def test_terminal_header_uses_read_only_market_snapshots_and_get_instrument_sele
     assert "TMF202610" in tmf and "24,108" in tmf and "82,514" in tmf
     assert "微型臺指期貨" in tmf and "休市" in tmf
     assert "微型臺指期貨・TMF｜TMF202610・202610｜最新 24,108・量 82,514" in tmf
-    assert "<span class='header-market-status'>資料時間（台灣）：2026-08-06 10:14｜休市｜帳戶未連線・券商未連線・唯讀模式・禁止真實下單</span>" in tmf
+    assert "<span class='header-market-status'>資料時間（台灣）：2026-08-06 10:14｜休市｜資料新鮮｜帳戶未連線・券商未連線・唯讀模式・禁止真實下單</span>" in tmf
     assert "market-selector-chip active' href='/?instrument=TMF'" in tmf
 
     tx = get("instrument=TX")
@@ -228,6 +228,7 @@ def test_wsgi_serves_non_overlapping_dashboard_refresh_script() -> None:
     assert "window.setTimeout(refreshDashboard, REFRESH_INTERVAL_MS)" in script
     assert "refreshInFlight" in script
     assert '".dashboard"' in script and '"main > footer"' in script
+    assert "if (!current && !replacement) continue" in script
 
 
 def test_market_status_time_is_explicitly_converted_to_taipei() -> None:
@@ -351,6 +352,7 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert ".position-card { grid-column: 2; grid-row: 3; }" in css
     assert ".next-card { grid-column: 3; grid-row: 3;" in css
     assert ".control-cells-unscored" in css
+    assert ".control-cell.unconfirmed" in css
     assert "@media (max-height: 650px) and (min-width: 1001px)" in css
     assert "grid-template-rows: minmax(130px, 150px) minmax(110px, 116px) minmax(78px, 88px) minmax(0, 1fr)" in css
     assert "justify-content: center" in css and "border-radius: 7px" in css

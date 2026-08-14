@@ -7,7 +7,7 @@ from datetime import datetime
 from decimal import Decimal
 from html import escape
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Mapping
 from urllib.parse import parse_qs
 from zoneinfo import ZoneInfo
 
@@ -36,12 +36,33 @@ def _stage_index(value: object) -> int:
     return min(8, int(text[1])) if len(text) > 1 and text[:1] == "U" and text[1].isdigit() else 0
 
 def _cells(view: PaperTradingOperatorView) -> tuple[int, str]:
+    demo = view.demo or {}
     try:
-        bull = int(round(float((view.demo or {}).get("bull_score", 50)) / 10))
+        bull = int(round(float(demo.get("bull_score", 50)) / 10))
     except (TypeError, ValueError):
         bull = 5
     bull = max(0, min(10, bull))
-    return bull, "".join(f"<span class='control-cell {'bull' if item < bull else 'bear'}' aria-hidden='true'></span>" for item in range(10))
+    if "unconfirmed_score" not in demo:
+        classes = ("bull",) * bull + ("bear",) * (10 - bull)
+    else:
+        try:
+            bear = int(round(float(demo.get("bear_score", 0)) / 10))
+        except (TypeError, ValueError):
+            bear = 0
+        bear = max(0, min(10 - bull, bear))
+        classes = ("bull",) * bull + ("unconfirmed",) * (10 - bull - bear) + ("bear",) * bear
+    return bull, "".join(f"<span class='control-cell {name}' aria-hidden='true'></span>" for name in classes)
+
+def _control_label(view: PaperTradingOperatorView, bull: int) -> str:
+    demo = view.demo or {}
+    if "unconfirmed_score" not in demo:
+        return f"多方 {bull}｜空方 {10-bull}"
+    try:
+        bear = int(round(float(demo.get("bear_score", 0)) / 10))
+    except (TypeError, ValueError):
+        bear = 0
+    bear = max(0, min(10 - bull, bear))
+    return f"多方 {bull}｜空方 {bear}｜未確認 {10-bull-bear}"
 
 def _cycle(view: PaperTradingOperatorView) -> str:
     """Render the complete, read-only MarketCycleCard from existing view data."""
@@ -53,10 +74,10 @@ def _cycle(view: PaperTradingOperatorView) -> str:
     if demo.get("cycle_label") is not None:
         stage = str(demo["cycle_label"])
         state = str(demo["cycle_label"])
-    previous = _STAGES[max(0, index - 1)][0]
-    following = _STAGES[min(8, index + 1)][0]
+    previous = "資料恢復後判讀" if index == 0 else _STAGES[index - 1][0]
+    following = "資料恢復後判讀" if index == 0 else _STAGES[min(8, index + 1)][0]
     next_step = str(demo.get("next_step", "等待資料完整"))
-    risk = "偏高" if index >= 5 else "風險受控"
+    risk = "不可判讀" if index == 0 else "偏高" if index >= 5 else "風險受控"
     labels = (
         ("低檔確認", 30, 164), ("起漲形成", 96, 79), ("多方延伸", 156, 30),
         ("高檔回落", 229, 74), ("起跌形成", 275, 105), ("空方延伸", 329, 151), ("低點止跌", 367, 169),
@@ -103,7 +124,7 @@ def _rows(values: dict[str, str]) -> str:
     return "".join(f"<dt>{escape(key.replace('_', ' '))}</dt><dd title='{escape(str(value))}'>{escape(str(value)[:10]) if key.endswith('hash') else escape(str(value))}</dd>" for key, value in values.items())
 
 
-def _timeframe_card(name: object, state: object) -> str:
+def _timeframe_card(name: object, state: object, details: Mapping[str, object] | None = None) -> str:
     """Apply a compact, presentation-only vocabulary to existing timeframe values."""
     raw = str(state)
     code, interpretation = {
@@ -122,17 +143,26 @@ def _timeframe_card(name: object, state: object) -> str:
         "觀望": ("NU", "觀望"),
         "偏空": ("BD", "空方健康"),
     }.get(raw, ("—", raw))
+    details = details or {}
+    ma20 = details.get("ma20")
+    relation = {"above": "上方", "below": "下方", "equal": "貼近", "insufficient": "尚未形成"}.get(str(details.get("price_vs_ma20", "insufficient")), "資料不足")
+    direction = {"rising": "上彎", "falling": "下彎", "flat": "走平", "insufficient": "尚未形成"}.get(str(details.get("ma20_direction", "insufficient")), "資料不足")
+    try:
+        ma_text = f"（20MA {float(ma20):,.2f}）".replace(".00", "") if ma20 is not None else ""
+    except (TypeError, ValueError):
+        ma_text = ""
     return (
         "<article class='timeframe-card'>"
         f"<b>{escape(str(name))}</b><strong>{code}</strong><span>{escape(interpretation)}</span>"
-        "<small>價格相對 20MA：—</small><small>20MA 方向：—</small></article>"
+        f"<small>價格相對 20MA：{escape(relation + ma_text)}</small><small>20MA 方向：{escape(direction)}</small></article>"
     )
 
 
-def _frontend_timeframe_cards(timeframes: Iterable[tuple[object, object]]) -> str:
+def _frontend_timeframe_cards(timeframes: Iterable[tuple[object, object]], details: object = None) -> str:
     """Keep 5-minute data available to rules while omitting its dashboard card."""
+    by_label = details if isinstance(details, Mapping) else {}
     return "".join(
-        _timeframe_card(name, state)
+        _timeframe_card(name, state, by_label.get(str(name)) if isinstance(by_label.get(str(name)), Mapping) else None)
         for name, state in timeframes
         if str(name) != "5 分"
     )
@@ -287,7 +317,8 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
     snapshot = snapshot or OFFLINE_DEMO_MARKET_DATA_SOURCE.read_snapshot(DEFAULT_MARKET_PRODUCT)
     demo = view.demo or {}
     bull, cells = _cells(view)
-    frames = _frontend_timeframe_cards(demo.get("timeframes", ()))
+    frames = _frontend_timeframe_cards(demo.get("timeframes", ()), demo.get("timeframe_details"))
+    control_label = _control_label(view, bull)
     audit = "".join(f"<li title='{escape(item['hash'])}'>{escape(item['type'])} · {escape(item['hash'][:10])}</li>" for item in view.audit_events[-3:])
     proposal = "<section class='proposal'><h2>模擬委託建議</h2><dl>{}</dl></section>".format(_rows(view.proposal))
     if snapshot.status is MarketSnapshotStatus.INVALID_PRODUCT:
@@ -297,7 +328,7 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
         "期貨具高槓桿，可能產生超過原始保證金之損失；所有實際委託均由使用者自行判斷並於券商端操作，交易結果與損益由使用者自行承擔。",
     )
     disclaimer = "".join(f"<span>{escape(line)}</span>" for line in disclaimer_lines)
-    return f"""<!doctype html><html lang='zh-Hant-TW'><head><meta charset='utf-8'><title>{escape(view.title)}</title><link rel='stylesheet' href='/static/operator.css'></head><body><main><header><h1>{escape(view.title)}</h1>{_market_header_status(snapshot)}<a class='account-chip' href='/account'>期貨帳戶｜資金安全</a>{_market_snapshot_header(snapshot)}</header><div class='banner'>{escape(str(demo.get('banner', '尚未載入模擬委託建議。本機頁面目前為唯讀模式。')))} · 目前僅 Header 已切換至離線示範行情；決策卡尚未接入此商品 snapshot。</div><div class='dashboard'><section class='direction-card'><h2>市場方向</h2><strong>{escape(str(demo.get('direction', '—')))}</strong><p>{escape(str(demo.get('direction_reason', '尚未載入方向資料')))}</p></section><section class='control-card'><h2>多空控制權</h2><strong>多方 {bull}｜空方 {10-bull}</strong><small>控制權分裂</small><div class='control-cells'>{cells}</div></section>{_cycle(view)}<section class='timeframes'><h2>四週期狀態</h2><div>{frames}</div></section><section><h2>趨勢健康度</h2><strong>{escape(str(demo.get('trend_health', '—')))}</strong></section><section><h2>目前模擬部位</h2><strong>{escape(str(demo.get('position', '無部位')))}</strong><p>現價 {escape(str(demo.get('current_price', '—')))} · 未實現 {escape(str(demo.get('unrealized_pnl', '—')))}</p></section><section class='next-card next-wait'><h2>唯一下一步</h2><strong>{escape(str(demo.get('next_step', '等待資料完整')))}</strong></section>{proposal}<section class='matching'><h2>模擬撮合結果</h2><dl>{_rows(view.matching)}</dl></section></div><footer><div class='footer-metrics'><span>模擬現金：{escape(str(view.ledger.get('cash', '—')))}</span><span>模擬部位：{escape(str(view.ledger.get('positions', '—')))}</span><span>已實現損益：—</span><span>未實現損益：{escape(str(demo.get('unrealized_pnl', '—')))}</span><span>緊急停止：{'已啟動' if view.emergency_stop else '未啟動'}</span><span class='audit'>稽核紀錄：{audit}</span></div><p class='risk-disclaimer'>{disclaimer}</p></footer></main></body></html>"""
+    return f"""<!doctype html><html lang='zh-Hant-TW'><head><meta charset='utf-8'><title>{escape(view.title)}</title><link rel='stylesheet' href='/static/operator.css'></head><body><main><header><h1>{escape(view.title)}</h1>{_market_header_status(snapshot)}<a class='account-chip' href='/account'>期貨帳戶｜資金安全</a>{_market_snapshot_header(snapshot)}</header><div class='banner'>{escape(str(demo.get('banner', '尚未載入模擬委託建議。本機頁面目前為唯讀模式。')))} · 目前僅 Header 已切換至離線示範行情；決策卡尚未接入此商品 snapshot。</div><div class='dashboard'><section class='direction-card'><h2>市場方向</h2><strong>{escape(str(demo.get('direction', '—')))}</strong><p>{escape(str(demo.get('direction_reason', '尚未載入方向資料')))}</p></section><section class='control-card'><h2>多空控制權</h2><strong>{escape(control_label)}</strong><small>控制權分裂</small><div class='control-cells'>{cells}</div></section>{_cycle(view)}<section class='timeframes'><h2>四週期狀態</h2><div>{frames}</div></section><section><h2>趨勢健康度</h2><strong>{escape(str(demo.get('trend_health', '—')))}</strong></section><section><h2>目前模擬部位</h2><strong>{escape(str(demo.get('position', '無部位')))}</strong><p>現價 {escape(str(demo.get('current_price', '—')))} · 未實現 {escape(str(demo.get('unrealized_pnl', '—')))}</p></section><section class='next-card next-wait'><h2>唯一下一步</h2><strong>{escape(str(demo.get('next_step', '等待資料完整')))}</strong></section>{proposal}<section class='matching'><h2>模擬撮合結果</h2><dl>{_rows(view.matching)}</dl></section></div><footer><div class='footer-metrics'><span>模擬現金：{escape(str(view.ledger.get('cash', '—')))}</span><span>模擬部位：{escape(str(view.ledger.get('positions', '—')))}</span><span>已實現損益：—</span><span>未實現損益：{escape(str(demo.get('unrealized_pnl', '—')))}</span><span>緊急停止：{'已啟動' if view.emergency_stop else '未啟動'}</span><span class='audit'>稽核紀錄：{audit}</span></div><p class='risk-disclaimer'>{disclaimer}</p></footer></main></body></html>"""
 
 
 _render_terminal_html = render_operator_html
@@ -307,11 +338,12 @@ def _market_header_status(snapshot: MarketSnapshot) -> str:
     if snapshot.status is MarketSnapshotStatus.INVALID_PRODUCT:
         return "<span class='header-market-status'>商品代碼無效｜帳戶未連線・券商未連線・唯讀模式・禁止真實下單</span>"
     session = {"DAY": "日盤", "NIGHT": "夜盤", "CLOSED": "休市", "UNKNOWN": "資料不足／無法判讀"}[snapshot.trading_session.value]
+    freshness = {"FRESH": "資料新鮮", "STALE": "資料延遲", "EXPIRED": "資料過期", "UNKNOWN": "資料不足／無法判讀"}[snapshot.freshness.value]
     timestamp = snapshot.timestamp
     display_time = "—"
     if isinstance(timestamp, datetime) and timestamp.tzinfo is not None:
         display_time = timestamp.astimezone(ZoneInfo("Asia/Taipei")).strftime("%Y-%m-%d %H:%M")
-    return f"<span class='header-market-status'>資料時間（台灣）：{display_time}｜{session}｜帳戶未連線・券商未連線・唯讀模式・禁止真實下單</span>"
+    return f"<span class='header-market-status'>資料時間（台灣）：{display_time}｜{session}｜{freshness}｜帳戶未連線・券商未連線・唯讀模式・禁止真實下單</span>"
 
 
 def _market_status_line(snapshot: MarketSnapshot) -> str:
@@ -368,16 +400,17 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
     if snapshot.data_source is MarketDataSource.FUTURE_LIVE:
         demo.update(
             {
-                "position": "尚未接入",
                 "current_price": _money(snapshot.last_price),
                 "unrealized_pnl": "—",
             }
         )
-        rendered_view = replace(
-            view,
-            proposal={"status": "尚未接入真實行情決策"},
-            matching={"state": "尚未接入"},
-        )
+        if not preserve_five_timeframe:
+            demo["position"] = "尚未接入"
+            rendered_view = replace(
+                view,
+                proposal={"status": "尚未接入真實行情決策"},
+                matching={"state": "尚未接入"},
+            )
     html = _render_terminal_html(replace(rendered_view, demo=demo), snapshot)
     if preserve_five_timeframe:
         html = html.replace(

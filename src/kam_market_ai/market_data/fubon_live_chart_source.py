@@ -7,11 +7,19 @@ import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
+from decimal import Decimal
 from math import isfinite
 from pathlib import Path
 from threading import Lock
 from zoneinfo import ZoneInfo
 
+from kam_market_ai.live_read_only.market_snapshot import (
+    MarketDataFreshness,
+    MarketDataSource,
+    MarketSnapshot,
+    MarketSnapshotStatus,
+    TradingSession,
+)
 from kam_market_ai.models import Candle, Instrument
 from kam_market_ai.paper_trading.multi_timeframe_chart import ChartCandle, ChartSeries
 
@@ -36,6 +44,7 @@ class LiveChartPrice:
     symbol: str
     price: float
     observed_at: datetime
+    volume: int | None = None
 
     def __post_init__(self) -> None:
         if self.instrument != "TMF" or not self.symbol or self.symbol.strip() != self.symbol:
@@ -44,6 +53,10 @@ class LiveChartPrice:
             raise ValueError("live chart price must be finite and positive")
         if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
             raise ValueError("live chart price timestamp must be timezone-aware")
+        if self.volume is not None and (
+            isinstance(self.volume, bool) or not isinstance(self.volume, int) or self.volume < 0
+        ):
+            raise ValueError("live chart volume must be a non-negative integer")
 
 
 def _provider_timestamp(value: object) -> datetime:
@@ -118,6 +131,18 @@ class FubonLiveQuoteSource:
         else:
             price = payload.get("closePrice")
             observed_at = payload.get("closeTime")
+        total = payload.get("total")
+        raw_volume = total.get("tradeVolume") if isinstance(total, Mapping) else None
+        volume = None
+        if raw_volume is not None:
+            if (
+                isinstance(raw_volume, bool)
+                or not isinstance(raw_volume, (int, float))
+                or not isfinite(float(raw_volume))
+                or raw_volume < 0
+            ):
+                raise FubonLiveQuoteError("QUOTE_VOLUME_INVALID")
+            volume = int(raw_volume)
         if isinstance(price, bool) or not isinstance(price, (int, float)):
             raise FubonLiveQuoteError("QUOTE_PRICE_INVALID")
         normalized_price = float(price)
@@ -128,6 +153,146 @@ class FubonLiveQuoteSource:
             self._symbol,
             normalized_price,
             _provider_timestamp(observed_at),
+            volume,
+        )
+
+
+def _contract_month_from_symbol(symbol: str, *, reference: datetime) -> str:
+    if (
+        len(symbol) < 5
+        or not symbol.startswith("TMF")
+        or not symbol[-2].isalpha()
+        or not symbol[-1].isdigit()
+    ):
+        raise ValueError("verified TMF symbol is required")
+    month = ord(symbol[-2].upper()) - ord("A") + 1
+    if not 1 <= month <= 12:
+        raise ValueError("verified TMF contract month is invalid")
+    decade = reference.year - reference.year % 10
+    year = decade + int(symbol[-1])
+    if year < reference.year - 1:
+        year += 10
+    elif year > reference.year + 8:
+        year -= 10
+    return f"{year:04d}{month:02d}"
+
+
+class FubonLiveDashboardMarketSource:
+    """Project the latest normalized TMF quote into the read-only dashboard contract."""
+
+    mode = "fubon-live"
+
+    def __init__(
+        self,
+        quote_source: FubonLiveQuoteSource,
+        *,
+        symbol: str,
+        contract_month: str | None = None,
+        after_hours: bool = False,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        stale_after_seconds: int = 60,
+        expire_after_seconds: int = 300,
+    ) -> None:
+        if not isinstance(quote_source, FubonLiveQuoteSource):
+            raise TypeError("FubonLiveQuoteSource is required")
+        if not callable(clock):
+            raise TypeError("dashboard market clock must be callable")
+        if stale_after_seconds < 0 or expire_after_seconds < stale_after_seconds:
+            raise ValueError("dashboard quote freshness thresholds are invalid")
+        reference = clock()
+        if reference.tzinfo is None or reference.utcoffset() is None:
+            raise ValueError("dashboard market clock must be timezone-aware")
+        inferred_month = contract_month or _contract_month_from_symbol(
+            symbol,
+            reference=reference,
+        )
+        if len(inferred_month) != 6 or not inferred_month.isdigit():
+            raise ValueError("dashboard contract month must use YYYYMM")
+        self._quote_source = quote_source
+        self._symbol = symbol
+        self._contract_month = inferred_month
+        self._after_hours = bool(after_hours)
+        self._clock = clock
+        self._stale_after_seconds = stale_after_seconds
+        self._expire_after_seconds = expire_after_seconds
+
+    def _failure_snapshot(self, product_code: str) -> MarketSnapshot:
+        return MarketSnapshot(
+            product_code,
+            "微型臺指期貨" if product_code == "TMF" else "",
+            f"TMF{self._contract_month}" if product_code == "TMF" else None,
+            self._contract_month if product_code == "TMF" else None,
+            None,
+            TradingSession.UNKNOWN,
+            "CLIENT_UNAVAILABLE",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            MarketDataSource.FUTURE_LIVE,
+            MarketDataFreshness.UNKNOWN,
+            (
+                MarketSnapshotStatus.CLIENT_UNAVAILABLE
+                if product_code == "TMF"
+                else MarketSnapshotStatus.INVALID_PRODUCT
+            ),
+            None,
+            None,
+            None,
+            MarketDataFreshness.UNKNOWN,
+        )
+
+    def read_snapshot(self, product_code: str) -> MarketSnapshot:
+        if product_code != "TMF":
+            return self._failure_snapshot(product_code)
+        quote = self._quote_source.latest
+        if quote is None or quote.symbol != self._symbol:
+            return self._failure_snapshot(product_code)
+        observed_at = self._clock()
+        if observed_at.tzinfo is None or observed_at.utcoffset() is None:
+            return self._failure_snapshot(product_code)
+        observed_at = max(observed_at, quote.observed_at)
+        age_seconds = int((observed_at - quote.observed_at).total_seconds())
+        freshness = (
+            MarketDataFreshness.FRESH
+            if age_seconds <= self._stale_after_seconds
+            else MarketDataFreshness.STALE
+            if age_seconds <= self._expire_after_seconds
+            else MarketDataFreshness.EXPIRED
+        )
+        return MarketSnapshot(
+            "TMF",
+            "微型臺指期貨",
+            f"TMF{self._contract_month}",
+            self._contract_month,
+            quote.observed_at,
+            TradingSession.NIGHT if self._after_hours else TradingSession.DAY,
+            "OPEN",
+            None,
+            None,
+            None,
+            None,
+            Decimal(str(quote.price)),
+            Decimal(quote.volume) if quote.volume is not None else None,
+            MarketDataSource.FUTURE_LIVE,
+            freshness,
+            MarketSnapshotStatus.READY,
+            observed_at,
+            quote.observed_at,
+            age_seconds,
+            freshness,
+        )
+
+    def list_available_products(self) -> tuple[str, ...]:
+        return ("TMF",)
+
+    def runtime_status(self) -> str:
+        return (
+            "READY"
+            if self.read_snapshot("TMF").status is MarketSnapshotStatus.READY
+            else "DEGRADED"
         )
 
 
@@ -515,6 +680,7 @@ class FubonLiveChartSource:
 
 __all__ = [
     "FubonLiveChartSource",
+    "FubonLiveDashboardMarketSource",
     "FubonLiveQuoteError",
     "FubonLiveQuoteSource",
     "LiveChartPrice",

@@ -88,6 +88,36 @@ def _five_timeframe_timing_config() -> TimingEngineConfig:
     )
 
 
+def _ma20_display_metrics(candles: tuple[Candle, ...]) -> dict[str, object]:
+    """Expose only bounded display metrics; raw candle history stays outside snapshots."""
+    closes = tuple(float(item.close) for item in candles)
+    latest = closes[-1]
+    if len(closes) < 20:
+        return {
+            "last_price": latest,
+            "ma20": None,
+            "price_vs_ma20": "insufficient",
+            "ma20_direction": "insufficient",
+        }
+    ma20 = sum(closes[-20:]) / 20
+    if latest > ma20:
+        position = "above"
+    elif latest < ma20:
+        position = "below"
+    else:
+        position = "equal"
+    direction = "insufficient"
+    if len(closes) >= 21:
+        previous = sum(closes[-21:-1]) / 20
+        direction = "rising" if ma20 > previous else "falling" if ma20 < previous else "flat"
+    return {
+        "last_price": latest,
+        "ma20": ma20,
+        "price_vs_ma20": position,
+        "ma20_direction": direction,
+    }
+
+
 @dataclass(frozen=True, slots=True)
 class VerifiedFiveTimeframeAnalysisPreview:
     evaluated_at: datetime
@@ -149,14 +179,8 @@ def build_verified_five_timeframe_analysis_preview(
         )
         series[FiveTimeframe.DAY] = (forming,)
         series[FiveTimeframe.WEEK] = (forming,)
-    candles = {
-        engine: series[source]
-        for source, engine in _ENGINE_TIMEFRAMES.items()
-    }
-    current_prices = {
-        engine: series[-1].close
-        for engine, series in candles.items()
-    }
+    candles = {engine: series[source] for source, engine in _ENGINE_TIMEFRAMES.items()}
+    current_prices = {engine: series[-1].close for engine, series in candles.items()}
     position = evaluate_all_position_ranges(
         candles,
         current_prices,
@@ -211,6 +235,7 @@ def build_verified_five_timeframe_analysis_preview(
             "structure": frame.structure.normalized_state.value,
             "timing": frame.timing.normalized_state.value,
             "error_codes": list(frame.error_codes),
+            **_ma20_display_metrics(series[source_timeframe]),
         }
 
     blockers: list[str] = []
@@ -238,7 +263,9 @@ def build_verified_five_timeframe_analysis_preview(
         "headline": (
             "日週線形成中"
             if provisional
-            else "等待資料確認" if contract.overall_status.value != "ready" else "五週期分析已更新"
+            else "等待資料確認"
+            if contract.overall_status.value != "ready"
+            else "五週期分析已更新"
         ),
         "direction": kam_decision.direction,
         "confidence": str(confidence.overall_confidence_score),
@@ -255,14 +282,18 @@ def build_verified_five_timeframe_analysis_preview(
         ),
     }
     kam_payload = kam_decision.safe_payload()
-    kam_payload.update({
-        "mapping_version": KAM_STATE_MAPPING_VERSION,
-        "states": {item.timeframe: item.safe_payload() for item in mapped_states},
-        "paper_test_direction": paper_direction.safe_payload(),
-    })
+    kam_payload.update(
+        {
+            "mapping_version": KAM_STATE_MAPPING_VERSION,
+            "states": {item.timeframe: item.safe_payload() for item in mapped_states},
+            "paper_test_direction": paper_direction.safe_payload(),
+        }
+    )
     return VerifiedFiveTimeframeAnalysisPreview(
         evaluated_at=evaluated_at,
-        overall_status=("provisional_current_periods" if provisional else contract.overall_status.value),
+        overall_status=(
+            "provisional_current_periods" if provisional else contract.overall_status.value
+        ),
         timeframe_analysis=analysis,
         decision_diagnostics=diagnostics,
         three_second_summary=summary,

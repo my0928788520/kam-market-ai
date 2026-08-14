@@ -6,8 +6,14 @@ from collections.abc import Mapping
 
 from kam_market_ai.paper_trading.operator_presenter import PaperTradingOperatorView
 
-
 _FRAME_LABELS = (("1w", "週線"), ("1d", "日線"), ("60m", "60 分"), ("15m", "15 分"), ("5m", "5 分"))
+_RISK_LABELS = {
+    "low": "低風險",
+    "moderate": "中等風險",
+    "high": "高風險",
+    "critical": "極高風險",
+    "unknown": "資料不足",
+}
 
 
 def build_five_timeframe_operator_view(payload: Mapping[str, object]) -> PaperTradingOperatorView:
@@ -25,6 +31,8 @@ def build_five_timeframe_operator_view(payload: Mapping[str, object]) -> PaperTr
     decision = decision if isinstance(decision, Mapping) else {}
     states = decision.get("states")
     states = states if isinstance(states, Mapping) else {}
+    analysis = preview.get("timeframes")
+    analysis = analysis if isinstance(analysis, Mapping) else {}
 
     direction = str(decision.get("direction", summary.get("direction", "觀望")))
     state_codes = []
@@ -37,7 +45,9 @@ def build_five_timeframe_operator_view(payload: Mapping[str, object]) -> PaperTr
         timeframes.append((label, code))
     bull = sum(code.startswith("A") for code in state_codes)
     bear = sum(code.startswith("B") for code in state_codes)
-    bull_score = 50 if bull == bear else round(100 * bull / max(1, bull + bear))
+    bull_score = bull * 20
+    bear_score = bear * 20
+    unconfirmed_score = max(0, 100 - bull_score - bear_score)
 
     status = str(payload.get("status", "資料不足"))
     next_step = str(decision.get("primary_next_action", summary.get("next_step", "等待資料完整")))
@@ -49,13 +59,24 @@ def build_five_timeframe_operator_view(payload: Mapping[str, object]) -> PaperTr
         "snapshot_time": payload.get("snapshot_written_at", "—"),
         "current_price": "—",
         "u_stage": "U0",
-        "cycle_label": "等待有效週期資料" if status != "READY_VERIFIED_FIVE_TIMEFRAMES" else "五週期已驗證",
+        "cycle_label": (
+            "等待有效週期資料" if status != "READY_VERIFIED_FIVE_TIMEFRAMES" else "等待循環位置判讀"
+        ),
         "timeframes": tuple(timeframes),
+        "timeframe_details": {
+            label: dict(analysis.get(key, {}))
+            for key, label in _FRAME_LABELS
+            if isinstance(analysis.get(key), Mapping)
+        },
         "direction": direction,
         "direction_reason": str(summary.get("headline", "依五週期規則持續觀察")),
         "bull_score": str(bull_score),
-        "bear_score": str(100 - bull_score),
-        "trend_health": str(summary.get("risk", "資料驗證中")),
+        "bear_score": str(bear_score),
+        "unconfirmed_score": str(unconfirmed_score),
+        "trend_health": _RISK_LABELS.get(
+            str(summary.get("risk", "unknown")).lower(),
+            str(summary.get("risk", "資料驗證中")),
+        ),
         "position": "無部位（唯讀）",
         "unrealized_pnl": "—",
         "next_step": next_step,

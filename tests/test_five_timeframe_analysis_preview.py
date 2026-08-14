@@ -37,6 +37,38 @@ def complete_result() -> CompleteFiveTimeframeCandleResult:
     )
 
 
+def complete_result_with_ma_history() -> CompleteFiveTimeframeCandleResult:
+    durations = {
+        FiveTimeframe.M5: timedelta(minutes=5),
+        FiveTimeframe.M15: timedelta(minutes=15),
+        FiveTimeframe.M60: timedelta(hours=1),
+        FiveTimeframe.DAY: timedelta(days=1),
+        FiveTimeframe.WEEK: timedelta(days=7),
+    }
+    series = {}
+    for timeframe, duration in durations.items():
+        first = NOW - duration * 22
+        series[timeframe] = tuple(
+            Candle(
+                Instrument.TMF,
+                first + duration * index,
+                first + duration * (index + 1),
+                99 + index,
+                102 + index,
+                98 + index,
+                100 + index,
+                10 + index,
+            )
+            for index in range(21)
+        )
+    return CompleteFiveTimeframeCandleResult(
+        instrument=Instrument.TMF,
+        session=None,
+        series=MappingProxyType(series),
+        endpoint_call_count=3,
+    )
+
+
 def test_preview_runs_all_five_timeframes_and_remains_fail_closed() -> None:
     payload = build_verified_five_timeframe_analysis_preview(
         complete_result(),
@@ -45,8 +77,21 @@ def test_preview_runs_all_five_timeframes_and_remains_fail_closed() -> None:
 
     assert list(payload["timeframes"]) == ["5m", "15m", "60m", "1d", "1w"]
     assert set(payload["timeframes"]["5m"]) == {
-        "status", "usable", "position", "trend", "structure", "timing", "error_codes",
+        "status",
+        "usable",
+        "position",
+        "trend",
+        "structure",
+        "timing",
+        "error_codes",
+        "last_price",
+        "ma20",
+        "price_vs_ma20",
+        "ma20_direction",
     }
+    assert payload["timeframes"]["5m"]["last_price"] == 102
+    assert payload["timeframes"]["5m"]["ma20"] is None
+    assert payload["timeframes"]["5m"]["price_vs_ma20"] == "insufficient"
     assert payload["decision_status"] == "BLOCKED"
     assert payload["action"] == "HOLD"
     assert "M5_ANALYSIS_ENGINE_REQUIRED" not in payload["blockers"]
@@ -56,7 +101,9 @@ def test_preview_runs_all_five_timeframes_and_remains_fail_closed() -> None:
     assert payload["kam_rule_decision"]["action"] == "HOLD"
     assert payload["kam_rule_decision"]["live_order_allowed"] is False
     assert payload["kam_rule_decision"]["paper_test_direction"]["direction"] in {
-        "LONG", "SHORT", "HOLD"
+        "LONG",
+        "SHORT",
+        "HOLD",
     }
     assert payload["kam_rule_decision"]["paper_test_direction"]["live_order_allowed"] is False
     assert set(payload["decision_diagnostics"]) == {
@@ -91,3 +138,17 @@ def test_preview_rejects_unverified_or_naive_inputs() -> None:
             complete_result(),
             evaluated_at=NOW.replace(tzinfo=None),
         )
+
+
+def test_preview_exposes_bounded_ma20_display_metrics_without_raw_candles() -> None:
+    payload = build_verified_five_timeframe_analysis_preview(
+        complete_result_with_ma_history(),
+        evaluated_at=NOW,
+    ).safe_payload()
+
+    daily = payload["timeframes"]["1d"]
+    assert daily["last_price"] == 120
+    assert daily["ma20"] == 110.5
+    assert daily["price_vs_ma20"] == "above"
+    assert daily["ma20_direction"] == "rising"
+    assert payload["raw_candles_retained"] is False

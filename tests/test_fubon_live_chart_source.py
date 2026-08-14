@@ -2,12 +2,19 @@ from datetime import UTC, date, datetime, time, timedelta
 from types import MappingProxyType
 from zoneinfo import ZoneInfo
 
+from kam_market_ai.live_read_only.market_snapshot import (
+    MarketDataFreshness,
+    MarketDataSource,
+    MarketSnapshotStatus,
+    TradingSession,
+)
 from kam_market_ai.market_data.fubon_five_timeframe_pipeline import (
     FiveTimeframe,
     FiveTimeframeCandleResult,
 )
 from kam_market_ai.market_data.fubon_live_chart_source import (
     FubonLiveChartSource,
+    FubonLiveDashboardMarketSource,
     FubonLiveQuoteSource,
     LiveChartPrice,
 )
@@ -43,6 +50,7 @@ class IntradayQuote:
         self.calls: list[dict[str, object]] = []
         self.symbol = "TMFH6"
         self.price = 45839
+        self.trade_volume = 321
         self.observed_at = datetime(2026, 8, 14, 5, 30, tzinfo=UTC)
 
     def quote(self, **params: object) -> dict[str, object]:
@@ -53,6 +61,7 @@ class IntradayQuote:
                 "price": self.price,
                 "time": int(self.observed_at.timestamp() * 1_000_000),
             },
+            "total": {"tradeVolume": self.trade_volume},
         }
 
 
@@ -226,9 +235,45 @@ def test_live_quote_source_normalizes_last_trade_without_retaining_payload() -> 
 
     assert first.price == 45839
     assert second.price == 45842
+    assert second.volume == 321
     assert second.observed_at == datetime(2026, 8, 14, 5, 30, 3, tzinfo=UTC)
     assert intraday.calls == [{"symbol": "TMFH6"}, {"symbol": "TMFH6"}]
     assert not hasattr(second, "raw_payload")
+
+
+def test_live_dashboard_market_source_uses_same_normalized_quote_and_fails_stale() -> None:
+    clients, intraday = quote_clients()
+    quote_source = FubonLiveQuoteSource(clients, symbol="TMFH6")
+    quote_source.refresh()
+    now = intraday.observed_at + timedelta(seconds=30)
+    source = FubonLiveDashboardMarketSource(
+        quote_source,
+        symbol="TMFH6",
+        contract_month="202608",
+        clock=lambda: now,
+    )
+
+    snapshot = source.read_snapshot("TMF")
+
+    assert snapshot.contract_code == "TMF202608"
+    assert snapshot.last_price == 45839
+    assert snapshot.volume == 321
+    assert snapshot.timestamp == intraday.observed_at
+    assert snapshot.trading_session is TradingSession.DAY
+    assert snapshot.data_source is MarketDataSource.FUTURE_LIVE
+    assert snapshot.freshness is MarketDataFreshness.FRESH
+    assert snapshot.status is MarketSnapshotStatus.READY
+    assert source.runtime_status() == "READY"
+    assert source.list_available_products() == ("TMF",)
+
+    expired = FubonLiveDashboardMarketSource(
+        quote_source,
+        symbol="TMFH6",
+        contract_month="202608",
+        clock=lambda: now + timedelta(minutes=6),
+    ).read_snapshot("TMF")
+    assert expired.freshness is MarketDataFreshness.EXPIRED
+    assert expired.status is MarketSnapshotStatus.EXPIRED
 
 
 def test_after_hours_quote_uses_official_session_and_bad_identity_keeps_last_good() -> None:

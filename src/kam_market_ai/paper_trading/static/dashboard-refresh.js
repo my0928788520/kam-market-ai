@@ -25,6 +25,7 @@
     for (const selector of REGION_SELECTORS) {
       const current = document.querySelector(selector);
       const replacement = nextDocument.querySelector(selector);
+      if (!current && !replacement) continue;
       if (!current || !replacement) {
         throw new Error(`missing dashboard refresh region: ${selector}`);
       }
