@@ -29,6 +29,19 @@ def test_dashboard_parser_keeps_browser_launch_explicit_and_local() -> None:
     assert args.open_browser is True
 
 
+def test_live_dashboard_opens_the_established_operator_homepage() -> None:
+    source = (
+        ROOT
+        / "src"
+        / "kam_market_ai"
+        / "market_data"
+        / "fubon_live_five_timeframe_dashboard_cli.py"
+    ).read_text(encoding="utf-8")
+
+    assert 'webbrowser.open(f"http://{args.host}:{args.port}/")' in source
+    assert '"url": f"http://{args.host}:{args.port}/"' in source
+
+
 def test_windows_launcher_preserves_read_only_local_boundary() -> None:
     source = (ROOT / "tools" / "start_fubon_five_timeframe_dashboard.ps1").read_text(
         encoding="utf-8"
