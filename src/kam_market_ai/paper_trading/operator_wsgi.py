@@ -63,7 +63,7 @@ def _control_label(view: PaperTradingOperatorView, bull: int) -> str:
     except (TypeError, ValueError):
         bear = 0
     bear = max(0, min(10 - bull, bear))
-    return f"多方 {bull}｜空方 {bear}｜未確認 {10-bull-bear}"
+    return f"多方 {bull}｜空方 {bear}\n未確認 {10-bull-bear}"
 
 
 def _numeric_price(value: object) -> float | None:
@@ -452,7 +452,7 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
     frames = _frontend_timeframe_cards(demo.get("timeframes", ()), demo.get("timeframe_details"))
     control_label = _control_label(view, bull)
     audit = "".join(f"<li title='{escape(item['hash'])}'>{escape(item['type'])} · {escape(item['hash'][:10])}</li>" for item in view.audit_events[-3:])
-    proposal_title = "自動 Paper 執行" if demo.get("automation_mode") == "AUTO PAPER" else "模擬委託建議"
+    proposal_title = "自動模擬執行" if demo.get("automation_mode") == "AUTO PAPER" else "模擬委託建議"
     proposal = f"<section class='proposal'><h2>{proposal_title}</h2><dl>{_rows(view.proposal)}</dl></section>"
     if snapshot.status is MarketSnapshotStatus.INVALID_PRODUCT:
         proposal = "<section class='proposal'><h2>模擬委託建議</h2><p>商品代碼無效，未載入模擬委託建議。</p></section>"
