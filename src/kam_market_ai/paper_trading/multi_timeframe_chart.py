@@ -441,13 +441,24 @@ def _recent_trend_anchors(
 
     falling = None
     if len(recent_highs) >= 2:
-        falling_pairs = [
-            (base, right)
-            for base, right in reversed(tuple(pairwise(recent_highs)))
-            if right <= base + 20 and candles[right].high < candles[base].high
-        ]
-        if falling_pairs:
-            base, right = falling_pairs[0]
+        # Start at the most prominent recent wave high, then connect it to the
+        # very next confirmed lower wave high.  Do not use two tiny late
+        # pivots, which creates a short line detached from the main decline.
+        bases = sorted(
+            recent_highs[:-1],
+            key=lambda index: (candles[index].high, index),
+            reverse=True,
+        )
+        for base in bases:
+            later_lower_highs = [
+                index
+                for index in recent_highs
+                if base < index <= base + 20
+                and candles[index].high < candles[base].high
+            ]
+            if not later_lower_highs:
+                continue
+            right = later_lower_highs[0]
             slope = (candles[right].high - candles[base].high) / (right - base)
             broken_by_bar = any(
                 candles[index].high > candles[base].high + slope * (index - base)
@@ -465,6 +476,7 @@ def _recent_trend_anchors(
                     candles[right].opened_at,
                     candles[right].high,
                 )
+                break
     return rising, falling, neckline
 
 
