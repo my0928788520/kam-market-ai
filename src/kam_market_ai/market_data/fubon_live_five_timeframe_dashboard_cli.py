@@ -255,6 +255,7 @@ def main(
     )
 
     paper_session: LiveTmfPaperSimulation | None = None
+    paper_runtime: dict[str, object] = {"armed": False, "action": "DISARMED"}
     if args.paper_test_armed:
         try:
             paper_config = TmfPaperSimulationConfig(
@@ -270,6 +271,19 @@ def main(
                 journal=paper_journal,
                 store=paper_store,
             )
+            paper_runtime = {
+                "armed": True,
+                "action": "WAITING_FOR_KAM",
+                "direction": "HOLD",
+                "reason_codes": ["KAM_CONDITION_NOT_MET"],
+                "cash_balance": str(paper_journal.ledger.cash_balance),
+                "open_positions": len(paper_journal.ledger.positions),
+                "journal_hash": paper_journal.journal_hash,
+                "proposal_hash": None,
+                "fill_hashes": [],
+                "live_order_allowed": False,
+                "broker_connected": False,
+            }
         except (OSError, TypeError, ValueError):
             print(json.dumps({"success": False, "failure_stage": "PAPER_JOURNAL_ERROR"}))
             return 2
@@ -280,10 +294,12 @@ def main(
         if paper_session is None or verifier.latest_candle_result is None:
             return
         try:
-            paper_session.process_candles(
+            result = paper_session.process_candles(
                 verifier.latest_candle_result,
                 evaluated_at=datetime.now(UTC),
             )
+            paper_runtime.update(result.safe_payload())
+            paper_runtime["armed"] = True
         except (OSError, TypeError, ValueError):
             # A paper-journal failure must never replace the last verified market snapshot.
             return
@@ -378,7 +394,9 @@ def main(
             five_timeframe_health_provider=lambda: refresher.health.safe_payload(),
         )
         operator_app = create_operator_app(
-            lambda: build_five_timeframe_operator_view(read_five_timeframe_snapshot(args.snapshot)),
+            lambda: build_five_timeframe_operator_view(
+                read_five_timeframe_snapshot(args.snapshot), paper_runtime
+            ),
             market_data_source=dashboard_market_source,
             chart_data_source=chart_source,
         )
