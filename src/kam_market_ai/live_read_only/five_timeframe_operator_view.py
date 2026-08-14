@@ -84,6 +84,10 @@ def build_five_timeframe_operator_view(
     if not isinstance(paper_reasons, (list, tuple)):
         paper_reasons = ()
     open_positions = int(paper.get("open_positions", 0) or 0)
+    performance = paper.get("performance_event")
+    performance = performance if isinstance(performance, Mapping) else {}
+    margin_state = paper.get("margin_state")
+    margin_state = margin_state if isinstance(margin_state, Mapping) else {}
     demo = {
         "source_kind": "FUBON_LIVE_FIVE_TIMEFRAME",
         "banner": (
@@ -115,7 +119,7 @@ def build_five_timeframe_operator_view(
             str(summary.get("risk", "資料驗證中")),
         ),
         "position": f"{open_positions} 口模擬部位" if open_positions else "無模擬部位",
-        "unrealized_pnl": "—",
+        "unrealized_pnl": str(margin_state.get("unrealized_pnl", "0")),
         "next_step": next_step,
         "automation_mode": "AUTO PAPER" if paper_armed else "未武裝",
     }
@@ -127,11 +131,18 @@ def build_five_timeframe_operator_view(
             _PAPER_REASON_LABELS.get(str(item), str(item)) for item in paper_reasons
         ) or "—",
         "提案雜湊": str(paper.get("proposal_hash") or "—"),
+        "模擬成交價": str(performance.get("entry_price", "—")),
+        "自動停損": str(performance.get("stop_loss_price", "—")),
+        "自動停利": str(performance.get("take_profit_price", "—")),
     }
     matching = {
         "最近動作": paper_action_label,
         "模擬成交": str(len(paper.get("fill_hashes", ()))),
         "日誌雜湊": str(paper.get("journal_hash") or "—"),
+        "目前模擬價": str(performance.get("current_price", "—")),
+        "未實現損益": str(margin_state.get("unrealized_pnl", "0")),
+        "已實現損益": str(performance.get("realized_pnl", "0")),
+        "保證金狀態": str(margin_state.get("status", "no_position")),
     }
     ledger = {
         "cash": str(paper.get("cash_balance", "—")),
