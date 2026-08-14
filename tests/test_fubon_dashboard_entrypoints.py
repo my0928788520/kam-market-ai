@@ -2,7 +2,10 @@ from pathlib import Path
 
 import tomllib
 
-from kam_market_ai.market_data.fubon_live_five_timeframe_dashboard_cli import build_parser
+from kam_market_ai.market_data.fubon_live_five_timeframe_dashboard_cli import (
+    build_local_dashboard_router,
+    build_parser,
+)
 
 
 ROOT = Path(__file__).parents[1]
@@ -40,6 +43,26 @@ def test_live_dashboard_opens_the_established_operator_homepage() -> None:
 
     assert 'webbrowser.open(f"http://{args.host}:{args.port}/")' in source
     assert '"url": f"http://{args.host}:{args.port}/"' in source
+
+
+def test_live_dashboard_routes_operator_styles_and_tools_to_operator_app() -> None:
+    calls = []
+
+    def operator(environ, start_response):
+        calls.append(("operator", environ["PATH_INFO"]))
+        return [b"operator"]
+
+    def diagnostic(environ, start_response):
+        calls.append(("diagnostic", environ["PATH_INFO"]))
+        return [b"diagnostic"]
+
+    app = build_local_dashboard_router(operator, diagnostic)
+    for path in ("/", "/static/operator.css", "/account", "/charts", "/help"):
+        assert app({"PATH_INFO": path}, lambda *_args: None) == [b"operator"]
+    for path in ("/five-timeframe", "/api/five-timeframe", "/static/dashboard.css"):
+        assert app({"PATH_INFO": path}, lambda *_args: None) == [b"diagnostic"]
+
+    assert ("operator", "/static/operator.css") in calls
 
 
 def test_windows_launcher_preserves_read_only_local_boundary() -> None:
