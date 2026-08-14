@@ -25,6 +25,7 @@ def test_chart_tooltip_stays_visible_long_enough_to_read() -> None:
     assert "hideChartTooltipLater(panel)" in script
     assert "document.hidden || isChartTooltipVisible()" in script
     assert 'event.key === "Escape"' in script
+    assert 'line.toggleAttribute("hidden", !enabledOverlays.has(line.dataset.chartOverlayLine))' in script
 
 
 class FixtureChartSource:
