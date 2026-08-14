@@ -120,3 +120,36 @@ def test_dashboard_rejects_stale_snapshot(tmp_path) -> None:
 
     assert response["status"] == "503 Service Unavailable"
     assert json.loads(body)["status"] == "SNAPSHOT_UNAVAILABLE"
+
+
+def test_dashboard_health_endpoint_is_read_only_and_reports_degradation() -> None:
+    response = {}
+    body = b"".join(DashboardApp(
+        five_timeframe_health_provider=lambda: {
+            "status": "DEGRADED",
+            "successful_refreshes": 3,
+            "consecutive_failures": 2,
+            "last_success_at": "2026-08-14T01:00:00+00:00",
+            "last_failure_at": "2026-08-14T01:02:00+00:00",
+        },
+    )(
+        {"PATH_INFO": "/api/five-timeframe/health", "REQUEST_METHOD": "GET"},
+        lambda status, headers: response.update(status=status, headers=dict(headers)),
+    ))
+    payload = json.loads(body)
+    assert response["status"] == "503 Service Unavailable"
+    assert response["headers"]["Cache-Control"] == "no-store"
+    assert payload["consecutive_failures"] == 2
+    assert payload["market_data_only"] is True
+    assert payload["trading_enabled"] is False
+    assert payload["live_order_allowed"] is False
+
+
+def test_dashboard_health_endpoint_fails_closed_without_provider() -> None:
+    response = {}
+    body = b"".join(DashboardApp()(
+        {"PATH_INFO": "/api/five-timeframe/health", "REQUEST_METHOD": "GET"},
+        lambda status, headers: response.update(status=status),
+    ))
+    assert response["status"] == "503 Service Unavailable"
+    assert json.loads(body)["failure_stage"] == "HEALTH_UNAVAILABLE"
