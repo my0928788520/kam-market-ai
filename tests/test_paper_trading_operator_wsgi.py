@@ -297,6 +297,7 @@ def test_dashboard_renders_real_control_cells_and_coloured_cycle_structure() -> 
     for field in ("目前位置", "循環狀態", "上一階段", "下一階段", "唯一下一步", "風險"):
         assert field in html
     assert html.count("class='timeframe-card'") == 4
+    assert "<strong>ND</strong>" not in html
     assert "四週期狀態" in html
     for timeframe in ("週線", "日線", "60 分", "15 分"):
         assert timeframe in html
