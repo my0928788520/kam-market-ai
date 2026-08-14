@@ -73,19 +73,20 @@ html.help-page, body.help-page { height: auto; min-height: 100%; overflow-x: hid
   section { padding: 8px 10px; }
   section h2 { margin-bottom: 4px; font-size: 12px; }
   section p, section small { margin: 3px 0; font-size: 10px; line-height: 1.25; }
-  .direction-card, .control-card { padding-block: 5px; }.direction-card { grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); column-gap: 12px; }.direction-card h2 { grid-column: 1 / -1; }.direction-card h2, .control-card h2 { margin-bottom: 1px; font-size: 9px; }
+  .direction-card, .control-card { padding-block: 5px; }.control-card { grid-template-rows: 14px 15px minmax(0, 1fr); }.direction-card { grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); column-gap: 12px; }.direction-card h2 { grid-column: 1 / -1; }.direction-card h2, .control-card h2 { margin-bottom: 1px; font-size: 9px; }
   .direction-card strong { align-self: center; font-size: 17px; line-height: 18px; }.trend-health-card strong, .position-card strong { font-size: 31px; }
-  .direction-card p { align-self: center; margin: 0; font-size: 9px; line-height: 11px; }.position-card p { font-size: 12px; }.control-card h2 { font-size: 13px; font-weight: 850; }.control-card strong { font-size: 14px; font-weight: 800; line-height: 15px; text-align: center; }
-  .control-card small { display: none; }.control-cells { gap: 4px; margin-top: 1px; }
-  .control-cell { width: 18px; height: 16px; border-radius: 5px; }
+  .direction-card p { align-self: center; margin: 0; font-size: 9px; line-height: 11px; }.position-card p { font-size: 12px; }.control-card h2 { font-size: 13px; font-weight: 850; }.control-card strong { align-self: start; transform: translateY(-3px); font-size: 12px; font-weight: 800; line-height: 14px; text-align: center; white-space: nowrap; }
+  .control-card small { display: none; }.control-cells { align-self: start; gap: 4px; margin-top: 0; transform: translateY(-2px); }
+  .control-cell { width: 21px; height: 20px; border-radius: 6px; }
   .cycle-card { padding: 8px 11px; }
   .cycle-card-body { gap: 9px; }
   .cycle-chart { min-height: 120px; }
   .cycle-chart svg { height: 120px; min-height: 120px; }
   .cycle-card-header h2 { font-size: 13px; }
-  .cycle-code, .cycle-badge, .cycle-info dt, .cycle-info dd, .cycle-note { font-size: 9px; }
-  .cycle-info { gap: 3px; }
-  .cycle-info div { grid-template-columns: 56px minmax(0, 1fr); gap: 5px; }
+  .cycle-code, .cycle-badge, .cycle-note { font-size: 9px; }
+  .cycle-info dt, .cycle-info dd { font-size: 18px; line-height: 1.05; }
+  .cycle-info { gap: 1px; }
+  .cycle-info div { grid-template-columns: 76px minmax(0, 1fr); gap: 6px; }
   .cycle-stage-label { font-size: 10.5px; font-weight: 850; }
   .timeframes { padding: 6px 10px; }
   .timeframes h2 { margin-bottom: 5px; font-size: 14px; }
