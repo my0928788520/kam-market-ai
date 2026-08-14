@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from html import escape
+from itertools import pairwise
 from math import isfinite
 from typing import Protocol
 
@@ -189,7 +190,7 @@ def _price_board(
     ma_values: tuple[float | None, ...],
 ) -> str:
     metrics = _reference_metrics(series, ma_values)
-    rising_anchors, falling_anchors = _recent_trend_anchors(series)
+    rising_anchors, falling_anchors, neckline_anchor = _recent_trend_anchors(series)
     current_label = (
         "即時微台"
         if series.current_price is not None and series.instrument == "TMF"
@@ -255,6 +256,11 @@ def _price_board(
             if metrics.support is not None
             else "<button class='chart-overlay-toggle' type='button' disabled>支撐資料不足</button>"
         )
+        + (
+            "<button class='chart-overlay-toggle' type='button' data-chart-overlay='neckline' aria-pressed='false'>W 頸線</button>"
+            if neckline_anchor is not None
+            else "<button class='chart-overlay-toggle' type='button' disabled>W 頸線不足</button>"
+        )
         + "<small>預設不顯示，需要時個別開啟</small></div>"
     )
 
@@ -263,7 +269,7 @@ def _summary(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     if not series.candles:
         return f"{TIMEFRAME_LABELS.get(series.timeframe, '週期無效')}｜資料不足"
     metrics = _reference_metrics(series, ma_values)
-    rising_anchors, falling_anchors = _recent_trend_anchors(series)
+    rising_anchors, falling_anchors, _ = _recent_trend_anchors(series)
     trend_status = (
         "最近趨勢錨點已更新"
         if rising_anchors is not None or falling_anchors is not None
@@ -316,12 +322,13 @@ def _recent_trend_anchors(
 ) -> tuple[
     tuple[datetime, float, datetime, float] | None,
     tuple[datetime, float, datetime, float] | None,
+    tuple[datetime, float] | None,
 ]:
-    """Return the latest rising-low and falling-high pivot pairs from closed bars."""
+    """Return W-second-leg rising, falling-high and W-neckline anchors."""
     completed = series.candles[:-1] if series.last_candle_is_forming else series.candles
     candles = completed[-32:]
     if len(candles) < 5:
-        return None, None
+        return None, None, None
     pivot_lows = [
         index
         for index in range(2, len(candles) - 2)
@@ -342,19 +349,46 @@ def _recent_trend_anchors(
     recent_lows = [index for index in pivot_lows if index >= recent_start]
     recent_highs = [index for index in pivot_highs if index >= recent_start]
 
+    def is_w_pair(left: int, right: int) -> bool:
+        neck = max(candles[index].high for index in range(left + 1, right))
+        floor = min(candles[left].low, candles[right].low)
+        return neck > floor and (
+            abs(candles[right].low - candles[left].low) <= (neck - floor) * 0.45
+        )
+
     rising = None
-    if len(recent_lows) >= 2:
-        base = min(recent_lows[:-1], key=lambda index: (candles[index].low, -index))
+    neckline = None
+    w_legs = next(
+        (
+            (left, right)
+            for left, right in reversed(tuple(pairwise(recent_lows)))
+            if 3 <= right - left <= 16
+            and any(
+                right < later <= right + 20 and candles[later].low > candles[right].low
+                for later in recent_lows
+            )
+            and is_w_pair(left, right)
+        ),
+        None,
+    )
+    if w_legs is not None:
+        first_leg, second_leg = w_legs
+        neck_index = max(
+            range(first_leg + 1, second_leg),
+            key=lambda index: candles[index].high,
+        )
+        neckline = (candles[neck_index].opened_at, candles[neck_index].high)
         later_higher_lows = [
             index
             for index in recent_lows
-            if base < index <= base + 20 and candles[index].low > candles[base].low
+            if second_leg < index <= second_leg + 20
+            and candles[index].low > candles[second_leg].low
         ]
         if later_higher_lows:
             right = later_higher_lows[-1]
             rising = (
-                candles[base].opened_at,
-                candles[base].low,
+                candles[second_leg].opened_at,
+                candles[second_leg].low,
                 candles[right].opened_at,
                 candles[right].low,
             )
@@ -375,12 +409,12 @@ def _recent_trend_anchors(
                 candles[right].opened_at,
                 candles[right].high,
             )
-    return rising, falling
+    return rising, falling, neckline
 
 
 def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     metrics = _reference_metrics(series, ma_values)
-    rising_anchors, falling_anchors = _recent_trend_anchors(series)
+    rising_anchors, falling_anchors, neckline_anchor = _recent_trend_anchors(series)
     display_bars = 48 if series.timeframe == "60m" else 64
     candles, ma_values = series.candles[-display_bars:], ma_values[-display_bars:]
     if not candles:
@@ -485,6 +519,17 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
             ),
         ))
     candle_indexes = {item.opened_at: index for index, item in enumerate(candles)}
+    if neckline_anchor is not None:
+        neck_time, neck_price = neckline_anchor
+        neck_index = candle_indexes.get(neck_time)
+        if neck_index is not None:
+            neck_y = y(neck_price)
+            overlay_lines.append(
+                "<g class='chart-overlay-line' data-chart-overlay-line='neckline' hidden>"
+                f"<line class='chart-neckline' x1='{first_x + neck_index * step:.2f}' y1='{neck_y:.2f}' x2='{right:.0f}' y2='{neck_y:.2f}'/>"
+                f"<text class='chart-neckline-label' x='{right - 4:.0f}' y='{neck_y - 5:.2f}' text-anchor='end'>W 頸線 {_price_text(neck_price)}</text>"
+                "</g>"
+            )
     for overlay, anchors, line_class, label in (
         ("rising", rising_anchors, "chart-rising-trend-line", "上升趨勢"),
         ("falling", falling_anchors, "chart-falling-trend-line", "下降趨勢"),
@@ -546,7 +591,7 @@ def render_multi_timeframe_chart_html(
     )
     status = _summary(series, ma_values) if valid else "商品或週期無效"
     metrics = _reference_metrics(series, ma_values)
-    rising_anchors, falling_anchors = _recent_trend_anchors(series)
+    rising_anchors, falling_anchors, neckline_anchor = _recent_trend_anchors(series)
     range_overlay = (
         "<span class='enabled'>20 棒壓力／支撐</span>"
         if metrics.resistance is not None and metrics.support is not None
@@ -555,6 +600,7 @@ def render_multi_timeframe_chart_html(
     trend_overlay = (
         f"<span class='enabled'>上升趨勢｜{'可顯示' if rising_anchors is not None else '錨點不足'}</span>"
         f"<span class='enabled'>下降趨勢｜{'可顯示' if falling_anchors is not None else '錨點不足'}</span>"
+        f"<span class='enabled'>W 頸線｜{'可顯示' if neckline_anchor is not None else '結構不足'}</span>"
     )
     return f"""<!doctype html><html class='chart-page' lang='zh-Hant-TW'><head><meta charset='utf-8'><title>KAM 多週期 K 線</title><link rel='stylesheet' href='/static/operator.css'><script src='/static/chart-refresh.js' defer></script></head><body class='chart-page'><main class='chart-main'>
       <header><div><h1>多週期 K 線</h1><small>15 分・60 分・日・週｜唯讀市場結構檢視</small></div><a class='account-chip' href='/'>返回市場儀表板</a><span id='chart-live-status' class='chart-live-status' role='status' aria-live='polite'>每 3 秒更新・禁止真實下單</span></header>
