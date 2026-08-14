@@ -43,6 +43,12 @@ class FubonLiveFiveTimeframeVerifier:
         if not isinstance(pipeline, FubonFiveTimeframeCandlePipeline):
             raise TypeError("FubonFiveTimeframeCandlePipeline is required")
         self._pipeline = pipeline
+        self._latest_candle_result = None
+
+    @property
+    def latest_candle_result(self):
+        """Latest immutable result for local read-only chart rendering only."""
+        return self._latest_candle_result
 
     def run(
         self,
@@ -62,6 +68,7 @@ class FubonLiveFiveTimeframeVerifier:
             session=session,
             after_hours=after_hours,
         )
+        self._latest_candle_result = partial
         source = partial.series[FiveTimeframe.M60]
         starts = tuple(candle.start for candle in source)
         base = {
@@ -118,6 +125,7 @@ class FubonLiveFiveTimeframeVerifier:
             partial,
             certify_higher_timeframe_batch(Instrument.TMF, classified, attestation),
         )
+        self._latest_candle_result = complete
         payload = complete.safe_payload()
         payload.update({
             "source_kind": "FUBON_LIVE_INTRADAY_CANDLES",
