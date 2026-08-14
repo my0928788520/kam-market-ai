@@ -134,12 +134,26 @@ def render_five_timeframe_html(payload: dict[str, object]) -> str:
             f'<p>結構 {text(frame.get("structure"))} · 時機 {text(frame.get("timing"))}</p>'
             f'<small>資料狀態：{text(frame.get("status"))}</small></section>'
         )
-    return f'''<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="60"><title>空明・五週期市場覺察</title><link rel="stylesheet" href="/static/dashboard.css"></head><body><main>
-<header class="status-bar"><div class="brand">空明・五週期市場覺察</div><dl class="status-meta"><div><dt>商品</dt><dd>{text(payload.get("symbol"))}</dd></div><div><dt>盤別</dt><dd>{text(payload.get("session") or "日盤")}</dd></div><div><dt>資料狀態</dt><dd>{text(payload.get("status"))}</dd></div><div><dt>模式</dt><dd>唯讀觀察</dd></div></dl></header>
-<section class="card market-direction"><h1>{text(summary.get("headline", "等待資料"))}</h1><p>{text(summary.get("message"))}</p></section>
-<section class="decision-grid"><section class="card"><h2>KAM 市場方向</h2><p class="headline">{text(kam.get("direction", summary.get("direction")))}</p></section><section class="card"><h2>信心</h2><p class="headline">{text(summary.get("confidence"))}</p></section><section class="card"><h2>風險</h2><p class="headline">{text(summary.get("risk"))}</p></section><section class="card next-step"><h2>唯一下一步</h2><p class="headline">{text(kam.get("primary_next_action", summary.get("next_step")))}</p></section></section>
+    direction = kam.get("direction", summary.get("direction"))
+    decision_status = kam.get("decision_status", preview.get("decision_status"))
+    next_step = kam.get("primary_next_action", summary.get("next_step"))
+    focus = timeframes.get("60m")
+    focus = focus if isinstance(focus, dict) else {}
+    return f'''<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="60"><title>空明・市場覺察</title><link rel="stylesheet" href="/static/dashboard.css"></head><body><main>
+<header class="status-bar"><div class="brand">空明・市場覺察</div><dl class="status-meta"><div><dt>商品代號</dt><dd>{text(payload.get("symbol"))}</dd></div><div><dt>盤別</dt><dd>{text(payload.get("session") or "日盤")}</dd></div><div><dt>市場狀態</dt><dd>{text(payload.get("status"))}</dd></div><div><dt>模式</dt><dd>唯讀</dd></div><div><dt>版本</dt><dd>Five-Timeframe</dd></div></dl></header>
+<div class="dashboard-grid">
+<section class="core-grid">
+<section class="card market-direction"><h2>KAM 市場方向</h2><p class="headline">{text(direction)}</p><p class="detail">{text(summary.get("headline", "等待資料"))}</p></section>
+<section class="card market-control"><h2>市場控制權</h2><p class="headline">{text(decision_status)}</p><p class="detail">動作：{text(kam.get("action", preview.get("action")))}</p></section>
+<section class="card turning-position"><h2>市場轉折位置</h2><div class="turning-content"><svg viewBox="0 0 240 72" role="img" aria-label="市場轉折位置倒 U 圖"><path d="M10,64 C58,64 65,10 120,10 C175,10 182,64 230,64" /></svg><dl class="turning-details"><div><dt>觀察週期</dt><dd>60 分</dd></div><div><dt>趨勢</dt><dd>{text(focus.get("trend"))}</dd></div><div><dt>目前位置</dt><dd>{text(focus.get("position"))}</dd></div><div><dt>結構</dt><dd>{text(focus.get("structure"))}</dd></div><div><dt>時機</dt><dd>{text(focus.get("timing"))}</dd></div></dl></div><p class="detail">{text(summary.get("message", "依五週期資料持續觀察"))}</p></section>
+</section>
 <section class="timeframe-grid">{''.join(cards)}</section>
-<section class="card"><h2>安全狀態</h2><p>決策 {text(kam.get("decision_status", preview.get("decision_status")))} · 動作 {text(kam.get("action", preview.get("action")))} · 觀察模式 {text(diagnostics.get("observation_only"))}</p><p>唯讀分析・禁止真實下單・映射版本 {text(kam.get("mapping_version"))}</p></section>
+<section class="decision-grid">
+<section class="card trend-health"><h2>趨勢健康度</h2><p class="headline">{text(summary.get("risk", "觀察中"))}</p><p class="detail">信心：{text(summary.get("confidence"))}</p></section>
+<section class="card position"><h2>資料與安全狀態</h2><p class="position-label">{text(payload.get("status"))}</p><p class="headline">{text(payload.get("symbol"))}</p><p class="detail">唯讀分析・禁止真實下單</p><p class="updated">映射版本 {text(kam.get("mapping_version"))}・觀察模式 {text(diagnostics.get("observation_only"))}</p></section>
+<section class="card next-step"><h2>唯一下一步</h2><p class="headline">{text(next_step)}</p></section>
+</section>
+</div>
 </main></body></html>'''
 
 
