@@ -14,9 +14,32 @@ _RISK_LABELS = {
     "critical": "極高風險",
     "unknown": "資料不足",
 }
+_PAPER_ACTION_LABELS = {
+    "DISARMED": "尚未武裝",
+    "WAITING_FOR_KAM": "等待 KAM 條件",
+    "hold": "觀望／未建立模擬委託",
+    "pending_manual_confirmation": "等待 Paper 授權",
+    "entry_filled": "模擬進場已成交",
+    "position_marked": "模擬持倉追蹤中",
+    "exit_filled": "模擬出場已成交",
+    "rejected": "風控阻擋",
+    "duplicate_ignored": "重複訊號已忽略",
+}
+_PAPER_REASON_LABELS = {
+    "KAM_CONDITION_NOT_MET": "KAM 條件尚未成立",
+    "KAM_BUY_CONDITION_NOT_MET": "KAM 買進條件尚未成立",
+    "PAPER_SHORT_NOT_ENABLED": "模擬空單尚未啟用",
+    "PAPER_TRADING_NOT_ARMED": "自動 Paper 尚未武裝",
+    "MANUAL_CONFIRMATION_REQUIRED": "本次工作階段尚未授權",
+    "INSUFFICIENT_INITIAL_MARGIN": "模擬保證金不足",
+    "QUOTE_STALE": "行情資料過期",
+}
 
 
-def build_five_timeframe_operator_view(payload: Mapping[str, object]) -> PaperTradingOperatorView:
+def build_five_timeframe_operator_view(
+    payload: Mapping[str, object],
+    paper_runtime: Mapping[str, object] | None = None,
+) -> PaperTradingOperatorView:
     """Build the established read-only operator view without inventing trade data."""
     if not isinstance(payload, Mapping):
         raise TypeError("five-timeframe payload is required")
@@ -53,9 +76,21 @@ def build_five_timeframe_operator_view(payload: Mapping[str, object]) -> PaperTr
 
     status = str(payload.get("status", "資料不足"))
     next_step = str(decision.get("primary_next_action", summary.get("next_step", "等待資料完整")))
+    paper = paper_runtime if isinstance(paper_runtime, Mapping) else {}
+    paper_armed = paper.get("armed") is True
+    paper_action = str(paper.get("action", "WAITING_FOR_KAM" if paper_armed else "DISARMED"))
+    paper_action_label = _PAPER_ACTION_LABELS.get(paper_action, paper_action)
+    paper_reasons = paper.get("reason_codes", ())
+    if not isinstance(paper_reasons, (list, tuple)):
+        paper_reasons = ()
+    open_positions = int(paper.get("open_positions", 0) or 0)
     demo = {
         "source_kind": "FUBON_LIVE_FIVE_TIMEFRAME",
-        "banner": "富邦即時行情・KAM 五週期唯讀分析・禁止真實下單",
+        "banner": (
+            "自動 Paper 已武裝・KAM 條件成立後自動模擬執行・禁止真實下單"
+            if paper_armed
+            else "富邦即時行情・自動 Paper 未武裝・禁止真實下單"
+        ),
         "data_freshness": status,
         "instrument": str(payload.get("symbol", "TMF")),
         "snapshot_time": payload.get("snapshot_written_at", "—"),
@@ -79,16 +114,36 @@ def build_five_timeframe_operator_view(payload: Mapping[str, object]) -> PaperTr
             str(summary.get("risk", "unknown")).lower(),
             str(summary.get("risk", "資料驗證中")),
         ),
-        "position": "無部位（唯讀）",
+        "position": f"{open_positions} 口模擬部位" if open_positions else "無模擬部位",
         "unrealized_pnl": "—",
         "next_step": next_step,
+        "automation_mode": "AUTO PAPER" if paper_armed else "未武裝",
+    }
+    proposal = {
+        "模式": "自動 Paper" if paper_armed else "關閉",
+        "狀態": paper_action_label,
+        "KAM 方向": str(paper.get("direction", direction)),
+        "阻擋原因": "、".join(
+            _PAPER_REASON_LABELS.get(str(item), str(item)) for item in paper_reasons
+        ) or "—",
+        "提案雜湊": str(paper.get("proposal_hash") or "—"),
+    }
+    matching = {
+        "最近動作": paper_action_label,
+        "模擬成交": str(len(paper.get("fill_hashes", ()))),
+        "日誌雜湊": str(paper.get("journal_hash") or "—"),
+    }
+    ledger = {
+        "cash": str(paper.get("cash_balance", "—")),
+        "positions": str(open_positions),
+        "ledger_hash": str(paper.get("journal_hash") or "—"),
     }
     return PaperTradingOperatorView(
         "KAM 交易決策操作台",
         "富邦即時五週期資料，僅供唯讀決策觀察。",
-        {"status": "唯讀觀察", "action": "不建立委託"},
-        {"state": "未執行", "fills": "0"},
-        {"cash": "—", "positions": "—"},
+        proposal,
+        matching,
+        ledger,
         (),
         False,
         demo=demo,
