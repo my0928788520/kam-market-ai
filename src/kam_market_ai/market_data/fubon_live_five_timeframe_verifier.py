@@ -50,6 +50,8 @@ class FubonLiveFiveTimeframeVerifier:
         self,
         pipeline: FubonFiveTimeframeCandlePipeline,
         higher_timeframe_source: TaifexOfficialHistorySource | None = None,
+        *,
+        instrument: Instrument = Instrument.TMF,
     ) -> None:
         if not isinstance(pipeline, FubonFiveTimeframeCandlePipeline):
             raise TypeError("FubonFiveTimeframeCandlePipeline is required")
@@ -60,6 +62,9 @@ class FubonLiveFiveTimeframeVerifier:
             raise TypeError("TaifexOfficialHistorySource is required")
         self._pipeline = pipeline
         self._higher_timeframe_source = higher_timeframe_source
+        if instrument not in {Instrument.TX, Instrument.MTX, Instrument.TMF}:
+            raise ValueError("TX, MTX, or TMF instrument is required")
+        self._instrument = instrument
         self._latest_candle_result: (
             CompleteFiveTimeframeCandleResult | FiveTimeframeCandleResult | None
         ) = None
@@ -85,7 +90,7 @@ class FubonLiveFiveTimeframeVerifier:
         if not symbol or symbol.strip() != symbol:
             raise ValueError("LIVE_VERIFIER_VERIFIED_SYMBOL_REQUIRED")
         partial = self._pipeline.run(
-            Instrument.TMF,
+            self._instrument,
             session=session,
             after_hours=after_hours,
         )
@@ -200,7 +205,7 @@ class FubonLiveFiveTimeframeVerifier:
         )
         complete = complete_with_verified_higher_timeframes(
             partial,
-            certify_higher_timeframe_batch(Instrument.TMF, classified, attestation),
+            certify_higher_timeframe_batch(self._instrument, classified, attestation),
         )
         self._latest_candle_result = complete
         payload = complete.safe_payload()
