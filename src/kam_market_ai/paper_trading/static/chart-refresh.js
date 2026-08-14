@@ -7,7 +7,7 @@
   const status = document.getElementById("chart-live-status");
   let refreshInFlight = false;
   let tooltipHideTimer = null;
-  let rangeLinesEnabled = false;
+  const enabledOverlays = new Set();
   const numberFormatter = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 0 });
 
   const scheduleNext = () => {
@@ -29,16 +29,15 @@
       }
       current.replaceChildren(...Array.from(replacement.childNodes).map((node) => document.importNode(node, true)));
     }
-    applyRangeLineVisibility();
+    applyOverlayVisibility();
   };
 
-  const applyRangeLineVisibility = () => {
-    const lines = document.querySelector(".chart-range-lines");
-    const button = document.getElementById("chart-range-toggle");
-    if (lines) lines.hidden = !rangeLinesEnabled;
-    if (button && !button.disabled) {
-      button.setAttribute("aria-pressed", String(rangeLinesEnabled));
-      button.textContent = rangeLinesEnabled ? "隱藏支撐／壓力＋趨勢線" : "顯示支撐／壓力＋趨勢線";
+  const applyOverlayVisibility = () => {
+    for (const line of document.querySelectorAll("[data-chart-overlay-line]")) {
+      line.hidden = !enabledOverlays.has(line.dataset.chartOverlayLine);
+    }
+    for (const button of document.querySelectorAll("[data-chart-overlay]")) {
+      button.setAttribute("aria-pressed", String(enabledOverlays.has(button.dataset.chartOverlay)));
     }
   };
 
@@ -168,10 +167,12 @@
   });
 
   document.addEventListener("click", (event) => {
-    const button = event.target.closest?.("#chart-range-toggle");
+    const button = event.target.closest?.("[data-chart-overlay]");
     if (!button || button.disabled) return;
-    rangeLinesEnabled = !rangeLinesEnabled;
-    applyRangeLineVisibility();
+    const overlay = button.dataset.chartOverlay;
+    if (enabledOverlays.has(overlay)) enabledOverlays.delete(overlay);
+    else enabledOverlays.add(overlay);
+    applyOverlayVisibility();
   });
 
   async function refreshChart() {
