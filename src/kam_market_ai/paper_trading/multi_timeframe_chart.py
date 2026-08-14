@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from html import escape
-from itertools import pairwise
 from math import isfinite
 from typing import Protocol
 
@@ -339,24 +338,43 @@ def _recent_trend_anchors(
         and candles[index].high >= candles[index + 1].high
         and candles[index].high > candles[index + 2].high
     ]
-    low_pairs = tuple(pairwise(pivot_lows))
-    high_pairs = tuple(pairwise(pivot_highs))
-    rising = next(
-        (
-            (candles[left].opened_at, candles[left].low, candles[right].opened_at, candles[right].low)
-            for left, right in reversed(low_pairs)
-            if right - left <= 12 and candles[right].low > candles[left].low
-        ),
-        None,
-    )
-    falling = next(
-        (
-            (candles[left].opened_at, candles[left].high, candles[right].opened_at, candles[right].high)
-            for left, right in reversed(high_pairs)
-            if right - left <= 12 and candles[right].high < candles[left].high
-        ),
-        None,
-    )
+    recent_start = max(0, len(candles) - 24)
+    recent_lows = [index for index in pivot_lows if index >= recent_start]
+    recent_highs = [index for index in pivot_highs if index >= recent_start]
+
+    rising = None
+    if len(recent_lows) >= 2:
+        base = min(recent_lows[:-1], key=lambda index: (candles[index].low, -index))
+        later_higher_lows = [
+            index
+            for index in recent_lows
+            if base < index <= base + 20 and candles[index].low > candles[base].low
+        ]
+        if later_higher_lows:
+            right = later_higher_lows[-1]
+            rising = (
+                candles[base].opened_at,
+                candles[base].low,
+                candles[right].opened_at,
+                candles[right].low,
+            )
+
+    falling = None
+    if len(recent_highs) >= 2:
+        base = max(recent_highs[:-1], key=lambda index: (candles[index].high, index))
+        later_lower_highs = [
+            index
+            for index in recent_highs
+            if base < index <= base + 20 and candles[index].high < candles[base].high
+        ]
+        if later_lower_highs:
+            right = later_lower_highs[-1]
+            falling = (
+                candles[base].opened_at,
+                candles[base].high,
+                candles[right].opened_at,
+                candles[right].high,
+            )
     return rising, falling
 
 
