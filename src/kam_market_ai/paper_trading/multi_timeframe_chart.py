@@ -103,15 +103,13 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     # Keep sparse live series visually comparable with a normal chart.  Using
     # the candle count directly makes two or three early-session bars expand
     # into enormous blocks across the full viewport.
-    sparse = len(candles) < 20
-    step = 32.0 if sparse else (right - left) / len(candles)
-    first_x = (
-        (left + right) / 2 - (len(candles) - 1) * step / 2
-        if sparse
-        else left + step / 2
-    )
+    # Use one compact visual rhythm for every timeframe.  Short series stay
+    # grouped instead of stretching across the viewport; long series compress
+    # only when the available plot width requires it.
+    step = min(22.0, (right - left) / len(candles))
+    first_x = (left + right) / 2 - (len(candles) - 1) * step / 2
     max_volume = max((item.volume for item in candles), default=0) or 1
-    body_width = 14.0 if sparse else min(18.0, max(2.0, step * 0.58))
+    body_width = min(11.0, max(2.0, step * 0.52))
     y = lambda value: top + (high - value) / span * (bottom - top)
     bodies: list[str] = []
     volumes: list[str] = []
