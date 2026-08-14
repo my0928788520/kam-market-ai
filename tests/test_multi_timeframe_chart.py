@@ -304,6 +304,34 @@ def test_chart_shows_live_price_number_on_three_second_refresh_line() -> None:
     assert ">即時 124</text>" in html
 
 
+def test_old_resistance_is_not_mislabeled_as_w_neckline_without_right_recovery() -> None:
+    start = datetime(2026, 8, 1, tzinfo=UTC)
+    lows = (100, 94, 97, 95, 96, 97, 98, 99, 100)
+    highs = (103, 97, 110, 98, 99, 100, 101, 102, 103)
+    candles = tuple(
+        ChartCandle(
+            start + timedelta(hours=index),
+            (low + high) / 2,
+            high,
+            low,
+            (low + high) / 2,
+            10,
+        )
+        for index, (low, high) in enumerate(zip(lows, highs, strict=True))
+    )
+    series = ChartSeries("TMF", "60m", candles, "resistance-only", candles[-1].opened_at)
+
+    _, _, neckline = _recent_trend_anchors(series)
+    html = render_multi_timeframe_chart_html(
+        type("ResistanceSource", (), {"read_series": lambda self, instrument, timeframe: series})(),
+        timeframe="60m",
+    )
+
+    assert neckline is None
+    assert "W 頸線不足" in html
+    assert "class='chart-neckline'" not in html
+
+
 def test_broken_rising_trend_is_removed_until_a_new_structure_forms() -> None:
     start = datetime(2026, 8, 1, tzinfo=UTC)
     lows = (10, 11, 8, 12, 13, 14, 10, 15, 14, 16, 11, 15, 14, 16, 17, 5)
