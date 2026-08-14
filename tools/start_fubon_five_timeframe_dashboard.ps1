@@ -18,10 +18,10 @@ $python = Join-Path $projectRoot '.venv\Scripts\python.exe'
 $envFile = Join-Path $projectRoot '.env'
 
 if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
-    throw '找不到 .venv\Scripts\python.exe，請先完成專案環境安裝。'
+    throw 'Missing .venv\Scripts\python.exe. Install the project environment first.'
 }
 if (-not (Test-Path -LiteralPath $envFile -PathType Leaf)) {
-    throw '找不到本機 .env；唯讀富邦登入資料不可放入 GitHub 或 Railway。'
+    throw 'Missing local .env. Fubon credentials must remain local and must not be committed or deployed.'
 }
 
 $arguments = @(
