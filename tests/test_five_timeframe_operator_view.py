@@ -108,6 +108,17 @@ def test_market_dashboard_exposes_armed_auto_paper_runtime_without_live_executio
         "journal_hash": "a" * 64,
         "proposal_hash": None,
         "fill_hashes": [],
+        "margin_state": {
+            "unrealized_pnl": "150",
+            "status": "safe",
+        },
+        "performance_event": {
+            "entry_price": "45700",
+            "current_price": "45715",
+            "stop_loss_price": "45680",
+            "take_profit_price": "45740",
+            "realized_pnl": "0",
+        },
         "live_order_allowed": False,
         "broker_connected": False,
     }
@@ -119,4 +130,8 @@ def test_market_dashboard_exposes_armed_auto_paper_runtime_without_live_executio
     assert "自動 Paper 執行" in page
     assert "KAM 買進條件尚未成立" in page
     assert "1000000" in page
+    assert "自動停損</dt><dd title='45680'>45680" in page
+    assert "自動停利</dt><dd title='45740'>45740" in page
+    assert "未實現損益</dt><dd title='150'>150" in page
+    assert "保證金狀態</dt><dd title='safe'>safe" in page
     assert view.live_order_allowed is False and view.broker_connected is False
