@@ -6,11 +6,13 @@ import json
 import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from math import isfinite
 from pathlib import Path
 from threading import Lock
+from zoneinfo import ZoneInfo
 
+from kam_market_ai.models import Candle, Instrument
 from kam_market_ai.paper_trading.multi_timeframe_chart import ChartCandle, ChartSeries
 
 from .fubon_five_timeframe_pipeline import (
@@ -23,6 +25,9 @@ from .fubon_neo import AuthorizedMarketDataClients
 
 class FubonLiveQuoteError(ValueError):
     """Sanitized failure from the read-only intraday quote boundary."""
+
+
+TAIPEI = ZoneInfo("Asia/Taipei")
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +141,10 @@ class FubonLiveChartSource:
         ],
         *,
         current_price_provider: Callable[[], LiveChartPrice | None] | None = None,
+        closed_higher_timeframe_provider: (
+            Callable[[], Mapping[FiveTimeframe, tuple[Candle, ...]]] | None
+        ) = None,
+        after_hours: bool = False,
         history_path: str | Path | None = None,
         history_15m_path: str | Path | None = None,
         history_limit: int = 240,
@@ -146,6 +155,14 @@ class FubonLiveChartSource:
         if current_price_provider is not None and not callable(current_price_provider):
             raise TypeError("current_price_provider must be callable")
         self._current_price_provider = current_price_provider
+        if closed_higher_timeframe_provider is not None and not callable(
+            closed_higher_timeframe_provider
+        ):
+            raise TypeError("closed_higher_timeframe_provider must be callable")
+        self._closed_higher_timeframe_provider = closed_higher_timeframe_provider
+        self._closed_higher_timeframes: dict[FiveTimeframe, tuple[Candle, ...]] = {}
+        self._closed_higher_timeframes_loaded = False
+        self._after_hours = bool(after_hours)
         if isinstance(history_limit, bool) or history_limit < 20:
             raise ValueError("history_limit must be at least 20")
         self._history_paths = {
@@ -173,10 +190,21 @@ class FubonLiveChartSource:
         candles: tuple[ChartCandle, ...],
         source: str,
         updated_at: datetime | None,
+        *,
+        last_candle_is_forming: bool = False,
+        forming_label: str | None = None,
     ) -> ChartSeries:
         current = self._current_price()
         if current is None:
-            return ChartSeries(instrument, timeframe, candles, source, updated_at)
+            return ChartSeries(
+                instrument,
+                timeframe,
+                candles,
+                source,
+                updated_at,
+                last_candle_is_forming=last_candle_is_forming,
+                forming_label=forming_label,
+            )
         return ChartSeries(
             instrument,
             timeframe,
@@ -185,6 +213,8 @@ class FubonLiveChartSource:
             updated_at,
             current.price,
             current.observed_at,
+            last_candle_is_forming,
+            forming_label,
         )
 
     @staticmethod
@@ -199,9 +229,7 @@ class FubonLiveChartSource:
             for item in result.series[selected]
         )
 
-    def _load_history(
-        self, path: Path | None, timeframe: str
-    ) -> tuple[ChartCandle, ...]:
+    def _load_history(self, path: Path | None, timeframe: str) -> tuple[ChartCandle, ...]:
         if path is None or not path.is_file():
             return ()
         try:
@@ -252,8 +280,137 @@ class FubonLiveChartSource:
         temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
         os.replace(temporary, path)
 
+    def _refresh_closed_higher_timeframes(self) -> None:
+        provider = self._closed_higher_timeframe_provider
+        if provider is None:
+            return
+        try:
+            supplied = provider()
+            if not isinstance(supplied, Mapping):
+                return
+            normalized: dict[FiveTimeframe, tuple[Candle, ...]] = {}
+            for selected in (FiveTimeframe.DAY, FiveTimeframe.WEEK):
+                values = supplied.get(selected)
+                if not isinstance(values, tuple) or not values:
+                    return
+                if any(
+                    not isinstance(item, Candle)
+                    or item.instrument is not Instrument.TMF
+                    or item.start.tzinfo is None
+                    or item.start.utcoffset() is None
+                    for item in values
+                ):
+                    return
+                ordered = tuple(sorted(values, key=lambda item: item.start))
+                if len({item.start for item in ordered}) != len(ordered):
+                    return
+                normalized[selected] = ordered
+        except Exception:  # noqa: BLE001
+            return
+        with self._lock:
+            self._closed_higher_timeframes = normalized
+            self._closed_higher_timeframes_loaded = True
+
+    def _closed_higher_candles(
+        self,
+        result: FiveTimeframeCandleResult | CompleteFiveTimeframeCandleResult | None,
+        selected: FiveTimeframe,
+    ) -> tuple[ChartCandle, ...]:
+        with self._lock:
+            values = self._closed_higher_timeframes.get(selected, ())
+        if values:
+            return tuple(
+                ChartCandle(item.start, item.open, item.high, item.low, item.close, item.volume)
+                for item in values
+            )
+        return self._chart_candles(result, selected)
+
+    @staticmethod
+    def _next_weekday(value: date) -> date:
+        candidate = value + timedelta(days=1)
+        while candidate.weekday() >= 5:
+            candidate += timedelta(days=1)
+        return candidate
+
+    def _session_start_date(self, observed_at: datetime) -> date | None:
+        local = observed_at.astimezone(TAIPEI)
+        clock = local.timetz().replace(tzinfo=None)
+        if self._after_hours:
+            if clock >= time(15):
+                return local.date()
+            if clock < time(5):
+                return local.date() - timedelta(days=1)
+            return None
+        if time(8, 45) <= clock <= time(13, 45):
+            return local.date()
+        return None
+
+    def _provisional_day_candle(
+        self,
+        result: FiveTimeframeCandleResult | CompleteFiveTimeframeCandleResult | None,
+        closed_days: tuple[ChartCandle, ...],
+    ) -> ChartCandle | None:
+        current = self._current_price()
+        if current is None or result is None or FiveTimeframe.M15 not in result.series:
+            return None
+        session_start_date = self._session_start_date(current.observed_at)
+        if session_start_date is None:
+            return None
+        session_candles = tuple(
+            item
+            for item in result.series[FiveTimeframe.M15]
+            if self._session_start_date(item.start) == session_start_date
+            and item.start <= current.observed_at
+        )
+        if not session_candles:
+            return None
+        trading_date = (
+            self._next_weekday(session_start_date) if self._after_hours else session_start_date
+        )
+        opened_at = datetime.combine(trading_date, time.min, TAIPEI).astimezone(UTC)
+        if closed_days and opened_at <= closed_days[-1].opened_at:
+            return None
+        prices_high = [item.high for item in session_candles]
+        prices_low = [item.low for item in session_candles]
+        return ChartCandle(
+            opened_at,
+            session_candles[0].open,
+            max(*prices_high, current.price),
+            min(*prices_low, current.price),
+            current.price,
+            sum(item.volume for item in session_candles),
+        )
+
+    @staticmethod
+    def _provisional_week_candle(
+        closed_weeks: tuple[ChartCandle, ...],
+        closed_days: tuple[ChartCandle, ...],
+        provisional_day: ChartCandle,
+    ) -> ChartCandle | None:
+        trading_date = provisional_day.opened_at.astimezone(TAIPEI).date()
+        week_start = trading_date - timedelta(days=trading_date.weekday())
+        opened_at = datetime.combine(week_start, time.min, TAIPEI).astimezone(UTC)
+        if closed_weeks and opened_at <= closed_weeks[-1].opened_at:
+            return None
+        current_week_days = tuple(
+            item
+            for item in closed_days
+            if item.opened_at.astimezone(TAIPEI).date() >= week_start
+            and item.opened_at < provisional_day.opened_at
+        )
+        values = (*current_week_days, provisional_day)
+        return ChartCandle(
+            opened_at,
+            values[0].open,
+            max(item.high for item in values),
+            min(item.low for item in values),
+            provisional_day.close,
+            sum(item.volume for item in values),
+        )
+
     def capture_latest(self) -> None:
         """Persist normalized verified 15/60-minute candles, never provider payloads."""
+        self._refresh_closed_higher_timeframes()
         result = self._result_provider()
         with self._lock:
             for selected, label in (
@@ -264,13 +421,11 @@ class FubonLiveChartSource:
                 live = self._chart_candles(result, selected)
                 if not live or path is None:
                     continue
-                merged = {
-                    item.opened_at: item for item in self._load_history(path, label)
-                }
+                merged = {item.opened_at: item for item in self._load_history(path, label)}
                 merged.update({item.opened_at: item for item in live})
-                bounded = tuple(
-                    sorted(merged.values(), key=lambda item: item.opened_at)
-                )[-self._history_limit:]
+                bounded = tuple(sorted(merged.values(), key=lambda item: item.opened_at))[
+                    -self._history_limit :
+                ]
                 self._write_history(path, label, bounded)
 
     def read_series(self, instrument: str, timeframe: str) -> ChartSeries:
@@ -284,6 +439,46 @@ class FubonLiveChartSource:
         if instrument != "TMF" or selected is None:
             return ChartSeries(instrument, timeframe, (), "invalid-selection", None)
         result = self._result_provider()
+        if selected in {FiveTimeframe.DAY, FiveTimeframe.WEEK}:
+            with self._lock:
+                higher_loaded = self._closed_higher_timeframes_loaded
+            if not higher_loaded:
+                self._refresh_closed_higher_timeframes()
+            closed_days = self._closed_higher_candles(result, FiveTimeframe.DAY)
+            closed_weeks = self._closed_higher_candles(result, FiveTimeframe.WEEK)
+            base = closed_days if selected is FiveTimeframe.DAY else closed_weeks
+            provisional_day = self._provisional_day_candle(result, closed_days)
+            provisional = provisional_day
+            forming_label = "本日形成中"
+            if selected is FiveTimeframe.WEEK and provisional_day is not None:
+                provisional = self._provisional_week_candle(
+                    closed_weeks,
+                    closed_days,
+                    provisional_day,
+                )
+                forming_label = "本週形成中"
+            if provisional is not None:
+                session_label = "night" if self._after_hours else "regular"
+                candles = (*base, provisional)[-self._history_limit :]
+                current = self._current_price()
+                updated_at = current.observed_at if current is not None else provisional.opened_at
+                return self._series(
+                    instrument,
+                    timeframe,
+                    candles,
+                    f"taifex-official-closed+fubon-live:provisional-{session_label}",
+                    updated_at,
+                    last_candle_is_forming=True,
+                    forming_label=forming_label,
+                )
+            if base:
+                return self._series(
+                    instrument,
+                    timeframe,
+                    base[-self._history_limit :],
+                    "taifex-official-closed:no-current-forming-candle",
+                    max(item.opened_at for item in base),
+                )
         live = self._chart_candles(result, selected)
         history_path = self._history_paths.get(selected)
         if history_path is not None:
@@ -308,13 +503,13 @@ class FubonLiveChartSource:
             )
         assert result is not None
         values = result.series[selected]
-        updated_at = max((item.end for item in values), default=None)
+        latest_closed_at = max((item.end for item in values), default=None)
         return self._series(
             instrument,
             timeframe,
             live,
             "fubon-live:verified-candles",
-            updated_at,
+            latest_closed_at,
         )
 
 

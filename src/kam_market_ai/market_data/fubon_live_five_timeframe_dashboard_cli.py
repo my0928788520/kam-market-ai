@@ -27,7 +27,7 @@ from kam_market_ai.live_read_only.five_timeframe_snapshot import (
     read_five_timeframe_snapshot,
     write_five_timeframe_snapshot,
 )
-from kam_market_ai.models import Instrument
+from kam_market_ai.models import Candle, Instrument
 from kam_market_ai.paper_trading.live_tmf_simulation import (
     LiveTmfPaperSimulation,
     TmfPaperJournalStore,
@@ -35,7 +35,7 @@ from kam_market_ai.paper_trading.live_tmf_simulation import (
 )
 from kam_market_ai.paper_trading.operator_app import create_operator_app
 
-from .fubon_five_timeframe_pipeline import FubonFiveTimeframeCandlePipeline
+from .fubon_five_timeframe_pipeline import FiveTimeframe, FubonFiveTimeframeCandlePipeline
 from .fubon_live_chart_source import FubonLiveChartSource, FubonLiveQuoteSource
 from .fubon_live_five_timeframe_verifier import FubonLiveFiveTimeframeVerifier
 from .fubon_neo import (
@@ -197,31 +197,48 @@ def main(
         print(json.dumps({"success": False, "failure_stage": "MARKET_CLIENTS_UNAVAILABLE"}))
         return 2
     try:
-        symbol = args.symbol or FubonTmfContractProbe(result.clients).resolve_active(
-            after_hours=args.after_hours,
-        ).symbol
+        symbol = (
+            args.symbol
+            or FubonTmfContractProbe(result.clients)
+            .resolve_active(
+                after_hours=args.after_hours,
+            )
+            .symbol
+        )
     except Exception:  # noqa: BLE001
         print(json.dumps({"success": False, "failure_stage": "ACTIVE_CONTRACT_RESOLUTION_ERROR"}))
         return 1
 
-    resolver = VerifiedContractResolver((
-        ResolvedFuturesContract(Instrument.TMF, symbol, args.after_hours),
-    ))
+    resolver = VerifiedContractResolver(
+        (ResolvedFuturesContract(Instrument.TMF, symbol, args.after_hours),)
+    )
     pipeline = FubonFiveTimeframeCandlePipeline(
         FubonIntradayCandlesAdapter(result.clients, resolver),
     )
-    verifier = FubonLiveFiveTimeframeVerifier(
-        pipeline,
-        TaifexOfficialHistorySource(args.taifex_history_cache),
-    )
+    official_history_source = TaifexOfficialHistorySource(args.taifex_history_cache)
+    verifier = FubonLiveFiveTimeframeVerifier(pipeline, official_history_source)
     quote_source = FubonLiveQuoteSource(
         result.clients,
         symbol=symbol,
         after_hours=args.after_hours,
     )
+
+    def closed_higher_timeframes() -> dict[FiveTimeframe, tuple[Candle, ...]]:
+        """Chart-only closed history; never upgrades after-hours KAM readiness."""
+        official = official_history_source.fetch(
+            observed_at=datetime.now(UTC),
+            after_hours=False,
+        )
+        return {
+            FiveTimeframe.DAY: official.higher_timeframes.day_candles,
+            FiveTimeframe.WEEK: official.higher_timeframes.week_candles,
+        }
+
     chart_source = FubonLiveChartSource(
         lambda: verifier.latest_candle_result,
         current_price_provider=lambda: quote_source.latest,
+        closed_higher_timeframe_provider=closed_higher_timeframes,
+        after_hours=args.after_hours,
         history_path=args.chart_history,
         history_15m_path=args.chart_history_15m,
     )
@@ -268,13 +285,19 @@ def main(
         snapshot_path=args.snapshot,
         on_success=capture_verified_refresh,
     )
-    print(json.dumps({
-        "status": "INITIALIZING_OFFICIAL_HISTORY",
-        "message": "首次建立 TAIFEX 官方歷史快取可能需要 30 至 90 秒；請保持視窗開啟。",
-        "cache": args.taifex_history_cache,
-        "trading_enabled": False,
-        "live_order_allowed": False,
-    }, ensure_ascii=False), flush=True)
+    print(
+        json.dumps(
+            {
+                "status": "INITIALIZING_OFFICIAL_HISTORY",
+                "message": "首次建立 TAIFEX 官方歷史快取可能需要 30 至 90 秒；請保持視窗開啟。",
+                "cache": args.taifex_history_cache,
+                "trading_enabled": False,
+                "live_order_allowed": False,
+            },
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
     try:
         refresher.refresh_once()
     except Exception:  # noqa: BLE001
@@ -290,32 +313,41 @@ def main(
             delay = (
                 args.refresh_seconds
                 if success
-                else min(60, args.refresh_seconds * (2 ** min(refresher.health.consecutive_failures, 5)))
+                else min(
+                    60, args.refresh_seconds * (2 ** min(refresher.health.consecutive_failures, 5))
+                )
             )
 
     worker = threading.Thread(target=refresh_loop, name="kam-five-timeframe-refresh", daemon=True)
     worker.start()
-    print(json.dumps({
-        "success": True,
-        "mode": "local_read_only_five_timeframe_dashboard",
-        "url": f"http://{args.host}:{args.port}/",
-        "api_url": f"http://{args.host}:{args.port}/api/five-timeframe",
-        "health_url": f"http://{args.host}:{args.port}/api/five-timeframe/health",
-        "refresh_seconds": args.refresh_seconds,
-        "symbol": symbol,
-        "live_quote_source": "FUBON_INTRADAY_QUOTE",
-        "live_quote_refresh_seconds": args.refresh_seconds,
-        "taifex_official_history_enabled": not args.after_hours,
-        "taifex_history_cache": args.taifex_history_cache,
-        "paper_simulation_enabled": args.paper_test_armed,
-        "paper_manual_approval_granted": args.paper_test_armed,
-        "paper_journal": args.paper_journal if args.paper_test_armed else None,
-        "paper_stop_loss_points": 20 if args.paper_test_armed else None,
-        "paper_take_profit_points": 40 if args.paper_test_armed else None,
-        "paper_point_value": 10 if args.paper_test_armed else None,
-        "trading_enabled": False,
-        "live_order_allowed": False,
-    }, ensure_ascii=False))
+    print(
+        json.dumps(
+            {
+                "success": True,
+                "mode": "local_read_only_five_timeframe_dashboard",
+                "url": f"http://{args.host}:{args.port}/",
+                "api_url": f"http://{args.host}:{args.port}/api/five-timeframe",
+                "health_url": f"http://{args.host}:{args.port}/api/five-timeframe/health",
+                "refresh_seconds": args.refresh_seconds,
+                "symbol": symbol,
+                "live_quote_source": "FUBON_INTRADAY_QUOTE",
+                "live_quote_refresh_seconds": args.refresh_seconds,
+                "taifex_official_history_chart_enabled": True,
+                "taifex_official_history_kam_enabled": not args.after_hours,
+                "forming_day_week_chart_only": True,
+                "taifex_history_cache": args.taifex_history_cache,
+                "paper_simulation_enabled": args.paper_test_armed,
+                "paper_manual_approval_granted": args.paper_test_armed,
+                "paper_journal": args.paper_journal if args.paper_test_armed else None,
+                "paper_stop_loss_points": 20 if args.paper_test_armed else None,
+                "paper_take_profit_points": 40 if args.paper_test_armed else None,
+                "paper_point_value": 10 if args.paper_test_armed else None,
+                "trading_enabled": False,
+                "live_order_allowed": False,
+            },
+            ensure_ascii=False,
+        )
+    )
     try:
         diagnostic_app = DashboardApp(
             five_timeframe_snapshot_path=args.snapshot,
@@ -323,9 +355,7 @@ def main(
             five_timeframe_health_provider=lambda: refresher.health.safe_payload(),
         )
         operator_app = create_operator_app(
-            lambda: build_five_timeframe_operator_view(
-                read_five_timeframe_snapshot(args.snapshot)
-            ),
+            lambda: build_five_timeframe_operator_view(read_five_timeframe_snapshot(args.snapshot)),
             chart_data_source=chart_source,
         )
 

@@ -1,4 +1,5 @@
 """GET-only multi-timeframe chart read model and SVG renderer."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -41,6 +42,8 @@ class ChartSeries:
     updated_at: datetime | None
     current_price: float | None = None
     current_price_at: datetime | None = None
+    last_candle_is_forming: bool = False
+    forming_label: str | None = None
 
     def __post_init__(self) -> None:
         if self.current_price is not None and (
@@ -48,12 +51,16 @@ class ChartSeries:
         ):
             raise ValueError("current_price must be finite and positive")
         if self.current_price_at is not None and (
-            self.current_price_at.tzinfo is None
-            or self.current_price_at.utcoffset() is None
+            self.current_price_at.tzinfo is None or self.current_price_at.utcoffset() is None
         ):
             raise ValueError("current_price_at must be timezone-aware")
         if (self.current_price is None) != (self.current_price_at is None):
             raise ValueError("current price and timestamp must be supplied together")
+        if self.last_candle_is_forming:
+            if not self.candles or not self.forming_label:
+                raise ValueError("forming series requires a candle and label")
+        elif self.forming_label is not None:
+            raise ValueError("forming label requires a forming candle")
 
 
 class ChartDataReadOnlySource(Protocol):
@@ -88,21 +95,37 @@ def _summary(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     if latest_ma is None:
         count = len(series.candles)
         missing = max(0, 20 - count)
-        return (
+        summary = (
             f"{TIMEFRAME_LABELS[series.timeframe]}｜已累積 {count}/20 根｜"
             f"尚缺 {missing} 根建立 20MA｜資料持續自動累積"
         )
     else:
         close = series.candles[-1].close
-        relation = "價格在 20MA 上方" if close > latest_ma else "價格在 20MA 下方" if close < latest_ma else "價格位於 20MA"
+        relation = (
+            "價格在 20MA 上方"
+            if close > latest_ma
+            else "價格在 20MA 下方"
+            if close < latest_ma
+            else "價格位於 20MA"
+        )
         previous = next((value for value in reversed(ma_values[:-1]) if value is not None), None)
-        direction = "均線上彎" if previous is not None and latest_ma > previous else "均線下彎" if previous is not None and latest_ma < previous else "均線走平"
-    return f"{TIMEFRAME_LABELS[series.timeframe]}｜{relation}｜{direction}｜趨勢線資料不足｜支撐壓力資料不足｜量能僅顯示原始成交量"
+        direction = (
+            "均線上彎"
+            if previous is not None and latest_ma > previous
+            else "均線下彎"
+            if previous is not None and latest_ma < previous
+            else "均線走平"
+        )
+        summary = f"{TIMEFRAME_LABELS[series.timeframe]}｜{relation}｜{direction}｜趨勢線資料不足｜支撐壓力資料不足｜量能僅顯示原始成交量"
+    if series.last_candle_is_forming:
+        return f"{summary}｜{series.forming_label}｜僅供顯示、不進入 KAM 或 Paper"
+    return summary
 
 
-def _time_label(value: datetime) -> str:
+def _time_label(value: datetime, timeframe: str) -> str:
     taiwan = timezone(timedelta(hours=8))
-    return value.astimezone(taiwan).strftime("%m/%d %H:%M")
+    pattern = "%Y/%m/%d" if timeframe in {"1d", "1w"} else "%m/%d %H:%M"
+    return value.astimezone(taiwan).strftime(pattern)
 
 
 def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
@@ -111,7 +134,9 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
         return "<div class='chart-empty' role='status'><strong>資料不足</strong><p>歷史 K 線來源尚未接入；系統不補假資料。</p></div>"
     top, bottom, left, right = 28.0, 270.0, 66.0, 980.0
     volume_top, volume_bottom = 292.0, 356.0
-    displayed_price = series.current_price if series.current_price is not None else candles[-1].close
+    displayed_price = (
+        series.current_price if series.current_price is not None else candles[-1].close
+    )
     raw_high = max(max(item.high for item in candles), displayed_price)
     raw_low = min(min(item.low for item in candles), displayed_price)
     raw_span = raw_high - raw_low or max(abs(raw_high) * 0.002, 1.0)
@@ -127,51 +152,83 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     first_x = (left + right) / 2 - (len(candles) - 1) * step / 2
     max_volume = max((item.volume for item in candles), default=0) or 1
     body_width = min(11.0, max(2.0, step * 0.52))
+
     def y(value: float) -> float:
         return top + (high - value) / span * (bottom - top)
+
     bodies: list[str] = []
     volumes: list[str] = []
     for index, candle in enumerate(candles):
         x = first_x + index * step
         colour = "chart-up" if candle.close >= candle.open else "chart-down"
+        forming = (
+            " chart-forming"
+            if (series.last_candle_is_forming and index == len(candles) - 1)
+            else ""
+        )
         body_top = min(y(candle.open), y(candle.close))
         body_height = max(1.5, abs(y(candle.open) - y(candle.close)))
-        bodies.append(f"<g class='{colour}'><line x1='{x:.2f}' y1='{y(candle.high):.2f}' x2='{x:.2f}' y2='{y(candle.low):.2f}'/><rect x='{x-body_width/2:.2f}' y='{body_top:.2f}' width='{body_width:.2f}' height='{body_height:.2f}'/></g>")
+        bodies.append(
+            f"<g class='{colour}{forming}'><line x1='{x:.2f}' y1='{y(candle.high):.2f}' x2='{x:.2f}' y2='{y(candle.low):.2f}'/><rect x='{x - body_width / 2:.2f}' y='{body_top:.2f}' width='{body_width:.2f}' height='{body_height:.2f}'/></g>"
+        )
         volume_height = candle.volume / max_volume * (volume_bottom - volume_top)
-        volumes.append(f"<rect class='{colour}' x='{x-body_width/2:.2f}' y='{volume_bottom-volume_height:.2f}' width='{body_width:.2f}' height='{volume_height:.2f}'/>")
-    points = [f"{first_x + index * step:.2f},{y(value):.2f}" for index, value in enumerate(ma_values) if value is not None]
-    ma_line = f"<polyline class='chart-ma20' points='{' '.join(points)}'/>" if len(points) > 1 else ""
+        volumes.append(
+            f"<rect class='{colour}{forming}' x='{x - body_width / 2:.2f}' y='{volume_bottom - volume_height:.2f}' width='{body_width:.2f}' height='{volume_height:.2f}'/>"
+        )
+    points = [
+        f"{first_x + index * step:.2f},{y(value):.2f}"
+        for index, value in enumerate(ma_values)
+        if value is not None
+    ]
+    ma_line = (
+        f"<polyline class='chart-ma20' points='{' '.join(points)}'/>" if len(points) > 1 else ""
+    )
     grid_values = tuple(low + span * index / 4 for index in range(5))
     grid = "".join(
         f"<line class='chart-grid' x1='{left:.0f}' y1='{y(value):.2f}' x2='{right:.0f}' y2='{y(value):.2f}'/>"
-        f"<text class='chart-price-label' x='8' y='{y(value)+4:.2f}'>{value:,.0f}</text>"
+        f"<text class='chart-price-label' x='8' y='{y(value) + 4:.2f}'>{value:,.0f}</text>"
         for value in reversed(grid_values)
     )
     latest = candles[-1]
     latest_y = y(displayed_price)
     price_label = "即時" if series.current_price is not None else "最新收盤"
     time_labels = (
-        f"<text class='chart-time-label' x='{first_x:.2f}' y='378' text-anchor='start'>{_time_label(candles[0].opened_at)}</text>"
-        f"<text class='chart-time-label' x='{first_x + (len(candles)-1)*step:.2f}' y='378' text-anchor='end'>{_time_label(latest.opened_at)}</text>"
+        f"<text class='chart-time-label' x='{first_x:.2f}' y='378' text-anchor='start'>{_time_label(candles[0].opened_at, series.timeframe)}</text>"
+        f"<text class='chart-time-label' x='{first_x + (len(candles) - 1) * step:.2f}' y='378' text-anchor='end'>{_time_label(latest.opened_at, series.timeframe)}</text>"
     )
-    return ("<svg class='candlestick-chart' viewBox='0 0 1024 392' role='img' aria-label='唯讀 K 線、20MA 與成交量'>"
-            f"{grid}<line class='chart-current-line' x1='{left:.0f}' y1='{latest_y:.2f}' x2='{right:.0f}' y2='{latest_y:.2f}'/>"
-            f"<text class='chart-current-price' x='976' y='{latest_y-5:.2f}' text-anchor='end'>{price_label} {displayed_price:,.0f}</text>"
-            f"<g class='chart-candles'>{''.join(bodies)}</g>{ma_line}<g class='chart-volumes'>{''.join(volumes)}</g>"
-            f"<text class='chart-volume-label' x='{left:.0f}' y='288'>成交量</text>{time_labels}</svg>")
+    return (
+        "<svg class='candlestick-chart' viewBox='0 0 1024 392' role='img' aria-label='唯讀 K 線、20MA 與成交量'>"
+        f"{grid}<line class='chart-current-line' x1='{left:.0f}' y1='{latest_y:.2f}' x2='{right:.0f}' y2='{latest_y:.2f}'/>"
+        f"<text class='chart-current-price' x='976' y='{latest_y - 5:.2f}' text-anchor='end'>{price_label} {displayed_price:,.0f}</text>"
+        f"<g class='chart-candles'>{''.join(bodies)}</g>{ma_line}<g class='chart-volumes'>{''.join(volumes)}</g>"
+        f"<text class='chart-volume-label' x='{left:.0f}' y='288'>成交量</text>{time_labels}</svg>"
+    )
 
 
-def render_multi_timeframe_chart_html(source: ChartDataReadOnlySource = EMPTY_CHART_DATA_SOURCE, *, instrument: str = "TMF", timeframe: str = "60m") -> str:
+def render_multi_timeframe_chart_html(
+    source: ChartDataReadOnlySource = EMPTY_CHART_DATA_SOURCE,
+    *,
+    instrument: str = "TMF",
+    timeframe: str = "60m",
+) -> str:
     valid = instrument in {"TX", "MTX", "TMF"} and timeframe in SUPPORTED_CHART_TIMEFRAMES
-    series = source.read_series(instrument, timeframe) if valid else ChartSeries(instrument, timeframe, (), "invalid-selection", None)
+    series = (
+        source.read_series(instrument, timeframe)
+        if valid
+        else ChartSeries(instrument, timeframe, (), "invalid-selection", None)
+    )
     ma_values = _ma20(series.candles)
-    timeframe_tabs = "".join(f"<a class='chart-tab {'active' if item == timeframe else ''}' href='/charts?instrument={escape(instrument)}&timeframe={item}'>{TIMEFRAME_LABELS[item]}</a>" for item in SUPPORTED_CHART_TIMEFRAMES)
-    instrument_tabs = "".join(f"<a class='chart-tab {'active' if item == instrument else ''}' href='/charts?instrument={item}&timeframe={escape(timeframe)}'>{item}</a>" for item in ("TX", "MTX", "TMF"))
+    timeframe_tabs = "".join(
+        f"<a class='chart-tab {'active' if item == timeframe else ''}' href='/charts?instrument={escape(instrument)}&timeframe={item}'>{TIMEFRAME_LABELS[item]}</a>"
+        for item in SUPPORTED_CHART_TIMEFRAMES
+    )
+    instrument_tabs = "".join(
+        f"<a class='chart-tab {'active' if item == instrument else ''}' href='/charts?instrument={item}&timeframe={escape(timeframe)}'>{item}</a>"
+        for item in ("TX", "MTX", "TMF")
+    )
     updated = series.updated_at.isoformat() if series.updated_at is not None else "—"
     quote_updated = (
-        series.current_price_at.isoformat()
-        if series.current_price_at is not None
-        else "—"
+        series.current_price_at.isoformat() if series.current_price_at is not None else "—"
     )
     status = _summary(series, ma_values) if valid else "商品或週期無效"
     return f"""<!doctype html><html class='chart-page' lang='zh-Hant-TW'><head><meta charset='utf-8'><title>KAM 多週期 K 線</title><link rel='stylesheet' href='/static/operator.css'><script src='/static/chart-refresh.js' defer></script></head><body class='chart-page'><main class='chart-main'>
