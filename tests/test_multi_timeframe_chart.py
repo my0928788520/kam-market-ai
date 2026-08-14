@@ -332,6 +332,33 @@ def test_old_resistance_is_not_mislabeled_as_w_neckline_without_right_recovery()
     assert "class='chart-neckline'" not in html
 
 
+def test_falling_line_connects_prominent_high_to_next_lower_wave_high() -> None:
+    start = datetime(2026, 8, 1, tzinfo=UTC)
+    highs = (104, 110, 105, 108, 104, 106, 102, 104, 100)
+    lows = tuple(high - 4 for high in highs)
+    candles = tuple(
+        ChartCandle(
+            start + timedelta(hours=index),
+            high - 2,
+            high,
+            low,
+            high - 2,
+            10,
+        )
+        for index, (low, high) in enumerate(zip(lows, highs, strict=True))
+    )
+    series = ChartSeries("TMF", "60m", candles, "falling-waves", candles[-1].opened_at)
+
+    _, falling, _ = _recent_trend_anchors(series)
+
+    assert falling == (
+        start + timedelta(hours=1),
+        110,
+        start + timedelta(hours=3),
+        108,
+    )
+
+
 def test_broken_rising_trend_is_removed_until_a_new_structure_forms() -> None:
     start = datetime(2026, 8, 1, tzinfo=UTC)
     lows = (10, 11, 8, 12, 13, 14, 10, 15, 14, 16, 11, 15, 14, 16, 17, 5)
