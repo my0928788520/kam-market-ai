@@ -93,6 +93,9 @@ def test_chart_page_shows_session_badges_from_source() -> None:
 
     assert "chart-session-afterhours" in night_html and "夜盤" in night_html
     assert "chart-session-regular" in day_html and "日盤" in day_html
+    assert "action='/session-switch'" in night_html
+    assert "name='session' value='regular'" in night_html
+    assert "name='session' value='afterhours'" in night_html
 
 
 def test_chart_page_renders_injected_candles_ma20_volume_and_summary() -> None:
