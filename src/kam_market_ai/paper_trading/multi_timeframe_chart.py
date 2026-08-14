@@ -332,21 +332,19 @@ def _recent_trend_anchors(
     candles = completed[-32:]
     if len(candles) < 5:
         return None, None, None
+    # Confirm nearby swings after one completed bar so fresh structures do not
+    # stay unavailable for two extra candles.
     pivot_lows = [
         index
-        for index in range(2, len(candles) - 2)
+        for index in range(1, len(candles) - 1)
         if candles[index].low <= candles[index - 1].low
-        and candles[index].low < candles[index - 2].low
-        and candles[index].low <= candles[index + 1].low
-        and candles[index].low < candles[index + 2].low
+        and candles[index].low < candles[index + 1].low
     ]
     pivot_highs = [
         index
-        for index in range(2, len(candles) - 2)
+        for index in range(1, len(candles) - 1)
         if candles[index].high >= candles[index - 1].high
-        and candles[index].high > candles[index - 2].high
-        and candles[index].high >= candles[index + 1].high
-        and candles[index].high > candles[index + 2].high
+        and candles[index].high > candles[index + 1].high
     ]
     recent_start = max(0, len(candles) - 24)
     recent_lows = [index for index in pivot_lows if index >= recent_start]
@@ -356,7 +354,7 @@ def _recent_trend_anchors(
         neck = max(candles[index].high for index in range(left + 1, right))
         floor = min(candles[left].low, candles[right].low)
         return neck > floor and (
-            abs(candles[right].low - candles[left].low) <= (neck - floor) * 0.45
+            abs(candles[right].low - candles[left].low) <= (neck - floor) * 0.60
         )
 
     rising = None
@@ -364,12 +362,7 @@ def _recent_trend_anchors(
     w_candidates = [
         (left, right)
         for left, right in reversed(tuple(pairwise(recent_lows)))
-        if 3 <= right - left <= 16
-        and any(
-            right < later <= right + 20 and candles[later].low > candles[right].low
-            for later in recent_lows
-        )
-        and is_w_pair(left, right)
+        if 2 <= right - left <= 16 and is_w_pair(left, right)
     ]
     if w_candidates:
         first_leg, second_leg = w_candidates[0]
@@ -378,7 +371,16 @@ def _recent_trend_anchors(
             key=lambda index: candles[index].high,
         )
         neckline = (candles[neck_index].opened_at, candles[neck_index].high)
-    for _first_leg, second_leg in w_candidates:
+    rising_candidates = [
+        pair
+        for pair in w_candidates
+        if any(
+            pair[1] < later <= pair[1] + 20
+            and candles[later].low > candles[pair[1]].low
+            for later in recent_lows
+        )
+    ]
+    for _first_leg, second_leg in rising_candidates:
         later_higher_lows = [
             index
             for index in recent_lows
@@ -412,14 +414,13 @@ def _recent_trend_anchors(
 
     falling = None
     if len(recent_highs) >= 2:
-        base = max(recent_highs[:-1], key=lambda index: (candles[index].high, index))
-        later_lower_highs = [
-            index
-            for index in recent_highs
-            if base < index <= base + 20 and candles[index].high < candles[base].high
+        falling_pairs = [
+            (base, right)
+            for base, right in reversed(tuple(pairwise(recent_highs)))
+            if right <= base + 20 and candles[right].high < candles[base].high
         ]
-        if later_lower_highs:
-            right = later_lower_highs[-1]
+        if falling_pairs:
+            base, right = falling_pairs[0]
             slope = (candles[right].high - candles[base].high) / (right - base)
             broken_by_bar = any(
                 candles[index].high > candles[base].high + slope * (index - base)
@@ -585,6 +586,7 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     return (
         "<svg class='candlestick-chart' viewBox='0 0 1024 392' role='img' aria-label='唯讀 K 線、20MA、即時水平線與成交量'>"
         f"{grid}<line class='chart-current-line' x1='{left:.0f}' y1='{latest_y:.2f}' x2='{right:.0f}' y2='{latest_y:.2f}'/>"
+        f"<text class='chart-current-price-label' x='{right - 4:.0f}' y='{latest_y - 6:.2f}' text-anchor='end'>即時 {_price_text(displayed_price)}</text>"
         f"<g class='chart-candles'>{''.join(bodies)}</g>{ma_line}{range_lines}<g class='chart-volumes'>{''.join(volumes)}</g>"
         f"<text class='chart-volume-label' x='{left:.0f}' y='288'>成交量</text>{time_labels}"
         f"<g class='chart-crosshair' hidden><line class='chart-crosshair-x' x1='0' y1='{top:.2f}' x2='0' y2='{volume_bottom:.2f}'/><line class='chart-crosshair-y' x1='{left:.2f}' y1='0' x2='{right:.2f}' y2='0'/></g>"
