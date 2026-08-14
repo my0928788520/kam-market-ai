@@ -369,6 +369,7 @@ class FubonLiveChartSource:
                 updated_at,
                 last_candle_is_forming=last_candle_is_forming,
                 forming_label=forming_label,
+                trading_session="afterhours" if self._after_hours else "regular",
             )
         return ChartSeries(
             instrument,
@@ -380,6 +381,7 @@ class FubonLiveChartSource:
             current.observed_at,
             last_candle_is_forming,
             forming_label,
+            "afterhours" if self._after_hours else "regular",
         )
 
     @staticmethod
