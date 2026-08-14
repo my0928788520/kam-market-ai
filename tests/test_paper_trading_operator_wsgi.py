@@ -400,7 +400,7 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert ".control-cells-unscored" in css
     assert ".control-cell.unconfirmed" in css
     assert "@media (max-height: 650px) and (min-width: 1001px)" in css
-    assert "grid-template-rows: 116px 128px 82px minmax(78px, 1fr)" in css
+    assert "grid-template-rows: 90px 154px 82px minmax(78px, 1fr)" in css
     assert ".proposal dl { grid-template-columns: repeat(3" in css
     assert ".matching dl { grid-template-columns: repeat(2" in css
     assert "justify-content: center" in css and "border-radius: 7px" in css
