@@ -29,6 +29,7 @@ from kam_market_ai.models import Instrument
 from kam_market_ai.paper_trading.operator_app import create_operator_app
 
 from .fubon_five_timeframe_pipeline import FubonFiveTimeframeCandlePipeline
+from .fubon_live_chart_source import FubonLiveChartSource
 from .fubon_live_five_timeframe_verifier import FubonLiveFiveTimeframeVerifier
 from .fubon_neo import (
     FubonIntradayCandlesAdapter,
@@ -178,9 +179,10 @@ def main(
     resolver = VerifiedContractResolver((
         ResolvedFuturesContract(Instrument.TMF, symbol, args.after_hours),
     ))
-    verifier = FubonLiveFiveTimeframeVerifier(FubonFiveTimeframeCandlePipeline(
+    pipeline = FubonFiveTimeframeCandlePipeline(
         FubonIntradayCandlesAdapter(result.clients, resolver),
-    ))
+    )
+    verifier = FubonLiveFiveTimeframeVerifier(pipeline)
     refresher = LiveFiveTimeframeSnapshotRefresher(
         verifier,
         symbol=symbol,
@@ -224,7 +226,10 @@ def main(
         operator_app = create_operator_app(
             lambda: build_five_timeframe_operator_view(
                 read_five_timeframe_snapshot(args.snapshot)
-            )
+            ),
+            chart_data_source=FubonLiveChartSource(
+                lambda: verifier.latest_candle_result
+            ),
         )
 
         application = build_local_dashboard_router(operator_app, diagnostic_app)
