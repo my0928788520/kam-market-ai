@@ -29,6 +29,7 @@ from .fubon_five_timeframe_pipeline import (
     FiveTimeframeCandleResult,
 )
 from .fubon_neo import AuthorizedMarketDataClients
+from .index_futures_product import index_futures_product, infer_index_futures_instrument
 
 
 class FubonLiveQuoteError(ValueError):
@@ -47,7 +48,7 @@ class LiveChartPrice:
     volume: int | None = None
 
     def __post_init__(self) -> None:
-        if self.instrument != "TMF" or not self.symbol or self.symbol.strip() != self.symbol:
+        if self.instrument not in {"TX", "MTX", "TMF"} or not self.symbol or self.symbol.strip() != self.symbol:
             raise ValueError("live chart price identity is invalid")
         if not isfinite(self.price) or self.price <= 0:
             raise ValueError("live chart price must be finite and positive")
@@ -83,6 +84,7 @@ class FubonLiveQuoteSource:
         clients: AuthorizedMarketDataClients,
         *,
         symbol: str,
+        instrument: Instrument | str | None = None,
         after_hours: bool = False,
     ) -> None:
         if not isinstance(clients, AuthorizedMarketDataClients):
@@ -91,6 +93,10 @@ class FubonLiveQuoteSource:
             raise ValueError("verified futures symbol is required")
         self._intraday = clients.futopt_rest.intraday
         self._symbol = symbol
+        self._instrument = instrument if isinstance(instrument, Instrument) else (
+            Instrument(str(instrument).upper()) if instrument is not None else infer_index_futures_instrument(symbol)
+        )
+        index_futures_product(self._instrument)
         self._after_hours = after_hours
         self._latest: LiveChartPrice | None = None
         self._lock = Lock()
@@ -149,7 +155,7 @@ class FubonLiveQuoteSource:
         if not isfinite(normalized_price) or normalized_price <= 0:
             raise FubonLiveQuoteError("QUOTE_PRICE_INVALID")
         return LiveChartPrice(
-            "TMF",
+            self._instrument.value,
             self._symbol,
             normalized_price,
             _provider_timestamp(observed_at),
@@ -158,16 +164,17 @@ class FubonLiveQuoteSource:
 
 
 def _contract_month_from_symbol(symbol: str, *, reference: datetime) -> str:
+    product = index_futures_product(infer_index_futures_instrument(symbol))
     if (
         len(symbol) < 5
-        or not symbol.startswith("TMF")
+        or not symbol.startswith(product.symbol_prefix)
         or not symbol[-2].isalpha()
         or not symbol[-1].isdigit()
     ):
-        raise ValueError("verified TMF symbol is required")
+        raise ValueError("verified index-futures symbol is required")
     month = ord(symbol[-2].upper()) - ord("A") + 1
     if not 1 <= month <= 12:
-        raise ValueError("verified TMF contract month is invalid")
+        raise ValueError("verified index-futures contract month is invalid")
     decade = reference.year - reference.year % 10
     year = decade + int(symbol[-1])
     if year < reference.year - 1:
@@ -187,6 +194,7 @@ class FubonLiveDashboardMarketSource:
         quote_source: FubonLiveQuoteSource,
         *,
         symbol: str,
+        instrument: Instrument | str | None = None,
         contract_month: str | None = None,
         after_hours: bool = False,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
@@ -209,6 +217,10 @@ class FubonLiveDashboardMarketSource:
         if len(inferred_month) != 6 or not inferred_month.isdigit():
             raise ValueError("dashboard contract month must use YYYYMM")
         self._quote_source = quote_source
+        self._instrument = instrument if isinstance(instrument, Instrument) else (
+            Instrument(str(instrument).upper()) if instrument is not None else infer_index_futures_instrument(symbol)
+        )
+        self._product = index_futures_product(self._instrument)
         self._symbol = symbol
         self._contract_month = inferred_month
         self._after_hours = bool(after_hours)
@@ -219,9 +231,9 @@ class FubonLiveDashboardMarketSource:
     def _failure_snapshot(self, product_code: str) -> MarketSnapshot:
         return MarketSnapshot(
             product_code,
-            "微型臺指期貨" if product_code == "TMF" else "",
-            f"TMF{self._contract_month}" if product_code == "TMF" else None,
-            self._contract_month if product_code == "TMF" else None,
+            self._product.display_name if product_code == self._instrument.value else "",
+            f"{self._product.contract_prefix}{self._contract_month}" if product_code == self._instrument.value else None,
+            self._contract_month if product_code == self._instrument.value else None,
             None,
             TradingSession.UNKNOWN,
             "CLIENT_UNAVAILABLE",
@@ -235,7 +247,7 @@ class FubonLiveDashboardMarketSource:
             MarketDataFreshness.UNKNOWN,
             (
                 MarketSnapshotStatus.CLIENT_UNAVAILABLE
-                if product_code == "TMF"
+                if product_code == self._instrument.value
                 else MarketSnapshotStatus.INVALID_PRODUCT
             ),
             None,
@@ -245,7 +257,7 @@ class FubonLiveDashboardMarketSource:
         )
 
     def read_snapshot(self, product_code: str) -> MarketSnapshot:
-        if product_code != "TMF":
+        if product_code != self._instrument.value:
             return self._failure_snapshot(product_code)
         quote = self._quote_source.latest
         if quote is None or quote.symbol != self._symbol:
@@ -263,9 +275,9 @@ class FubonLiveDashboardMarketSource:
             else MarketDataFreshness.EXPIRED
         )
         return MarketSnapshot(
-            "TMF",
-            "微型臺指期貨",
-            f"TMF{self._contract_month}",
+            self._instrument.value,
+            self._product.display_name,
+            f"{self._product.contract_prefix}{self._contract_month}",
             self._contract_month,
             quote.observed_at,
             TradingSession.NIGHT if self._after_hours else TradingSession.DAY,
@@ -286,12 +298,12 @@ class FubonLiveDashboardMarketSource:
         )
 
     def list_available_products(self) -> tuple[str, ...]:
-        return ("TMF",)
+        return (self._instrument.value,)
 
     def runtime_status(self) -> str:
         return (
             "READY"
-            if self.read_snapshot("TMF").status is MarketSnapshotStatus.READY
+            if self.read_snapshot(self._instrument.value).status is MarketSnapshotStatus.READY
             else "DEGRADED"
         )
 
@@ -313,10 +325,13 @@ class FubonLiveChartSource:
         history_path: str | Path | None = None,
         history_15m_path: str | Path | None = None,
         history_limit: int = 240,
+        instrument: Instrument | str = Instrument.TMF,
     ) -> None:
         if not callable(result_provider):
             raise TypeError("result_provider must be callable")
         self._result_provider = result_provider
+        self._instrument = instrument if isinstance(instrument, Instrument) else Instrument(str(instrument).upper())
+        index_futures_product(self._instrument)
         if current_price_provider is not None and not callable(current_price_provider):
             raise TypeError("current_price_provider must be callable")
         self._current_price_provider = current_price_provider
@@ -344,7 +359,7 @@ class FubonLiveChartSource:
             value = self._current_price_provider()
         except Exception:  # noqa: BLE001
             return None
-        if not isinstance(value, LiveChartPrice) or value.instrument != "TMF":
+        if not isinstance(value, LiveChartPrice) or value.instrument != self._instrument.value:
             return None
         return value
 
@@ -403,7 +418,7 @@ class FubonLiveChartSource:
             payload = json.loads(path.read_text(encoding="utf-8"))
             if (
                 payload.get("schema") != "kam-normalized-chart-history-v1"
-                or payload.get("instrument") != "TMF"
+                or payload.get("instrument") != self._instrument.value
                 or payload.get("timeframe") != timeframe
             ):
                 return ()
@@ -429,7 +444,7 @@ class FubonLiveChartSource:
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "schema": "kam-normalized-chart-history-v1",
-            "instrument": "TMF",
+            "instrument": self._instrument.value,
             "timeframe": timeframe,
             "candles": [
                 {
@@ -462,7 +477,7 @@ class FubonLiveChartSource:
                     return
                 if any(
                     not isinstance(item, Candle)
-                    or item.instrument is not Instrument.TMF
+                    or item.instrument is not self._instrument
                     or item.start.tzinfo is None
                     or item.start.utcoffset() is None
                     for item in values
@@ -603,7 +618,7 @@ class FubonLiveChartSource:
             "1w": FiveTimeframe.WEEK,
         }
         selected = mapping.get(timeframe)
-        if instrument != "TMF" or selected is None:
+        if instrument != self._instrument.value or selected is None:
             return ChartSeries(instrument, timeframe, (), "invalid-selection", None)
         result = self._result_provider()
         if selected in {FiveTimeframe.DAY, FiveTimeframe.WEEK}:
