@@ -73,7 +73,7 @@ def test_live_five_timeframe_uses_established_kam_operator_ui() -> None:
     assert "四週期狀態" in page
     assert "等待有效週期資料恢復" in page
     assert "TMFH6" in page
-    assert "多方 4｜空方 0｜未確認 6" in page
+    assert "多方 4｜空方 0\n未確認 6" in page
     assert "價格相對 20MA：上方（20MA 45,700）" in page
     assert "20MA 方向：上彎" in page
     assert "20棒壓力：46,500" in page
@@ -126,8 +126,8 @@ def test_market_dashboard_exposes_armed_auto_paper_runtime_without_live_executio
     view = build_five_timeframe_operator_view(payload, runtime)
     page = render_operator_html(view)
 
-    assert "自動 Paper 已武裝" in page
-    assert "自動 Paper 執行" in page
+    assert "自動模擬已啟用" in page
+    assert "自動模擬執行" in page
     assert "KAM 買進條件尚未成立" in page
     assert "1000000" in page
     assert "自動停損</dt><dd title='45680'>45680" in page
