@@ -13,6 +13,12 @@
   const status = document.getElementById("dashboard-live-status");
   let refreshInFlight = false;
 
+  const placeAccountMetrics = () => {
+    const metrics = document.querySelector("main > footer .footer-metrics");
+    const matching = document.querySelector(".dashboard .matching");
+    if (metrics && matching) matching.append(metrics);
+  };
+
   const scheduleNext = () => window.setTimeout(refreshDashboard, REFRESH_INTERVAL_MS);
 
   const showStatus = (message, state) => {
@@ -31,6 +37,7 @@
       }
       current.replaceWith(document.importNode(replacement, true));
     }
+    placeAccountMetrics();
   };
 
   async function refreshDashboard() {
@@ -57,5 +64,6 @@
     }
   }
 
+  placeAccountMetrics();
   scheduleNext();
 })();
