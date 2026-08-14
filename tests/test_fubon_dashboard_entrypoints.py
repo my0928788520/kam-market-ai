@@ -41,6 +41,8 @@ def test_windows_launcher_preserves_read_only_local_boundary() -> None:
     assert "--live" in source
     assert "127.0.0.1" in source
     assert "--open-browser" in source
+    assert "$env:pythonpath" in source
+    assert "'src'" in source
     assert "[parameter(mandatory = $true)]" not in source
     assert "place_order" not in source
     assert "0.0.0.0" not in source
