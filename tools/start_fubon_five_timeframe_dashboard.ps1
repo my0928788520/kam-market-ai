@@ -20,6 +20,21 @@ $python = Join-Path $projectRoot '.venv\Scripts\python.exe'
 $envFile = Join-Path $projectRoot '.env'
 $sourceRoot = Join-Path $projectRoot 'src'
 
+$productCode = 'TMF'
+if ($Symbol) {
+    $normalizedSymbol = $Symbol.ToUpperInvariant()
+    if ($normalizedSymbol.StartsWith('TXF')) {
+        $productCode = 'TX'
+    }
+    elseif ($normalizedSymbol.StartsWith('MXF')) {
+        $productCode = 'MTX'
+    }
+    elseif (-not $normalizedSymbol.StartsWith('TMF')) {
+        throw 'Symbol must begin with TXF, MXF, or TMF.'
+    }
+}
+$productSlug = $productCode.ToLowerInvariant()
+
 if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
     throw 'Missing .venv\Scripts\python.exe. Install the project environment first.'
 }
@@ -42,10 +57,11 @@ $arguments = @(
     '--host', '127.0.0.1',
     '--port', [string]$Port,
     '--refresh-seconds', [string]$RefreshSeconds,
-    '--snapshot', (Join-Path $projectRoot 'debug\five_timeframe\live.json'),
-    '--chart-history', (Join-Path $projectRoot 'debug\five_timeframe\tmf_60m_history.json'),
-    '--chart-history-15m', (Join-Path $projectRoot 'debug\five_timeframe\tmf_15m_history.json'),
-    '--taifex-history-cache', (Join-Path $projectRoot 'debug\five_timeframe\taifex_official_history.json'),
+    '--instrument', $productCode,
+    '--snapshot', (Join-Path $projectRoot "debug\five_timeframe\${productSlug}_live.json"),
+    '--chart-history', (Join-Path $projectRoot "debug\five_timeframe\${productSlug}_60m_history.json"),
+    '--chart-history-15m', (Join-Path $projectRoot "debug\five_timeframe\${productSlug}_15m_history.json"),
+    '--taifex-history-cache', (Join-Path $projectRoot "debug\five_timeframe\${productSlug}_taifex_official_history.json"),
     '--open-browser'
 )
 
@@ -60,7 +76,7 @@ if ($Session -eq 'afterhours') {
 if ($PaperTestArmed) {
     $arguments += @(
         '--paper-test-armed',
-        '--paper-journal', (Join-Path $projectRoot 'debug\paper_trading\tmf_live_journal.json')
+        '--paper-journal', (Join-Path $projectRoot "debug\paper_trading\${productSlug}_live_journal.json")
     )
 }
 
