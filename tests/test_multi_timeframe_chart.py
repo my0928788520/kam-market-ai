@@ -274,6 +274,35 @@ def test_chart_draws_latest_rising_and_falling_pivot_trend_lines() -> None:
     assert neckline == (start + timedelta(hours=4), 25)
 
 
+def test_broken_rising_trend_is_removed_until_a_new_structure_forms() -> None:
+    start = datetime(2026, 8, 1, tzinfo=UTC)
+    lows = (10, 11, 8, 12, 13, 14, 10, 15, 14, 16, 11, 15, 14, 16, 17, 5)
+    highs = (20, 21, 18, 23, 25, 22, 19, 21, 23, 20, 19, 21, 22, 20, 19, 18)
+    candles = tuple(
+        ChartCandle(
+            start + timedelta(hours=index),
+            (low + high) / 2,
+            high,
+            low,
+            (low + high) / 2,
+            10,
+        )
+        for index, (low, high) in enumerate(zip(lows, highs, strict=True))
+    )
+    series = ChartSeries("TMF", "60m", candles, "broken-trend", candles[-1].opened_at)
+
+    rising, _, neckline = _recent_trend_anchors(series)
+    html = render_multi_timeframe_chart_html(
+        type("BrokenSource", (), {"read_series": lambda self, instrument, timeframe: series})(),
+        timeframe="60m",
+    )
+
+    assert rising is None
+    assert neckline is not None
+    assert "上升趨勢不足" in html
+    assert "class='chart-rising-trend-line'" not in html
+
+
 @pytest.mark.parametrize("instrument,timeframe", [("BAD", "60m"), ("TMF", "5m")])
 def test_chart_page_rejects_unknown_instrument_or_timeframe(
     instrument: str, timeframe: str
