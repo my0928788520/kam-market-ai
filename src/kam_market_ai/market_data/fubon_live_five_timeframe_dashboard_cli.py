@@ -281,6 +281,12 @@ def main(
                 "journal_hash": paper_journal.journal_hash,
                 "proposal_hash": None,
                 "fill_hashes": [],
+                "margin_state": paper_journal.margin_state_payload(),
+                "performance_event": (
+                    paper_journal.events[-1].canonical_payload()
+                    if paper_journal.events
+                    else None
+                ),
                 "live_order_allowed": False,
                 "broker_connected": False,
             }
