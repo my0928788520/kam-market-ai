@@ -279,9 +279,10 @@ def _timeframe_card(name: object, state: object, details: Mapping[str, object] |
     except (TypeError, ValueError):
         range_bars = 0
     range_label = f"{range_bars}棒" if range_bars else "區間"
+    status_code = "" if code == "ND" else f"<strong>{escape(code)}</strong>"
     return (
         "<article class='timeframe-card'>"
-        f"<b>{escape(str(name))}</b><strong>{code}</strong><span>{escape(interpretation)}</span>"
+        f"<b>{escape(str(name))}</b>{status_code}<span>{escape(interpretation)}</span>"
         f"<small>價格相對 20MA：{escape(relation + ma_text)}</small><small>20MA 方向：{escape(direction)}</small>"
         f"<small class='timeframe-resistance'>{range_label}壓力：{escape(resistance)}</small>"
         f"<small class='timeframe-support'>{range_label}支撐：{escape(support)}</small></article>"
