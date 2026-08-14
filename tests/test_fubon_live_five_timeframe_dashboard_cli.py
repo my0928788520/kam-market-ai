@@ -102,6 +102,22 @@ def test_many_consecutive_failures_do_not_publish_unverified_data(tmp_path) -> N
     assert refresher.health.safe_payload()["status"] == "DEGRADED"
 
 
+def test_refresh_health_payload_never_contains_exception_or_credentials(tmp_path) -> None:
+    verifier = RecoveringVerifier()
+    verifier.fail = True
+    refresher = LiveFiveTimeframeSnapshotRefresher(
+        verifier, symbol="TMFH6", session=None, after_hours=False,
+        snapshot_path=tmp_path / "live.json",
+    )
+    assert refresher.refresh_safely() is False
+    payload = refresher.health.safe_payload()
+    assert set(payload) == {
+        "successful_refreshes", "consecutive_failures", "last_success_at",
+        "last_failure_at", "status",
+    }
+    assert "fixture transport interruption" not in str(payload)
+
+
 def test_service_requires_live_flag_and_loopback_host(capsys) -> None:
     assert main(["--symbol", "TMFH6"]) == 2
     assert "LIVE_FLAG_REQUIRED" in capsys.readouterr().out
