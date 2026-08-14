@@ -103,6 +103,10 @@ def test_dashboard_renders_safe_three_second_view_without_trade_controls(tmp_pat
     assert "NF" in body
     assert "中性・形成中" in body
     assert "five-timeframe-kam-state-v1.0" in body
+    assert '<div class="dashboard-grid">' in body
+    assert '<section class="core-grid">' in body
+    assert "市場轉折位置" in body
+    assert "資料與安全狀態" in body
     assert "place_order" not in body.lower()
 
 
