@@ -259,7 +259,7 @@ def test_chart_pressure_and_support_exclude_forming_candle() -> None:
     assert "最近 20 根已完成 K 棒" in html
 
 
-def test_chart_draws_latest_rising_and_falling_pivot_trend_lines() -> None:
+def test_chart_draws_dominant_w_rising_and_nearest_falling_trend_lines() -> None:
     start = datetime(2026, 8, 1, tzinfo=UTC)
     lows = (10, 11, 8, 12, 13, 14, 10, 15, 14, 16, 11, 15, 14, 16, 17)
     highs = (20, 21, 18, 23, 25, 22, 19, 21, 23, 20, 19, 21, 22, 20, 19)
@@ -292,9 +292,9 @@ def test_chart_draws_latest_rising_and_falling_pivot_trend_lines() -> None:
     assert "class='chart-neckline'" in html
     assert ">上升趨勢</text>" in html
     assert ">下降趨勢</text>" in html
-    assert rising is not None and rising[1:] == (11, start + timedelta(hours=12), 14)
+    assert rising is not None and rising[1:] == (10, start + timedelta(hours=12), 14)
     assert falling is not None and falling[1:] == (23, start + timedelta(hours=12), 22)
-    assert neckline == (start + timedelta(hours=11), 21)
+    assert neckline == (start + timedelta(hours=4), 25)
 
 
 def test_chart_shows_live_price_number_on_three_second_refresh_line() -> None:
