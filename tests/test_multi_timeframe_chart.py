@@ -11,6 +11,22 @@ from kam_market_ai.paper_trading.operator_presenter import PaperTradingOperatorV
 from kam_market_ai.paper_trading.operator_wsgi import build_operator_wsgi
 
 
+def test_chart_tooltip_stays_visible_long_enough_to_read() -> None:
+    script = (
+        __import__("pathlib").Path(__file__).parents[1]
+        / "src"
+        / "kam_market_ai"
+        / "paper_trading"
+        / "static"
+        / "chart-refresh.js"
+    ).read_text(encoding="utf-8")
+
+    assert "const TOOLTIP_HIDE_DELAY_MS = 6000;" in script
+    assert "hideChartTooltipLater(panel)" in script
+    assert "document.hidden || isChartTooltipVisible()" in script
+    assert 'event.key === "Escape"' in script
+
+
 class FixtureChartSource:
     def read_series(self, instrument: str, timeframe: str) -> ChartSeries:
         start = datetime(2026, 8, 1, tzinfo=UTC)
@@ -70,6 +86,13 @@ def test_chart_page_renders_injected_candles_ma20_volume_and_summary() -> None:
     assert "<span>20 棒上壓力</span><strong>125</strong>" in html
     assert "<span>20 棒下支撐</span><strong>103</strong>" in html
     assert "20 棒支撐壓力已更新" in html
+    assert "id='chart-range-toggle'" in html
+    assert "顯示支撐／壓力＋趨勢線" in html
+    assert "水平線＝最近上下緣・斜線＝最近有效波段高低點" in html
+    assert "class='chart-range-lines' hidden" in html
+    assert "class='chart-resistance-line'" in html
+    assert "class='chart-support-line'" in html
+    assert "上壓 125" in html and "下撐 103" in html
     assert "class='chart-current-price'" not in html
 
 
@@ -191,6 +214,34 @@ def test_chart_pressure_and_support_exclude_forming_candle() -> None:
     assert "<span>20 棒下支撐</span><strong>99</strong>" in html
     assert "<span>20 棒上壓力</span><strong>999</strong>" not in html
     assert "最近 20 根已完成 K 棒" in html
+
+
+def test_chart_draws_latest_rising_and_falling_pivot_trend_lines() -> None:
+    start = datetime(2026, 8, 1, tzinfo=UTC)
+    lows = (10, 11, 8, 12, 13, 14, 10, 15, 14, 16, 17)
+    highs = (20, 21, 18, 23, 25, 22, 19, 21, 23, 20, 19)
+
+    class PivotSource:
+        def read_series(self, instrument: str, timeframe: str) -> ChartSeries:
+            candles = tuple(
+                ChartCandle(
+                    start + timedelta(hours=index),
+                    (low + high) / 2,
+                    high,
+                    low,
+                    (low + high) / 2,
+                    10,
+                )
+                for index, (low, high) in enumerate(zip(lows, highs, strict=True))
+            )
+            return ChartSeries(instrument, timeframe, candles, "pivot-fixture", candles[-1].opened_at)
+
+    html = render_multi_timeframe_chart_html(PivotSource(), timeframe="60m")
+
+    assert "class='chart-rising-trend-line'" in html
+    assert "class='chart-falling-trend-line'" in html
+    assert ">上升趨勢</text>" in html
+    assert ">下降趨勢</text>" in html
 
 
 @pytest.mark.parametrize("instrument,timeframe", [("BAD", "60m"), ("TMF", "5m")])
