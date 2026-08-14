@@ -5,6 +5,7 @@ import pytest
 from kam_market_ai.paper_trading.multi_timeframe_chart import (
     ChartCandle,
     ChartSeries,
+    _recent_trend_anchors,
     render_multi_timeframe_chart_html,
 )
 from kam_market_ai.paper_trading.operator_presenter import PaperTradingOperatorView
@@ -256,6 +257,7 @@ def test_chart_draws_latest_rising_and_falling_pivot_trend_lines() -> None:
             return ChartSeries(instrument, timeframe, candles, "pivot-fixture", candles[-1].opened_at)
 
     html = render_multi_timeframe_chart_html(PivotSource(), timeframe="60m")
+    rising, falling = _recent_trend_anchors(PivotSource().read_series("TMF", "60m"))
 
     assert "class='chart-rising-trend-line'" in html
     assert "class='chart-falling-trend-line'" in html
@@ -263,6 +265,8 @@ def test_chart_draws_latest_rising_and_falling_pivot_trend_lines() -> None:
     assert "data-chart-overlay='falling'" in html
     assert ">上升趨勢</text>" in html
     assert ">下降趨勢</text>" in html
+    assert rising is not None and rising[1:] == (8, start + timedelta(hours=6), 10)
+    assert falling is not None and falling[1:] == (25, start + timedelta(hours=8), 23)
 
 
 @pytest.mark.parametrize("instrument,timeframe", [("BAD", "60m"), ("TMF", "5m")])
