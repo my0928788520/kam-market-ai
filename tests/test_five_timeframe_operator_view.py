@@ -73,7 +73,7 @@ def test_live_five_timeframe_uses_established_kam_operator_ui() -> None:
     assert "四週期狀態" in page
     assert "等待有效週期資料恢復" in page
     assert "TMFH6" in page
-    assert "多方 4｜空方 0\n未確認 6" in page
+    assert "多方 4｜空方 0｜未確認 6" in page
     assert "在20MA上方（45,700）" in page
     assert "價格相對 20MA" not in page
     assert "20MA 方向：上彎" in page
@@ -134,5 +134,6 @@ def test_market_dashboard_exposes_armed_auto_paper_runtime_without_live_executio
     assert "自動停損</dt><dd title='45680'>45680" in page
     assert "自動停利</dt><dd title='45740'>45740" in page
     assert "未實現損益</dt><dd title='150'>150" in page
-    assert "保證金狀態</dt><dd title='safe'>safe" in page
+    assert "保證金狀態</dt><dd title='保證金安全'>保證金安全" in page
+    assert ">HOLD<" not in page and ">stale<" not in page
     assert view.live_order_allowed is False and view.broker_connected is False
