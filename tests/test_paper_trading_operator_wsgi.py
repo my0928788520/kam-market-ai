@@ -385,6 +385,7 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert ".proposal p, .matching p" in css and "font-size: 13px" in css
     assert ".proposal dl, .matching dl" in css and "align-content: center" in css
     assert ".proposal dd, .matching dd" in css and "text-overflow: ellipsis" in css
+    assert ".matching > .footer-metrics" in css
     assert "grid-template-columns: repeat(4, minmax(0, 1fr))" in css
     assert ".timeframes { grid-column: 1 / 3; grid-row: 2; display: grid; grid-template-rows: auto minmax(0, 1fr);" in css
     assert ".timeframes h2 { margin-bottom: 7px; color: #f5f8ff; font-size: 16px;" in css
