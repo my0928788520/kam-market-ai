@@ -431,6 +431,7 @@ def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], a
     public_embed_config = public_embed_config or PublicEmbedConfig()
     chart_data_source = chart_data_source or EMPTY_CHART_DATA_SOURCE
     css_path = Path(__file__).with_name("static") / "operator.css"
+    chart_refresh_path = Path(__file__).with_name("static") / "chart-refresh.js"
     def app(environ: dict[str, object], start_response: Callable[..., object]) -> Iterable[bytes]:
         path, method = str(environ.get("PATH_INFO", "/")), str(environ.get("REQUEST_METHOD", "GET"))
         headers = [("Content-Security-Policy", public_embed_config.content_security_policy), ("X-Content-Type-Options", "nosniff"), ("Referrer-Policy", "strict-origin-when-cross-origin"), ("Permissions-Policy", "geolocation=(), camera=(), microphone=()"), ("Cache-Control", "no-store")]
@@ -451,6 +452,8 @@ def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], a
             start_response("405 Method Not Allowed", [("Content-Type", "text/plain; charset=utf-8"), ("Allow", "GET")]); return ["唯讀端點，不接受此操作。".encode()]
         if path == "/static/operator.css":
             start_response("200 OK", [("Content-Type", "text/css; charset=utf-8")]); return [css_path.read_bytes()]
+        if path == "/static/chart-refresh.js":
+            start_response("200 OK", [("Content-Type", "text/javascript; charset=utf-8"), *headers]); return [chart_refresh_path.read_bytes()]
         if path == "/embed":
             if not public_embed_config.enable_embed:
                 start_response("404 Not Found", [("Content-Type", "text/plain; charset=utf-8"), *headers]); return [b"Not found"]

@@ -150,10 +150,10 @@ def render_multi_timeframe_chart_html(source: ChartDataReadOnlySource = EMPTY_CH
     instrument_tabs = "".join(f"<a class='chart-tab {'active' if item == instrument else ''}' href='/charts?instrument={item}&timeframe={escape(timeframe)}'>{item}</a>" for item in ("TX", "MTX", "TMF"))
     updated = series.updated_at.isoformat() if series.updated_at is not None else "—"
     status = _summary(series, ma_values) if valid else "商品或週期無效"
-    return f"""<!doctype html><html class='chart-page' lang='zh-Hant-TW'><head><meta charset='utf-8'><meta http-equiv='refresh' content='3'><title>KAM 多週期 K 線</title><link rel='stylesheet' href='/static/operator.css'></head><body class='chart-page'><main class='chart-main'>
-      <header><div><h1>多週期 K 線</h1><small>15 分・60 分・日・週｜唯讀市場結構檢視</small></div><a class='account-chip' href='/'>返回市場儀表板</a><span>每 3 秒更新・禁止真實下單</span></header>
+    return f"""<!doctype html><html class='chart-page' lang='zh-Hant-TW'><head><meta charset='utf-8'><title>KAM 多週期 K 線</title><link rel='stylesheet' href='/static/operator.css'><script src='/static/chart-refresh.js' defer></script></head><body class='chart-page'><main class='chart-main'>
+      <header><div><h1>多週期 K 線</h1><small>15 分・60 分・日・週｜唯讀市場結構檢視</small></div><a class='account-chip' href='/'>返回市場儀表板</a><span id='chart-live-status' class='chart-live-status' role='status' aria-live='polite'>每 3 秒更新・禁止真實下單</span></header>
       <nav class='chart-toolbar' aria-label='圖表商品與週期'>{instrument_tabs}<span class='chart-toolbar-divider'></span>{timeframe_tabs}</nav>
-      <div class='chart-summary'>{escape(status)}</div><section class='chart-panel'>{_chart_svg(series, ma_values)}</section>
+      <div id='chart-summary' class='chart-summary'>{escape(status)}</div><section id='chart-panel' class='chart-panel'>{_chart_svg(series, ma_values)}</section>
       <aside class='chart-overlays' aria-label='圖表顯示項目'><span class='enabled'>K 線</span><span class='enabled'>20MA</span><span>上升趨勢線｜尚未接入</span><span>下降趨勢線｜尚未接入</span><span>支撐壓力｜尚未接入</span><span class='enabled'>成交量</span></aside>
-      <footer class='chart-footer'><span>資料來源：{escape(series.source)}</span><span>更新時間：{escape(updated)}</span><span>資料不足時不補假資料</span><span>任何單一指標均不構成進出場訊號</span></footer>
+      <footer id='chart-footer' class='chart-footer'><span>資料來源：{escape(series.source)}</span><span>更新時間：{escape(updated)}</span><span>資料不足時不補假資料</span><span>任何單一指標均不構成進出場訊號</span></footer>
     </main></body></html>"""

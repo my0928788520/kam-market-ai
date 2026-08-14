@@ -22,8 +22,10 @@ def test_chart_page_is_fail_closed_without_historical_source() -> None:
     html = render_multi_timeframe_chart_html()
     assert "多週期 K 線" in html and "15 分 K" in html and "60 分 K" in html and "日 K" in html and "週 K" in html
     assert "資料不足" in html and "系統不補假資料" in html
-    assert "<meta http-equiv='refresh' content='3'>" in html
+    assert "<meta http-equiv='refresh'" not in html
+    assert "<script src='/static/chart-refresh.js' defer></script>" in html
     assert "每 3 秒更新" in html
+    assert "id='chart-summary'" in html and "id='chart-panel'" in html
     assert "<svg class='candlestick-chart'" not in html
     assert "上升趨勢線｜尚未接入" in html and "支撐壓力｜尚未接入" in html
 
@@ -82,3 +84,18 @@ def test_wsgi_serves_get_only_chart_route_and_dashboard_link() -> None:
     assert "href='/charts'>多週期 K 線</a>" in dashboard
     b"".join(app({"REQUEST_METHOD": "POST", "PATH_INFO": "/charts"}, start))
     assert response["status"] == "405 Method Not Allowed"
+
+
+def test_wsgi_serves_external_non_overlapping_chart_refresh_script() -> None:
+    app = build_operator_wsgi(_view, chart_data_source=FixtureChartSource())
+    response = {}
+    start = lambda status, headers: response.update(status=status, headers=headers)
+
+    script = b"".join(app({"REQUEST_METHOD": "GET", "PATH_INFO": "/static/chart-refresh.js"}, start)).decode()
+
+    assert response["status"] == "200 OK"
+    assert ("Content-Type", "text/javascript; charset=utf-8") in response["headers"]
+    assert "fetch(window.location.href" in script
+    assert "window.setTimeout(refreshChart, REFRESH_INTERVAL_MS)" in script
+    assert "refreshInFlight" in script
+    assert "chart-summary" in script and "chart-panel" in script and "chart-footer" in script
