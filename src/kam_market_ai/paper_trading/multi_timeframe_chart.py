@@ -233,6 +233,12 @@ def _price_board(
         "<div class='chart-price-metric chart-price-support'>"
         f"<span>20 棒下支撐</span><strong>{_price_text(metrics.support)}</strong>"
         f"<small>{support_caption}</small></div></div>"
+        + (
+            "<div class='chart-level-controls'><button id='chart-range-toggle' class='chart-overlay-toggle' type='button' aria-pressed='false'>顯示支撐／壓力＋趨勢線</button>"
+            "<small>水平線＝最近上下緣・斜線＝最近有效波段高低點</small></div>"
+            if metrics.resistance is not None and metrics.support is not None
+            else "<div class='chart-level-controls'><button id='chart-range-toggle' class='chart-overlay-toggle' type='button' disabled>支撐壓力資料不足</button></div>"
+        )
     )
 
 
@@ -282,7 +288,57 @@ def _time_label(value: datetime, timeframe: str) -> str:
     return value.astimezone(taiwan).strftime(pattern)
 
 
+def _recent_trend_anchors(
+    series: ChartSeries,
+) -> tuple[
+    tuple[datetime, float, datetime, float] | None,
+    tuple[datetime, float, datetime, float] | None,
+]:
+    """Return the latest rising-low and falling-high pivot pairs from closed bars."""
+    completed = series.candles[:-1] if series.last_candle_is_forming else series.candles
+    candles = completed[-80:]
+    if len(candles) < 5:
+        return None, None
+    pivot_lows = [
+        index
+        for index in range(2, len(candles) - 2)
+        if candles[index].low <= candles[index - 1].low
+        and candles[index].low < candles[index - 2].low
+        and candles[index].low <= candles[index + 1].low
+        and candles[index].low < candles[index + 2].low
+    ]
+    pivot_highs = [
+        index
+        for index in range(2, len(candles) - 2)
+        if candles[index].high >= candles[index - 1].high
+        and candles[index].high > candles[index - 2].high
+        and candles[index].high >= candles[index + 1].high
+        and candles[index].high > candles[index + 2].high
+    ]
+    rising = next(
+        (
+            (candles[left].opened_at, candles[left].low, candles[right].opened_at, candles[right].low)
+            for right in reversed(pivot_lows)
+            for left in reversed([item for item in pivot_lows if item < right])
+            if candles[right].low > candles[left].low
+        ),
+        None,
+    )
+    falling = next(
+        (
+            (candles[left].opened_at, candles[left].high, candles[right].opened_at, candles[right].high)
+            for right in reversed(pivot_highs)
+            for left in reversed([item for item in pivot_highs if item < right])
+            if candles[right].high < candles[left].high
+        ),
+        None,
+    )
+    return rising, falling
+
+
 def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
+    metrics = _reference_metrics(series, ma_values)
+    rising_anchors, falling_anchors = _recent_trend_anchors(series)
     candles, ma_values = series.candles[-80:], ma_values[-80:]
     if not candles:
         return "<div class='chart-empty' role='status'><strong>資料不足</strong><p>歷史 K 線來源尚未接入；系統不補假資料。</p></div>"
@@ -367,6 +423,37 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     )
     latest = candles[-1]
     latest_y = y(displayed_price)
+    range_lines = ""
+    if metrics.resistance is not None and metrics.support is not None:
+        resistance_y = y(metrics.resistance)
+        support_y = y(metrics.support)
+        range_lines = (
+            "<g class='chart-range-lines' hidden>"
+            f"<line class='chart-resistance-line' x1='{left:.0f}' y1='{resistance_y:.2f}' x2='{right:.0f}' y2='{resistance_y:.2f}'/>"
+            f"<text class='chart-resistance-label' x='{right - 4:.0f}' y='{resistance_y - 5:.2f}' text-anchor='end'>上壓 {_price_text(metrics.resistance)}</text>"
+            f"<line class='chart-support-line' x1='{left:.0f}' y1='{support_y:.2f}' x2='{right:.0f}' y2='{support_y:.2f}'/>"
+            f"<text class='chart-support-label' x='{right - 4:.0f}' y='{support_y - 5:.2f}' text-anchor='end'>下撐 {_price_text(metrics.support)}</text>"
+        )
+        candle_indexes = {item.opened_at: index for index, item in enumerate(candles)}
+        trend_parts: list[str] = []
+        for anchors, line_class, label in (
+            (rising_anchors, "chart-rising-trend-line", "上升趨勢"),
+            (falling_anchors, "chart-falling-trend-line", "下降趨勢"),
+        ):
+            if anchors is None:
+                continue
+            first_time, first_price, second_time, second_price = anchors
+            first_index = candle_indexes.get(first_time)
+            second_index = candle_indexes.get(second_time)
+            if first_index is None or second_index is None or first_index == second_index:
+                continue
+            slope = (second_price - first_price) / (second_index - first_index)
+            projected_price = second_price + slope * (len(candles) - 1 - second_index)
+            trend_parts.append(
+                f"<line class='{line_class}' x1='{first_x + first_index * step:.2f}' y1='{y(first_price):.2f}' x2='{first_x + (len(candles) - 1) * step:.2f}' y2='{y(projected_price):.2f}'/>"
+                f"<text class='{line_class}-label' x='{first_x + (len(candles) - 1) * step - 4:.2f}' y='{y(projected_price) - 5:.2f}' text-anchor='end'>{label}</text>"
+            )
+        range_lines += "".join(trend_parts) + "</g>"
     time_labels = (
         f"<text class='chart-time-label' x='{first_x:.2f}' y='378' text-anchor='start'>{_time_label(candles[0].opened_at, series.timeframe)}</text>"
         f"<text class='chart-time-label' x='{first_x + (len(candles) - 1) * step:.2f}' y='378' text-anchor='end'>{_time_label(latest.opened_at, series.timeframe)}</text>"
@@ -374,7 +461,7 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     return (
         "<svg class='candlestick-chart' viewBox='0 0 1024 392' role='img' aria-label='唯讀 K 線、20MA、即時水平線與成交量'>"
         f"{grid}<line class='chart-current-line' x1='{left:.0f}' y1='{latest_y:.2f}' x2='{right:.0f}' y2='{latest_y:.2f}'/>"
-        f"<g class='chart-candles'>{''.join(bodies)}</g>{ma_line}<g class='chart-volumes'>{''.join(volumes)}</g>"
+        f"<g class='chart-candles'>{''.join(bodies)}</g>{ma_line}{range_lines}<g class='chart-volumes'>{''.join(volumes)}</g>"
         f"<text class='chart-volume-label' x='{left:.0f}' y='288'>成交量</text>{time_labels}"
         f"<g class='chart-crosshair' hidden><line class='chart-crosshair-x' x1='0' y1='{top:.2f}' x2='0' y2='{volume_bottom:.2f}'/><line class='chart-crosshair-y' x1='{left:.2f}' y1='0' x2='{right:.2f}' y2='0'/></g>"
         f"<g class='chart-hover-zones'>{''.join(hover_zones)}</g></svg>"
