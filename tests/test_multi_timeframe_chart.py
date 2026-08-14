@@ -59,6 +59,10 @@ def test_chart_page_renders_injected_candles_ma20_volume_and_summary() -> None:
     assert "class='chart-ma20'" in html and "class='chart-volumes'" in html
     assert "日 K｜價格在 20MA 上方｜均線上彎" in html
     assert "fixture-historical-bars" in html and "任何單一指標均不構成進出場訊號" in html
+    assert html.count("class='chart-hover-zone'") == 24
+    assert "data-high='125'" in html and "data-low='122'" in html
+    assert "data-ma20='114.5'" in html and "data-ma-label='20 日線'" in html
+    assert "class='chart-crosshair'" in html and "class='chart-tooltip'" in html
 
 
 def test_chart_page_renders_15m_reference_tab() -> None:
@@ -90,6 +94,7 @@ def test_sparse_live_series_keeps_candle_bodies_at_readable_width() -> None:
     assert "class='chart-current-line'" in html
     assert "最新收盤 102" in html
     assert "08/13 08:00" in html
+    assert "data-ma20=''" in html
 
 
 def test_chart_uses_live_quote_for_current_line_without_changing_candle_close() -> None:
@@ -185,3 +190,6 @@ def test_wsgi_serves_external_non_overlapping_chart_refresh_script() -> None:
     assert "window.setTimeout(refreshChart, REFRESH_INTERVAL_MS)" in script
     assert "refreshInFlight" in script
     assert "chart-summary" in script and "chart-panel" in script and "chart-footer" in script
+    assert 'document.addEventListener("pointermove"' in script
+    assert "zone.dataset.high" in script and "zone.dataset.low" in script
+    assert "zone.dataset.ma20" in script and "尚未形成" in script

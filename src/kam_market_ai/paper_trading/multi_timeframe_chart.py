@@ -158,6 +158,13 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
 
     bodies: list[str] = []
     volumes: list[str] = []
+    hover_zones: list[str] = []
+    ma_label = {
+        "15m": "20MA（15 分）",
+        "60m": "20MA（60 分）",
+        "1d": "20 日線",
+        "1w": "20 週線",
+    }[series.timeframe]
     for index, candle in enumerate(candles):
         x = first_x + index * step
         colour = "chart-up" if candle.close >= candle.open else "chart-down"
@@ -174,6 +181,21 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
         volume_height = candle.volume / max_volume * (volume_bottom - volume_top)
         volumes.append(
             f"<rect class='{colour}{forming}' x='{x - body_width / 2:.2f}' y='{volume_bottom - volume_height:.2f}' width='{body_width:.2f}' height='{volume_height:.2f}'/>"
+        )
+        ma_value = ma_values[index]
+        timestamp = _time_label(candle.opened_at, series.timeframe)
+        forming_state = (
+            "true" if (series.last_candle_is_forming and index == len(candles) - 1) else "false"
+        )
+        accessible_ma = (
+            f"{ma_label} {ma_value:,.2f}" if ma_value is not None else f"{ma_label} 尚未形成"
+        )
+        hover_zones.append(
+            f"<rect class='chart-hover-zone' tabindex='0' x='{x - step / 2:.2f}' y='{top:.2f}' width='{step:.2f}' height='{volume_bottom - top:.2f}' "
+            f"data-x='{x:.2f}' data-time='{timestamp}' data-open='{candle.open:.10g}' data-high='{candle.high:.10g}' "
+            f"data-low='{candle.low:.10g}' data-close='{candle.close:.10g}' data-volume='{candle.volume}' "
+            f"data-ma20='{'' if ma_value is None else f'{ma_value:.10g}'}' data-ma-label='{ma_label}' data-forming='{forming_state}' "
+            f"aria-label='{timestamp}，開盤 {candle.open:,.2f}，最高 {candle.high:,.2f}，最低 {candle.low:,.2f}，收盤 {candle.close:,.2f}，{accessible_ma}'/>"
         )
     points = [
         f"{first_x + index * step:.2f},{y(value):.2f}"
@@ -201,7 +223,9 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
         f"{grid}<line class='chart-current-line' x1='{left:.0f}' y1='{latest_y:.2f}' x2='{right:.0f}' y2='{latest_y:.2f}'/>"
         f"<text class='chart-current-price' x='976' y='{latest_y - 5:.2f}' text-anchor='end'>{price_label} {displayed_price:,.0f}</text>"
         f"<g class='chart-candles'>{''.join(bodies)}</g>{ma_line}<g class='chart-volumes'>{''.join(volumes)}</g>"
-        f"<text class='chart-volume-label' x='{left:.0f}' y='288'>成交量</text>{time_labels}</svg>"
+        f"<text class='chart-volume-label' x='{left:.0f}' y='288'>成交量</text>{time_labels}"
+        f"<g class='chart-crosshair' hidden><line class='chart-crosshair-x' x1='0' y1='{top:.2f}' x2='0' y2='{volume_bottom:.2f}'/><line class='chart-crosshair-y' x1='{left:.2f}' y1='0' x2='{right:.2f}' y2='0'/></g>"
+        f"<g class='chart-hover-zones'>{''.join(hover_zones)}</g></svg>"
     )
 
 
@@ -234,7 +258,7 @@ def render_multi_timeframe_chart_html(
     return f"""<!doctype html><html class='chart-page' lang='zh-Hant-TW'><head><meta charset='utf-8'><title>KAM 多週期 K 線</title><link rel='stylesheet' href='/static/operator.css'><script src='/static/chart-refresh.js' defer></script></head><body class='chart-page'><main class='chart-main'>
       <header><div><h1>多週期 K 線</h1><small>15 分・60 分・日・週｜唯讀市場結構檢視</small></div><a class='account-chip' href='/'>返回市場儀表板</a><span id='chart-live-status' class='chart-live-status' role='status' aria-live='polite'>每 3 秒更新・禁止真實下單</span></header>
       <nav class='chart-toolbar' aria-label='圖表商品與週期'>{instrument_tabs}<span class='chart-toolbar-divider'></span>{timeframe_tabs}</nav>
-      <div id='chart-summary' class='chart-summary'>{escape(status)}</div><section id='chart-panel' class='chart-panel'>{_chart_svg(series, ma_values)}</section>
+      <div id='chart-summary' class='chart-summary'>{escape(status)}</div><section id='chart-panel' class='chart-panel'>{_chart_svg(series, ma_values)}<div class='chart-tooltip' role='status' aria-live='polite' hidden></div></section>
       <aside class='chart-overlays' aria-label='圖表顯示項目'><span class='enabled'>K 線</span><span class='enabled'>20MA</span><span>上升趨勢線｜尚未接入</span><span>下降趨勢線｜尚未接入</span><span>支撐壓力｜尚未接入</span><span class='enabled'>成交量</span></aside>
       <footer id='chart-footer' class='chart-footer'><span>資料來源：{escape(series.source)}</span><span>K 線時間：{escape(updated)}</span><span>即時報價時間：{escape(quote_updated)}</span><span>資料不足時不補假資料</span><span>任何單一指標均不構成進出場訊號</span></footer>
     </main></body></html>"""
