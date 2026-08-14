@@ -266,10 +266,10 @@ def _timeframe_card(name: object, state: object, details: Mapping[str, object] |
         if condition is not None and bias is not None:
             interpretation = f"{bias}・{condition}"
     ma20 = details.get("ma20")
-    relation = {"above": "上方", "below": "下方", "equal": "貼近", "insufficient": "尚未形成"}.get(str(details.get("price_vs_ma20", "insufficient")), "資料不足")
+    relation = {"above": "在20MA上方", "below": "在20MA下方", "equal": "貼近20MA", "insufficient": "20MA尚未形成"}.get(str(details.get("price_vs_ma20", "insufficient")), "20MA資料不足")
     direction = {"rising": "上彎", "falling": "下彎", "flat": "走平", "insufficient": "尚未形成"}.get(str(details.get("ma20_direction", "insufficient")), "資料不足")
     try:
-        ma_text = f"（20MA {_display_price(ma20)}）" if ma20 is not None else ""
+        ma_text = f"（{_display_price(ma20)}）" if ma20 is not None else ""
     except (TypeError, ValueError):
         ma_text = ""
     resistance = _display_price(details.get("range_resistance"))
@@ -283,7 +283,7 @@ def _timeframe_card(name: object, state: object, details: Mapping[str, object] |
     return (
         "<article class='timeframe-card'>"
         f"<b>{escape(str(name))}</b>{status_code}<span>{escape(interpretation)}</span>"
-        f"<small>價格相對 20MA：{escape(relation + ma_text)}</small><small>20MA 方向：{escape(direction)}</small>"
+        f"<small>{escape(relation + ma_text)}</small><small>20MA 方向：{escape(direction)}</small>"
         f"<small class='timeframe-resistance'>{range_label}壓力：{escape(resistance)}</small>"
         f"<small class='timeframe-support'>{range_label}支撐：{escape(support)}</small></article>"
     )
@@ -494,8 +494,9 @@ def render_help_html() -> str:
     return """<!doctype html><html class='help-page' lang='zh-Hant-TW'><head><meta charset='utf-8'><title>KAM 使用說明｜SOP</title><link rel='stylesheet' href='/static/operator.css'></head><body class='help-page'><main class='help-main'>
       <header><div><h1>KAM 使用說明｜SOP</h1><small>先判斷、再等待；只有條件完整才行動</small></div><nav class='help-nav' aria-label='主要頁面'><a class='account-chip' href='/'>市場儀表板</a><a class='account-chip' href='/account'>期貨帳戶｜資金安全</a></nav><span>研究與模擬用途・禁止真實自動下單</span></header>
       <div class='help-banner'>KAM 是交易決策作業系統，不是承諾獲利的交易指示工具。它只清楚回答兩件事：當前是否具備交易條件，以及下一步應採取什麼行動。</div>
-      <nav class='help-toc' aria-label='本頁目錄'><a href='#daily-sop'>每日 SOP</a><a href='#read-order'>判讀順序</a><a href='#horizons'>週期與持有時間</a><a href='#rollover'>每月換倉</a><a href='#paper'>模擬紀錄</a><a href='#stop'>停止條件</a></nav>
+      <nav class='help-toc' aria-label='本頁目錄'><a href='#product-note'>商品點值與保證金</a><a href='#daily-sop'>每日 SOP</a><a href='#read-order'>判讀順序</a><a href='#horizons'>週期與持有時間</a><a href='#rollover'>每月換倉</a><a href='#paper'>模擬紀錄</a><a href='#stop'>停止條件</a></nav>
       <div class='help-content'>
+        <section id='product-note' class='help-section'><h2>商品點值與模擬原始保證金</h2><div class='help-grid'><article><b>大台 TX</b><p>每點 200 元<br>模擬原始保證金 701,000 元</p></article><article><b>小台 MTX</b><p>每點 50 元<br>模擬原始保證金 175,250 元</p></article><article><b>微台 TMF</b><p>每點 10 元<br>模擬原始保證金 35,050 元</p></article></div><p class='help-note'>以上為目前 Paper Trading 採用的模擬參數；交易所或券商調整保證金時，系統資料也必須同步更新。所有數值僅供模擬風控，不代表真實帳戶可用額度。</p></section>
         <section id='daily-sop' class='help-section'><h2>一、每日使用 SOP</h2><ol class='help-steps'>
           <li><strong>先確認資料。</strong><span>商品代碼、契約月份、台灣資料時間、日盤／夜盤及 WebSocket 狀態都正確；資料過期、中斷或契約不明時停止判讀。</span></li>
           <li><strong>先看長週期。</strong><span>週線決定大方向，日線確認目前是延伸、回檔或整理；長週期不清楚時，不用短週期猜方向。</span></li>
