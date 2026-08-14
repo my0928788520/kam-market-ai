@@ -451,7 +451,8 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
     frames = _frontend_timeframe_cards(demo.get("timeframes", ()), demo.get("timeframe_details"))
     control_label = _control_label(view, bull)
     audit = "".join(f"<li title='{escape(item['hash'])}'>{escape(item['type'])} · {escape(item['hash'][:10])}</li>" for item in view.audit_events[-3:])
-    proposal = "<section class='proposal'><h2>模擬委託建議</h2><dl>{}</dl></section>".format(_rows(view.proposal))
+    proposal_title = "自動 Paper 執行" if demo.get("automation_mode") == "AUTO PAPER" else "模擬委託建議"
+    proposal = f"<section class='proposal'><h2>{proposal_title}</h2><dl>{_rows(view.proposal)}</dl></section>"
     if snapshot.status is MarketSnapshotStatus.INVALID_PRODUCT:
         proposal = "<section class='proposal'><h2>模擬委託建議</h2><p>商品代碼無效，未載入模擬委託建議。</p></section>"
     disclaimer_lines = (
