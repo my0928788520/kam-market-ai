@@ -13,6 +13,23 @@ _RISK_LABELS = {
     "high": "高風險",
     "critical": "極高風險",
     "unknown": "資料不足",
+    "stale": "資料逾時",
+    "fresh": "資料正常",
+}
+_DIRECTION_LABELS = {
+    "HOLD": "觀望",
+    "NEUTRAL": "觀望",
+    "LONG": "偏多",
+    "SHORT": "偏空",
+    "BUY": "買進",
+    "SELL": "賣出",
+}
+_MARGIN_STATUS_LABELS = {
+    "no_position": "目前無部位",
+    "safe": "保證金安全",
+    "healthy": "保證金充足",
+    "maintenance_warning": "低於維持保證金",
+    "margin_call": "保證金追繳警示",
 }
 _PAPER_ACTION_LABELS = {
     "DISARMED": "尚未武裝",
@@ -59,7 +76,8 @@ def build_five_timeframe_operator_view(
     five_minute = analysis.get("5m")
     five_minute = five_minute if isinstance(five_minute, Mapping) else {}
 
-    direction = str(decision.get("direction", summary.get("direction", "觀望")))
+    raw_direction = str(decision.get("direction", summary.get("direction", "觀望")))
+    direction = _DIRECTION_LABELS.get(raw_direction.upper(), raw_direction)
     state_codes = []
     timeframes = []
     for key, label in _FRAME_LABELS:
@@ -126,7 +144,10 @@ def build_five_timeframe_operator_view(
     proposal = {
         "模式": "自動模擬" if paper_armed else "關閉",
         "狀態": paper_action_label,
-        "KAM 方向": str(paper.get("direction", direction)),
+        "KAM 方向": _DIRECTION_LABELS.get(
+            str(paper.get("direction", direction)).upper(),
+            str(paper.get("direction", direction)),
+        ),
         "阻擋原因": "、".join(
             _PAPER_REASON_LABELS.get(str(item), str(item)) for item in paper_reasons
         ) or "—",
@@ -142,7 +163,10 @@ def build_five_timeframe_operator_view(
         "目前模擬價": str(performance.get("current_price", "—")),
         "未實現損益": str(margin_state.get("unrealized_pnl", "0")),
         "已實現損益": str(performance.get("realized_pnl", "0")),
-        "保證金狀態": str(margin_state.get("status", "no_position")),
+        "保證金狀態": _MARGIN_STATUS_LABELS.get(
+            str(margin_state.get("status", "no_position")),
+            "資料待確認",
+        ),
     }
     ledger = {
         "cash": str(paper.get("cash_balance", "—")),
