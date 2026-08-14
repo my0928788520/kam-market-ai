@@ -358,26 +358,24 @@ def _recent_trend_anchors(
 
     rising = None
     neckline = None
-    w_legs = next(
-        (
-            (left, right)
-            for left, right in reversed(tuple(pairwise(recent_lows)))
-            if 3 <= right - left <= 16
-            and any(
-                right < later <= right + 20 and candles[later].low > candles[right].low
-                for later in recent_lows
-            )
-            and is_w_pair(left, right)
-        ),
-        None,
-    )
-    if w_legs is not None:
-        first_leg, second_leg = w_legs
+    w_candidates = [
+        (left, right)
+        for left, right in reversed(tuple(pairwise(recent_lows)))
+        if 3 <= right - left <= 16
+        and any(
+            right < later <= right + 20 and candles[later].low > candles[right].low
+            for later in recent_lows
+        )
+        and is_w_pair(left, right)
+    ]
+    if w_candidates:
+        first_leg, second_leg = w_candidates[0]
         neck_index = max(
             range(first_leg + 1, second_leg),
             key=lambda index: candles[index].high,
         )
         neckline = (candles[neck_index].opened_at, candles[neck_index].high)
+    for _first_leg, second_leg in w_candidates:
         later_higher_lows = [
             index
             for index in recent_lows
@@ -386,12 +384,28 @@ def _recent_trend_anchors(
         ]
         if later_higher_lows:
             right = later_higher_lows[-1]
-            rising = (
-                candles[second_leg].opened_at,
-                candles[second_leg].low,
-                candles[right].opened_at,
-                candles[right].low,
+            slope = (candles[right].low - candles[second_leg].low) / (
+                right - second_leg
             )
+            broken_by_bar = any(
+                candles[index].low
+                < candles[second_leg].low + slope * (index - second_leg)
+                for index in range(right + 1, len(candles))
+            )
+            live_index = len(candles) if series.last_candle_is_forming else len(candles) - 1
+            broken_live = (
+                series.current_price is not None
+                and series.current_price
+                < candles[second_leg].low + slope * (live_index - second_leg)
+            )
+            if not broken_by_bar and not broken_live:
+                rising = (
+                    candles[second_leg].opened_at,
+                    candles[second_leg].low,
+                    candles[right].opened_at,
+                    candles[right].low,
+                )
+                break
 
     falling = None
     if len(recent_highs) >= 2:
@@ -403,12 +417,23 @@ def _recent_trend_anchors(
         ]
         if later_lower_highs:
             right = later_lower_highs[-1]
-            falling = (
-                candles[base].opened_at,
-                candles[base].high,
-                candles[right].opened_at,
-                candles[right].high,
+            slope = (candles[right].high - candles[base].high) / (right - base)
+            broken_by_bar = any(
+                candles[index].high > candles[base].high + slope * (index - base)
+                for index in range(right + 1, len(candles))
             )
+            live_index = len(candles) if series.last_candle_is_forming else len(candles) - 1
+            broken_live = (
+                series.current_price is not None
+                and series.current_price > candles[base].high + slope * (live_index - base)
+            )
+            if not broken_by_bar and not broken_live:
+                falling = (
+                    candles[base].opened_at,
+                    candles[base].high,
+                    candles[right].opened_at,
+                    candles[right].high,
+                )
     return rising, falling, neckline
 
 
