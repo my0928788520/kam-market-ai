@@ -93,6 +93,12 @@ class LiveFiveTimeframeSnapshotRefresher:
         self._consecutive_failures = 0
         self._last_success_at: datetime | None = None
         self._last_failure_at: datetime | None = None
+        self._lock = threading.RLock()
+
+    def set_session(self, *, after_hours: bool) -> None:
+        with self._lock:
+            self.after_hours = bool(after_hours)
+            self.session = "afterhours" if after_hours else None
 
     @property
     def health(self) -> RefreshHealth:
@@ -105,18 +111,19 @@ class LiveFiveTimeframeSnapshotRefresher:
         )
 
     def refresh_once(self) -> dict[str, object]:
-        payload = self.verifier.run(
-            symbol=self.symbol,
-            session=self.session,
-            after_hours=self.after_hours,
-        )
-        write_five_timeframe_snapshot(self.snapshot_path, payload)
-        if self.on_success is not None:
-            self.on_success()
-        self._successful_refreshes += 1
-        self._consecutive_failures = 0
-        self._last_success_at = datetime.now(UTC)
-        return payload
+        with self._lock:
+            payload = self.verifier.run(
+                symbol=self.symbol,
+                session=self.session,
+                after_hours=self.after_hours,
+            )
+            write_five_timeframe_snapshot(self.snapshot_path, payload)
+            if self.on_success is not None:
+                self.on_success()
+            self._successful_refreshes += 1
+            self._consecutive_failures = 0
+            self._last_success_at = datetime.now(UTC)
+            return payload
 
     def refresh_safely(self) -> bool:
         """Retry on the next cycle without replacing the last verified snapshot."""
@@ -232,9 +239,10 @@ def main(
     if args.paper_journal == "debug/paper_trading/tmf_live_journal.json":
         args.paper_journal = f"debug/paper_trading/{product_slug}_live_journal.json"
 
-    resolver = VerifiedContractResolver(
-        (ResolvedFuturesContract(instrument, symbol, args.after_hours),)
-    )
+    resolver = VerifiedContractResolver((
+        ResolvedFuturesContract(instrument, symbol, False),
+        ResolvedFuturesContract(instrument, symbol, True),
+    ))
     pipeline = FubonFiveTimeframeCandlePipeline(
         FubonIntradayCandlesAdapter(result.clients, resolver),
     )
@@ -347,6 +355,40 @@ def main(
         snapshot_path=args.snapshot,
         on_success=capture_verified_refresh,
     )
+
+    session_switch_lock = threading.Lock()
+
+    def switch_session(requested: str) -> tuple[bool, str]:
+        if requested not in {"regular", "afterhours"}:
+            return False, "時段參數無效"
+        target_after_hours = requested == "afterhours"
+        with session_switch_lock:
+            previous = refresher.after_hours
+            if previous == target_after_hours:
+                return True, "已是日盤" if not previous else "已是夜盤"
+            paper_runtime.update({
+                "armed": False,
+                "action": "SWITCHING_SESSION",
+                "direction": "HOLD",
+                "reason_codes": ["SESSION_SWITCH_IN_PROGRESS"],
+            })
+            quote_source.set_after_hours(target_after_hours)
+            dashboard_market_source.set_after_hours(target_after_hours)
+            chart_source.set_after_hours(target_after_hours)
+            refresher.set_session(after_hours=target_after_hours)
+            if refresher.refresh_safely():
+                paper_runtime["armed"] = bool(args.paper_test_armed)
+                paper_runtime["action"] = "WAITING_FOR_KAM"
+                paper_runtime["reason_codes"] = ["KAM_CONDITION_NOT_MET"]
+                return True, "已切換夜盤" if target_after_hours else "已切換日盤"
+            quote_source.set_after_hours(previous)
+            dashboard_market_source.set_after_hours(previous)
+            chart_source.set_after_hours(previous)
+            refresher.set_session(after_hours=previous)
+            refresher.refresh_safely()
+            paper_runtime["action"] = "SESSION_SWITCH_FAILED"
+            paper_runtime["reason_codes"] = ["SESSION_DATA_VERIFICATION_FAILED"]
+            return False, "新時段資料驗證失敗，已維持原時段"
     print(
         json.dumps(
             {
@@ -435,6 +477,7 @@ def main(
             ),
             market_data_source=dashboard_market_source,
             chart_data_source=chart_source,
+            session_switcher=switch_session,
         )
 
         application = build_local_dashboard_router(operator_app, diagnostic_app)
