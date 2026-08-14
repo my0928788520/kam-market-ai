@@ -26,7 +26,9 @@ def test_chart_tooltip_stays_visible_long_enough_to_read() -> None:
     assert "hideChartTooltipLater(panel)" in script
     assert "document.hidden || isChartTooltipVisible()" in script
     assert 'event.key === "Escape"' in script
-    assert 'line.toggleAttribute("hidden", !enabledOverlays.has(line.dataset.chartOverlayLine))' in script
+    assert "renderManualDrawings();" in script
+    assert "window.localStorage.setItem(drawingStorageKey" in script
+    assert 'activeDrawingTool === "horizontal"' in script
 
 
 class FixtureChartSource:
@@ -67,7 +69,7 @@ def test_chart_page_is_fail_closed_without_historical_source() -> None:
     assert "每 3 秒更新" in html
     assert "id='chart-summary'" in html and "id='chart-panel'" in html
     assert "<svg class='candlestick-chart'" not in html
-    assert "上升趨勢｜錨點不足" in html and "支撐壓力｜資料不足" in html
+    assert "趨勢／頸線｜手動畫線" in html and "支撐壓力｜資料不足" in html
 
 
 def test_chart_page_shows_session_badges_from_source() -> None:
@@ -111,11 +113,12 @@ def test_chart_page_renders_injected_candles_ma20_volume_and_summary() -> None:
     assert "<span>20 棒上壓力</span><strong>125</strong>" in html
     assert "<span>20 棒下支撐</span><strong>103</strong>" in html
     assert "20 棒支撐壓力已更新" in html
-    assert "data-chart-overlay='resistance'" in html
-    assert "data-chart-overlay='support'" in html
-    assert "預設不顯示，需要時個別開啟" in html
-    assert "data-chart-overlay-line='resistance' hidden" in html
-    assert "data-chart-overlay-line='support' hidden" in html
+    assert "data-manual-tool='trend'" in html
+    assert "data-manual-tool='horizontal'" in html
+    assert "data-manual-action='undo'" in html
+    assert "data-manual-action='clear'" in html
+    assert "壓力／支撐自動顯示" in html
+    assert "chart-auto-level" in html and "chart-auto-level' hidden" not in html
     assert "class='chart-resistance-line'" in html
     assert "class='chart-support-line'" in html
     assert "上壓 125" in html and "下撐 103" in html
@@ -284,14 +287,10 @@ def test_chart_draws_dominant_w_rising_and_nearest_falling_trend_lines() -> None
         PivotSource().read_series("TMF", "60m")
     )
 
-    assert "class='chart-rising-trend-line'" in html
-    assert "class='chart-falling-trend-line'" in html
-    assert "data-chart-overlay='rising'" in html
-    assert "data-chart-overlay='falling'" in html
-    assert "data-chart-overlay='neckline'" in html
-    assert "class='chart-neckline'" in html
-    assert ">上升趨勢</text>" in html
-    assert ">下降趨勢</text>" in html
+    assert "class='chart-rising-trend-line'" not in html
+    assert "class='chart-falling-trend-line'" not in html
+    assert "class='chart-neckline'" not in html
+    assert "class='chart-manual-drawings'" in html
     assert rising is not None and rising[1:] == (10, start + timedelta(hours=12), 14)
     assert falling is not None and falling[1:] == (23, start + timedelta(hours=12), 22)
     assert neckline == (start + timedelta(hours=4), 25)
@@ -328,7 +327,6 @@ def test_old_resistance_is_not_mislabeled_as_w_neckline_without_right_recovery()
     )
 
     assert neckline is None
-    assert "W 頸線不足" in html
     assert "class='chart-neckline'" not in html
 
 
@@ -384,7 +382,6 @@ def test_broken_rising_trend_is_removed_until_a_new_structure_forms() -> None:
 
     assert rising is None
     assert neckline is not None
-    assert "上升趨勢不足" in html
     assert "class='chart-rising-trend-line'" not in html
 
 
