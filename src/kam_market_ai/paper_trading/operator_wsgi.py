@@ -144,6 +144,33 @@ def _timeframe_card(name: object, state: object, details: Mapping[str, object] |
         "偏空": ("BD", "空方健康"),
     }.get(raw, ("—", raw))
     details = details or {}
+    frame_status = str(details.get("status", ""))
+    if code.endswith("D"):
+        condition = {
+            "ambiguous": "結構待確認",
+            "unavailable": "資料不足",
+            "insufficient": "資料不足",
+            "invalid": "資料異常",
+            "stale": "資料失效",
+        }.get(frame_status)
+        bias = {"A": "偏多", "N": "中性", "B": "偏空"}.get(code[:1])
+        if frame_status == "ambiguous":
+            observed = {
+                str(details.get("position", "")),
+                str(details.get("trend", "")),
+            }
+            if observed == {"bullish"}:
+                bias = "偏多觀察"
+            elif observed == {"bearish"}:
+                bias = "偏空觀察"
+            elif "bullish" in observed and "bearish" not in observed:
+                bias = "偏多傾向"
+            elif "bearish" in observed and "bullish" not in observed:
+                bias = "偏空傾向"
+            elif "bullish" in observed and "bearish" in observed:
+                bias = "方向分歧"
+        if condition is not None and bias is not None:
+            interpretation = f"{bias}・{condition}"
     ma20 = details.get("ma20")
     relation = {"above": "上方", "below": "下方", "equal": "貼近", "insufficient": "尚未形成"}.get(str(details.get("price_vs_ma20", "insufficient")), "資料不足")
     direction = {"rising": "上彎", "falling": "下彎", "flat": "走平", "insufficient": "尚未形成"}.get(str(details.get("ma20_direction", "insufficient")), "資料不足")

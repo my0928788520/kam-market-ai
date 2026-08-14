@@ -13,6 +13,11 @@ def test_live_five_timeframe_uses_established_kam_operator_ui() -> None:
         "analysis_preview": {
             "three_second_summary": {"headline": "日週線形成中", "direction": "觀望"},
             "timeframes": {
+                "1w": {
+                    "status": "ambiguous",
+                    "position": "bullish",
+                    "trend": "bullish",
+                },
                 "1d": {
                     "ma20": 45700,
                     "price_vs_ma20": "above",
@@ -47,6 +52,7 @@ def test_live_five_timeframe_uses_established_kam_operator_ui() -> None:
     assert "多方 4｜空方 0｜未確認 6" in page
     assert "價格相對 20MA：上方（20MA 45,700）" in page
     assert "20MA 方向：上彎" in page
+    assert "偏多觀察・結構待確認" in page
     assert page.count("control-cell unconfirmed") == 6
     assert "風險</dt><dd>不可判讀" in page
     assert "禁止真實下單" in page

@@ -336,7 +336,7 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
 
     assert '@import "../../ui/design_tokens.css"' in css
     assert "height: 100vh" in css and "overflow: hidden" in css
-    assert "grid-template-rows: minmax(160px, 205px) minmax(110px, 128px) minmax(96px, 110px) minmax(0, 1fr)" in css
+    assert "grid-template-rows: minmax(142px, 178px) minmax(144px, 146px) minmax(96px, 110px) minmax(0, 1fr)" in css
     assert "footer { grid-row: 4; position: static;" in css
     assert ".risk-disclaimer" in css and ".footer-metrics" in css
     assert "font-size: 11px" in css and ".risk-disclaimer span { display: block; }" in css
@@ -344,17 +344,20 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert "marker-breathe 5s" in css
     assert ".proposal dd, .matching dd" in css and "text-overflow: ellipsis" in css
     assert "grid-template-columns: repeat(4, minmax(0, 1fr))" in css
-    assert ".timeframes { grid-column: 1 / 3; grid-row: 2; padding: 8px 13px; }" in css
-    assert ".timeframes h2 { margin-bottom: 5px; }" in css
-    assert ".timeframe-card { padding: 5px 7px; overflow: hidden;" in css
-    assert ".timeframe-card small { display: block; margin: 0;" in css
+    assert ".timeframes { grid-column: 1 / 3; grid-row: 2; padding: 7px 12px 10px; }" in css
+    assert ".timeframes h2 { margin-bottom: 6px; color: #f5f8ff; font-size: 15px;" in css
+    assert ".timeframe-card { padding: 7px 9px; overflow: hidden;" in css
+    assert ".timeframe-card small { display: block; margin: 1px 0 0;" in css
+    assert ".timeframe-card b { display: block; color: #f8fbff; font-size: 16px;" in css
+    assert ".timeframe-card strong { font-size: 22px;" in css
+    assert ".timeframe-card span { display: block; color: #ffffff; font-size: 12px;" in css
     assert ".trend-health-card { grid-column: 1; grid-row: 3; }" in css
     assert ".position-card { grid-column: 2; grid-row: 3; }" in css
     assert ".next-card { grid-column: 3; grid-row: 3;" in css
     assert ".control-cells-unscored" in css
     assert ".control-cell.unconfirmed" in css
     assert "@media (max-height: 650px) and (min-width: 1001px)" in css
-    assert "grid-template-rows: minmax(130px, 150px) minmax(110px, 116px) minmax(78px, 88px) minmax(0, 1fr)" in css
+    assert "grid-template-rows: minmax(118px, 132px) minmax(122px, 132px) minmax(78px, 88px) minmax(0, 1fr)" in css
     assert "justify-content: center" in css and "border-radius: 7px" in css
     bull_rule = css.split(".control-cell.bull", 1)[1].split(".control-cell.bear", 1)[0]
     bear_rule = css.split(".control-cell.bear", 1)[1]
