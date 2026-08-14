@@ -246,7 +246,9 @@ def test_live_dashboard_shows_real_quote_but_never_offline_decision_or_proposal(
     for text in ("偏多假資料", "BUY_FIXTURE", "FILLED_FIXTURE", "多單假資料", "買進假資料"):
         assert text not in html
     assert "title='FUTURE_LIVE'" in html
-    assert "http-equiv='refresh' content='3'" in html
+    assert "http-equiv='refresh'" not in html
+    assert "<script src='/static/dashboard-refresh.js' defer></script>" in html
+    assert "id='dashboard-live-status'" in html
     provider.close()  # type: ignore[attr-defined]
 
 

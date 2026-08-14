@@ -88,4 +88,7 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
 .chart-live-status { color: #9adfca; transition: color 160ms ease; }
 .chart-live-status[data-state='refreshing'] { color: #f2ce86; }
 .chart-live-status[data-state='error'] { color: #ff9a83; }
+.dashboard-live-status { color: #9adfca; font-size: 10px; transition: color 160ms ease; }
+.dashboard-live-status[data-state='refreshing'] { color: #f2ce86; }
+.dashboard-live-status[data-state='error'] { color: #ff9a83; }
 @media (max-width: 760px) { .chart-main { grid-template-rows: auto; }.chart-toolbar { flex-wrap: wrap; }.chart-toolbar-divider { display: none; }.chart-panel { min-height: 360px; padding: 5px; }.chart-footer { align-items: start; flex-direction: column; } }

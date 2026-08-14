@@ -432,6 +432,7 @@ def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], a
     chart_data_source = chart_data_source or EMPTY_CHART_DATA_SOURCE
     css_path = Path(__file__).with_name("static") / "operator.css"
     chart_refresh_path = Path(__file__).with_name("static") / "chart-refresh.js"
+    dashboard_refresh_path = Path(__file__).with_name("static") / "dashboard-refresh.js"
     def app(environ: dict[str, object], start_response: Callable[..., object]) -> Iterable[bytes]:
         path, method = str(environ.get("PATH_INFO", "/")), str(environ.get("REQUEST_METHOD", "GET"))
         headers = [("Content-Security-Policy", public_embed_config.content_security_policy), ("X-Content-Type-Options", "nosniff"), ("Referrer-Policy", "strict-origin-when-cross-origin"), ("Permissions-Policy", "geolocation=(), camera=(), microphone=()"), ("Cache-Control", "no-store")]
@@ -454,6 +455,8 @@ def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], a
             start_response("200 OK", [("Content-Type", "text/css; charset=utf-8")]); return [css_path.read_bytes()]
         if path == "/static/chart-refresh.js":
             start_response("200 OK", [("Content-Type", "text/javascript; charset=utf-8"), *headers]); return [chart_refresh_path.read_bytes()]
+        if path == "/static/dashboard-refresh.js":
+            start_response("200 OK", [("Content-Type", "text/javascript; charset=utf-8"), *headers]); return [dashboard_refresh_path.read_bytes()]
         if path == "/embed":
             if not public_embed_config.enable_embed:
                 start_response("404 Not Found", [("Content-Type", "text/plain; charset=utf-8"), *headers]); return [b"Not found"]
@@ -506,6 +509,16 @@ def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], a
             )
             body = body.replace("離線示範行情｜", label + "｜", 1)
             body = body.replace("title='OFFLINE_DEMO'", "title='FUTURE_LIVE'", 1)
-            body = body.replace("</head>", "<meta http-equiv='refresh' content='3'></head>", 1)
+            body = body.replace(
+                "</head>",
+                "<script src='/static/dashboard-refresh.js' defer></script></head>",
+                1,
+            )
+            body = body.replace(
+                "</header>",
+                "<span id='dashboard-live-status' class='dashboard-live-status' "
+                "role='status' aria-live='polite'>每 3 秒更新</span></header>",
+                1,
+            )
         body = body.encode(); start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"), ("Content-Length", str(len(body)))]); return [body]
     return app

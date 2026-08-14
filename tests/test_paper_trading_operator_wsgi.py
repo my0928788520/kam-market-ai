@@ -210,6 +210,26 @@ def test_terminal_header_uses_read_only_market_snapshots_and_get_instrument_sele
     assert response["status"] == "405 Method Not Allowed"
 
 
+def test_wsgi_serves_non_overlapping_dashboard_refresh_script() -> None:
+    app = build_operator_wsgi(_view)
+    response = {}
+    start = lambda status, headers: response.update(status=status, headers=headers)
+
+    script = b"".join(
+        app(
+            {"REQUEST_METHOD": "GET", "PATH_INFO": "/static/dashboard-refresh.js"},
+            start,
+        )
+    ).decode()
+
+    assert response["status"] == "200 OK"
+    assert ("Content-Type", "text/javascript; charset=utf-8") in response["headers"]
+    assert "fetch(window.location.href" in script
+    assert "window.setTimeout(refreshDashboard, REFRESH_INTERVAL_MS)" in script
+    assert "refreshInFlight" in script
+    assert '".dashboard"' in script and '"main > footer"' in script
+
+
 def test_market_status_time_is_explicitly_converted_to_taipei() -> None:
     tmf = OFFLINE_DEMO_MARKET_DATA_SOURCE.read_snapshot("TMF")
     html = render_operator_html(_view(), tmf)
