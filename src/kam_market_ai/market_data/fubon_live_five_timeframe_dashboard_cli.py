@@ -187,6 +187,7 @@ def main(
         "mode": "local_read_only_five_timeframe_dashboard",
         "url": f"http://{args.host}:{args.port}/five-timeframe",
         "api_url": f"http://{args.host}:{args.port}/api/five-timeframe",
+        "health_url": f"http://{args.host}:{args.port}/api/five-timeframe/health",
         "refresh_seconds": args.refresh_seconds,
         "symbol": symbol,
         "trading_enabled": False,
@@ -199,6 +200,7 @@ def main(
             DashboardApp(
                 five_timeframe_snapshot_path=args.snapshot,
                 five_timeframe_max_age_seconds=max(180, args.refresh_seconds * 3),
+                five_timeframe_health_provider=lambda: refresher.health.safe_payload(),
             ),
         ) as server:
             if args.open_browser:
