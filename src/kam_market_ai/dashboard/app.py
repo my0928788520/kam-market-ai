@@ -144,12 +144,13 @@ def render_five_timeframe_html(payload: dict[str, object]) -> str:
 
 
 class DashboardApp:
-    def __init__(self, snapshot_path: str | Path = "debug/position/dashboard_position_snapshot.json", *, five_timeframe_snapshot_path: str | Path | None = None, five_timeframe_max_age_seconds: int = 180, presenter: DashboardPresenterView | None = None, ui_config: DashboardUIConfig | None = None, adapter_config: DashboardWSGIAdapterConfig | None = None) -> None:
+    def __init__(self, snapshot_path: str | Path = "debug/position/dashboard_position_snapshot.json", *, five_timeframe_snapshot_path: str | Path | None = None, five_timeframe_max_age_seconds: int = 180, five_timeframe_health_provider: Callable[[], dict[str, object]] | None = None, presenter: DashboardPresenterView | None = None, ui_config: DashboardUIConfig | None = None, adapter_config: DashboardWSGIAdapterConfig | None = None) -> None:
         self.snapshot_path = Path(snapshot_path)
         self.five_timeframe_snapshot_path = Path(five_timeframe_snapshot_path) if five_timeframe_snapshot_path else None
         if five_timeframe_max_age_seconds <= 0:
             raise ValueError("five_timeframe_max_age_seconds must be positive")
         self.five_timeframe_max_age_seconds = five_timeframe_max_age_seconds
+        self.five_timeframe_health_provider = five_timeframe_health_provider
         self.presenter = presenter
         self.ui_config = ui_config or DashboardUIConfig.provisional()
         self.adapter_config = adapter_config or DashboardWSGIAdapterConfig.provisional()
@@ -176,6 +177,33 @@ class DashboardApp:
                 payload = {
                     "success": False,
                     "status": "SNAPSHOT_UNAVAILABLE",
+                    "market_data_only": True,
+                    "trading_enabled": False,
+                    "live_order_allowed": False,
+                }
+                status = "503 Service Unavailable"
+            body = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+            start_response(status, [("Content-Type", "application/json; charset=utf-8"), ("Cache-Control", "no-store"), ("Content-Length", str(len(body)))])
+            return [body]
+        if path == "/api/five-timeframe/health":
+            try:
+                if self.five_timeframe_health_provider is None:
+                    raise ValueError("HEALTH_PROVIDER_UNAVAILABLE")
+                payload = dict(self.five_timeframe_health_provider())
+                if payload.get("status") not in {"READY", "DEGRADED"}:
+                    raise ValueError("HEALTH_STATUS_INVALID")
+                payload.update({
+                    "success": payload["status"] == "READY",
+                    "market_data_only": True,
+                    "trading_enabled": False,
+                    "live_order_allowed": False,
+                })
+                status = "200 OK" if payload["success"] else "503 Service Unavailable"
+            except Exception:  # noqa: BLE001
+                payload = {
+                    "success": False,
+                    "status": "DEGRADED",
+                    "failure_stage": "HEALTH_UNAVAILABLE",
                     "market_data_only": True,
                     "trading_enabled": False,
                     "live_order_allowed": False,
