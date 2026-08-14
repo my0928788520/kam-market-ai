@@ -238,8 +238,8 @@ def test_chart_pressure_and_support_exclude_forming_candle() -> None:
 
 def test_chart_draws_latest_rising_and_falling_pivot_trend_lines() -> None:
     start = datetime(2026, 8, 1, tzinfo=UTC)
-    lows = (10, 11, 8, 12, 13, 14, 10, 15, 14, 16, 17)
-    highs = (20, 21, 18, 23, 25, 22, 19, 21, 23, 20, 19)
+    lows = (10, 11, 8, 12, 13, 14, 10, 15, 14, 16, 11, 15, 14, 16, 17)
+    highs = (20, 21, 18, 23, 25, 22, 19, 21, 23, 20, 19, 21, 22, 20, 19)
 
     class PivotSource:
         def read_series(self, instrument: str, timeframe: str) -> ChartSeries:
@@ -257,16 +257,21 @@ def test_chart_draws_latest_rising_and_falling_pivot_trend_lines() -> None:
             return ChartSeries(instrument, timeframe, candles, "pivot-fixture", candles[-1].opened_at)
 
     html = render_multi_timeframe_chart_html(PivotSource(), timeframe="60m")
-    rising, falling = _recent_trend_anchors(PivotSource().read_series("TMF", "60m"))
+    rising, falling, neckline = _recent_trend_anchors(
+        PivotSource().read_series("TMF", "60m")
+    )
 
     assert "class='chart-rising-trend-line'" in html
     assert "class='chart-falling-trend-line'" in html
     assert "data-chart-overlay='rising'" in html
     assert "data-chart-overlay='falling'" in html
+    assert "data-chart-overlay='neckline'" in html
+    assert "class='chart-neckline'" in html
     assert ">上升趨勢</text>" in html
     assert ">下降趨勢</text>" in html
-    assert rising is not None and rising[1:] == (8, start + timedelta(hours=6), 10)
-    assert falling is not None and falling[1:] == (25, start + timedelta(hours=8), 23)
+    assert rising is not None and rising[1:] == (10, start + timedelta(hours=10), 11)
+    assert falling is not None and falling[1:] == (25, start + timedelta(hours=12), 22)
+    assert neckline == (start + timedelta(hours=4), 25)
 
 
 @pytest.mark.parametrize("instrument,timeframe", [("BAD", "60m"), ("TMF", "5m")])
