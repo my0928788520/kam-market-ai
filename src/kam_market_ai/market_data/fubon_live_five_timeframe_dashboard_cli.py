@@ -20,8 +20,13 @@ from kam_market_ai.authorization.bootstrap import (
 )
 from kam_market_ai.config import Settings, UnsafeConfigurationError
 from kam_market_ai.dashboard.app import DashboardApp
+from kam_market_ai.live_read_only.five_timeframe_operator_view import (
+    build_five_timeframe_operator_view,
+)
 from kam_market_ai.live_read_only.five_timeframe_snapshot import write_five_timeframe_snapshot
+from kam_market_ai.live_read_only.five_timeframe_snapshot import read_five_timeframe_snapshot
 from kam_market_ai.models import Instrument
+from kam_market_ai.paper_trading.operator_app import create_operator_app
 
 from .fubon_five_timeframe_pipeline import FubonFiveTimeframeCandlePipeline
 from .fubon_live_five_timeframe_verifier import FubonLiveFiveTimeframeVerifier
@@ -185,7 +190,7 @@ def main(
     print(json.dumps({
         "success": True,
         "mode": "local_read_only_five_timeframe_dashboard",
-        "url": f"http://{args.host}:{args.port}/five-timeframe",
+        "url": f"http://{args.host}:{args.port}/",
         "api_url": f"http://{args.host}:{args.port}/api/five-timeframe",
         "health_url": f"http://{args.host}:{args.port}/api/five-timeframe/health",
         "refresh_seconds": args.refresh_seconds,
@@ -194,17 +199,29 @@ def main(
         "live_order_allowed": False,
     }, ensure_ascii=False))
     try:
+        diagnostic_app = DashboardApp(
+            five_timeframe_snapshot_path=args.snapshot,
+            five_timeframe_max_age_seconds=max(180, args.refresh_seconds * 3),
+            five_timeframe_health_provider=lambda: refresher.health.safe_payload(),
+        )
+        operator_app = create_operator_app(
+            lambda: build_five_timeframe_operator_view(
+                read_five_timeframe_snapshot(args.snapshot)
+            )
+        )
+
+        def application(environ, start_response):
+            if str(environ.get("PATH_INFO", "/")) == "/":
+                return operator_app(environ, start_response)
+            return diagnostic_app(environ, start_response)
+
         with make_server(
             args.host,
             args.port,
-            DashboardApp(
-                five_timeframe_snapshot_path=args.snapshot,
-                five_timeframe_max_age_seconds=max(180, args.refresh_seconds * 3),
-                five_timeframe_health_provider=lambda: refresher.health.safe_payload(),
-            ),
+            application,
         ) as server:
             if args.open_browser:
-                webbrowser.open(f"http://{args.host}:{args.port}/five-timeframe")
+                webbrowser.open(f"http://{args.host}:{args.port}/")
             server.serve_forever()
     except KeyboardInterrupt:
         return 0
