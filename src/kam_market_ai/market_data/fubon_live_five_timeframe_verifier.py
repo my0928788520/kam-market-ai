@@ -12,9 +12,16 @@ from kam_market_ai.live_read_only.five_timeframe_analysis_preview import (
 from kam_market_ai.models import Instrument
 
 from .fubon_five_timeframe_pipeline import (
+    CompleteFiveTimeframeCandleResult,
     FiveTimeframe,
+    FiveTimeframeCandleResult,
     FubonFiveTimeframeCandlePipeline,
     complete_with_verified_higher_timeframes,
+)
+from .taifex_official_history import (
+    TaifexOfficialHistoryError,
+    TaifexOfficialHistoryResult,
+    TaifexOfficialHistorySource,
 )
 from .verified_higher_timeframe_batch import (
     ClassifiedSourceCandle,
@@ -39,14 +46,28 @@ class CandleClassification:
 class FubonLiveFiveTimeframeVerifier:
     """Fetch exactly three TMF slices and fail closed without full attestation."""
 
-    def __init__(self, pipeline: FubonFiveTimeframeCandlePipeline) -> None:
+    def __init__(
+        self,
+        pipeline: FubonFiveTimeframeCandlePipeline,
+        higher_timeframe_source: TaifexOfficialHistorySource | None = None,
+    ) -> None:
         if not isinstance(pipeline, FubonFiveTimeframeCandlePipeline):
             raise TypeError("FubonFiveTimeframeCandlePipeline is required")
+        if higher_timeframe_source is not None and not isinstance(
+            higher_timeframe_source,
+            TaifexOfficialHistorySource,
+        ):
+            raise TypeError("TaifexOfficialHistorySource is required")
         self._pipeline = pipeline
-        self._latest_candle_result = None
+        self._higher_timeframe_source = higher_timeframe_source
+        self._latest_candle_result: (
+            CompleteFiveTimeframeCandleResult | FiveTimeframeCandleResult | None
+        ) = None
 
     @property
-    def latest_candle_result(self):
+    def latest_candle_result(
+        self,
+    ) -> CompleteFiveTimeframeCandleResult | FiveTimeframeCandleResult | None:
         """Latest immutable result for local read-only chart rendering only."""
         return self._latest_candle_result
 
@@ -71,6 +92,9 @@ class FubonLiveFiveTimeframeVerifier:
         self._latest_candle_result = partial
         source = partial.series[FiveTimeframe.M60]
         starts = tuple(candle.start for candle in source)
+        observed_at = verified_at or datetime.now(UTC)
+        if observed_at.tzinfo is None or observed_at.utcoffset() is None:
+            raise ValueError("LIVE_VERIFIER_VERIFIED_AT_TIMEZONE_REQUIRED")
         base = {
             **partial.safe_payload(),
             "success": False,
@@ -87,18 +111,65 @@ class FubonLiveFiveTimeframeVerifier:
             "live_order_allowed": False,
         }
         if not classifications and not complete_trading_dates and not complete_week_starts:
+            if self._higher_timeframe_source is not None:
+                try:
+                    official = self._higher_timeframe_source.fetch(
+                        observed_at=observed_at,
+                        after_hours=after_hours,
+                    )
+                    complete = complete_with_verified_higher_timeframes(
+                        _merge_official_intraday_history(partial, official, observed_at),
+                        official.higher_timeframes,
+                    )
+                except (TaifexOfficialHistoryError, TypeError, ValueError):
+                    base["higher_timeframe_status"] = "OFFICIAL_HISTORY_UNAVAILABLE"
+                    base["higher_timeframe_source_kind"] = (
+                        "TAIFEX_OFFICIAL_REGULAR_SESSION_HISTORY"
+                    )
+                    base["higher_timeframe_failure_safe"] = True
+                else:
+                    self._latest_candle_result = complete
+                    payload = complete.safe_payload()
+                    payload.update({
+                        "source_kind": (
+                            "FUBON_LIVE_INTRADAY_PLUS_TAIFEX_OFFICIAL_HISTORY"
+                        ),
+                        "symbol": symbol,
+                        "source_timeframe": "60m",
+                        "source_candle_starts": [item.isoformat() for item in starts],
+                        "source_candle_count": len(starts),
+                        "external_endpoint_call_count": 3,
+                        "fubon_endpoint_call_count": 3,
+                        "taifex_history": official.safe_payload(),
+                        "verified_trading_dates": [
+                            item.isoformat()
+                            for item in official.source_trading_dates
+                        ],
+                        "verified_week_starts": [
+                            item.week_start.isoformat()
+                            for item in official.higher_timeframes.weeks
+                        ],
+                        "credentials_loaded": True,
+                        "account_connected": False,
+                        "broker_connected": False,
+                        "live_order_allowed": False,
+                    })
+                    analysis_preview = build_verified_five_timeframe_analysis_preview(
+                        complete,
+                        evaluated_at=observed_at,
+                    ).safe_payload()
+                    payload["analysis_preview"] = analysis_preview
+                    payload["decision_preview"] = analysis_preview["kam_rule_decision"]
+                    return payload
             analysis_preview = build_verified_five_timeframe_analysis_preview(
                 partial,
-                evaluated_at=datetime.now(UTC),
+                evaluated_at=observed_at,
             ).safe_payload()
             base["analysis_preview"] = analysis_preview
             base["decision_preview"] = analysis_preview["kam_rule_decision"]
             return base
         if not classifications or not complete_trading_dates or not complete_week_starts:
             raise ValueError("LIVE_VERIFIER_COMPLETE_ATTESTATION_REQUIRED")
-        observed_at = verified_at or datetime.now(UTC)
-        if observed_at.tzinfo is None or observed_at.utcoffset() is None:
-            raise ValueError("LIVE_VERIFIER_VERIFIED_AT_TIMEZONE_REQUIRED")
         local_date = observed_at.astimezone(ZoneInfo("Asia/Taipei")).date()
         if any(item >= local_date for item in complete_trading_dates):
             raise ValueError("LIVE_VERIFIER_CURRENT_TRADING_DATE_CANNOT_BE_COMPLETE")
@@ -143,11 +214,46 @@ class FubonLiveFiveTimeframeVerifier:
         })
         analysis_preview = build_verified_five_timeframe_analysis_preview(
             complete,
-            evaluated_at=datetime.now(UTC),
+            evaluated_at=observed_at,
         ).safe_payload()
         payload["analysis_preview"] = analysis_preview
         payload["decision_preview"] = analysis_preview["kam_rule_decision"]
         return payload
+
+
+def _merge_official_intraday_history(
+    partial: FiveTimeframeCandleResult,
+    official: TaifexOfficialHistoryResult,
+    observed_at: datetime,
+) -> FiveTimeframeCandleResult:
+    """Prepend only closed official bars to the three current Fubon slices."""
+    local_date = observed_at.astimezone(ZoneInfo("Asia/Taipei")).date()
+    series = {}
+    for timeframe in (FiveTimeframe.M5, FiveTimeframe.M15, FiveTimeframe.M60):
+        closed_live = tuple(
+            candle for candle in partial.series[timeframe]
+            if candle.end <= observed_at
+        )
+        if not closed_live:
+            raise ValueError("LIVE_VERIFIER_CLOSED_INTRADAY_CANDLE_REQUIRED")
+        combined = (*official.intraday_series[timeframe], *closed_live)
+        if any(candle.start.astimezone(ZoneInfo("Asia/Taipei")).date() >= local_date
+               for candle in official.intraday_series[timeframe]):
+            raise ValueError("LIVE_VERIFIER_OFFICIAL_HISTORY_CONTAINS_CURRENT_DATE")
+        by_start = {candle.start: candle for candle in combined}
+        if len(by_start) != len(combined):
+            raise ValueError("LIVE_VERIFIER_OFFICIAL_HISTORY_OVERLAP")
+        ordered = tuple(by_start[start] for start in sorted(by_start))
+        if any(candle.instrument is not partial.instrument for candle in ordered):
+            raise ValueError("LIVE_VERIFIER_OFFICIAL_HISTORY_INSTRUMENT_MISMATCH")
+        series[timeframe] = ordered
+    return FiveTimeframeCandleResult(
+        instrument=partial.instrument,
+        session=partial.session,
+        series=series,
+        missing_timeframes=partial.missing_timeframes,
+        endpoint_call_count=partial.endpoint_call_count,
+    )
 
 
 __all__ = ["CandleClassification", "FubonLiveFiveTimeframeVerifier"]

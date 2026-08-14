@@ -7,8 +7,8 @@ decision.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, replace
+from datetime import datetime, timedelta
 
 from kam_market_ai.analysis.position_engine import (
     PositionEngineConfig,
@@ -65,6 +65,29 @@ _ENGINE_TIMEFRAMES = {
 }
 
 
+def _five_timeframe_timing_config() -> TimingEngineConfig:
+    """Keep every frame usable until its existing hard stale threshold.
+
+    The generic provisional timing defaults mark a closed daily bar as delayed
+    before the next regular session opens and a closed weekly bar as delayed
+    during the following week.  The KAM mapper treats delayed as degraded, so
+    those defaults make a verified five-timeframe ``AU`` state unreachable.
+    This profile preserves the original hard stale limits while reserving the
+    delayed band for the final minute/hour/day before each limit.
+    """
+    config = TimingEngineConfig.provisional()
+    return replace(
+        config,
+        delayed_after_by_timeframe={
+            PositionTimeframe.M5: timedelta(minutes=9),
+            PositionTimeframe.M15: timedelta(minutes=29),
+            PositionTimeframe.M60: timedelta(minutes=119),
+            PositionTimeframe.D1: timedelta(hours=47),
+            PositionTimeframe.W1: timedelta(days=13),
+        },
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class VerifiedFiveTimeframeAnalysisPreview:
     evaluated_at: datetime
@@ -112,17 +135,17 @@ def build_verified_five_timeframe_analysis_preview(
     provisional = isinstance(value, FiveTimeframeCandleResult)
     series = dict(value.series)
     if provisional:
-        source = series[FiveTimeframe.M60]
-        first, last = source[0], source[-1]
+        forming_source = series[FiveTimeframe.M60]
+        first, last = forming_source[0], forming_source[-1]
         forming = Candle(
             instrument=first.instrument,
             start=first.start,
             end=last.end,
             open=first.open,
-            high=max(item.high for item in source),
-            low=min(item.low for item in source),
+            high=max(item.high for item in forming_source),
+            low=min(item.low for item in forming_source),
             close=last.close,
-            volume=sum(item.volume for item in source),
+            volume=sum(item.volume for item in forming_source),
         )
         series[FiveTimeframe.DAY] = (forming,)
         series[FiveTimeframe.WEEK] = (forming,)
@@ -155,7 +178,7 @@ def build_verified_five_timeframe_analysis_preview(
     timing = evaluate_all_timings(
         candles,
         evaluated_at,
-        TimingEngineConfig.provisional(),
+        _five_timeframe_timing_config(),
     )
     contract = build_decision_input_contract(
         position,
@@ -178,9 +201,9 @@ def build_verified_five_timeframe_analysis_preview(
     )
 
     analysis: dict[str, dict[str, object]] = {}
-    for source, engine in _ENGINE_TIMEFRAMES.items():
+    for source_timeframe, engine in _ENGINE_TIMEFRAMES.items():
         frame = contract.timeframes[engine]
-        analysis[source.value] = {
+        analysis[source_timeframe.value] = {
             "status": frame.input_status.value,
             "usable": frame.usable,
             "position": frame.position.normalized_state.value,

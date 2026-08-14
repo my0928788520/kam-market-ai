@@ -10,6 +10,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from wsgiref.simple_server import make_server
 
 from kam_market_ai.authorization.bootstrap import (
@@ -43,6 +44,7 @@ from .fubon_neo import (
     VerifiedContractResolver,
 )
 from .fubon_tmf_contract_probe import FubonTmfContractProbe
+from .taifex_official_history import TaifexOfficialHistorySource
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,7 +124,7 @@ class LiveFiveTimeframeSnapshotRefresher:
         return True
 
 
-def build_local_dashboard_router(operator_app, diagnostic_app):
+def build_local_dashboard_router(operator_app: Any, diagnostic_app: Any) -> Any:
     """Keep the canonical operator UI and its assets on their original routes."""
     diagnostic_paths = {
         "/five-timeframe",
@@ -131,7 +133,7 @@ def build_local_dashboard_router(operator_app, diagnostic_app):
         "/static/dashboard.css",
     }
 
-    def application(environ, start_response):
+    def application(environ: Any, start_response: Any) -> Any:
         if str(environ.get("PATH_INFO", "/")) in diagnostic_paths:
             return diagnostic_app(environ, start_response)
         return operator_app(environ, start_response)
@@ -152,6 +154,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--snapshot", default="debug/five_timeframe/live.json")
     parser.add_argument("--chart-history", default="debug/five_timeframe/tmf_60m_history.json")
     parser.add_argument("--chart-history-15m", default="debug/five_timeframe/tmf_15m_history.json")
+    parser.add_argument(
+        "--taifex-history-cache",
+        default="debug/five_timeframe/taifex_official_history.json",
+        help="TAIFEX 官方已收盤歷史資料的本機雜湊快取",
+    )
     parser.add_argument(
         "--paper-test-armed",
         action="store_true",
@@ -203,7 +210,10 @@ def main(
     pipeline = FubonFiveTimeframeCandlePipeline(
         FubonIntradayCandlesAdapter(result.clients, resolver),
     )
-    verifier = FubonLiveFiveTimeframeVerifier(pipeline)
+    verifier = FubonLiveFiveTimeframeVerifier(
+        pipeline,
+        TaifexOfficialHistorySource(args.taifex_history_cache),
+    )
     chart_source = FubonLiveChartSource(
         lambda: verifier.latest_candle_result,
         history_path=args.chart_history,
@@ -251,6 +261,13 @@ def main(
         snapshot_path=args.snapshot,
         on_success=capture_verified_refresh,
     )
+    print(json.dumps({
+        "status": "INITIALIZING_OFFICIAL_HISTORY",
+        "message": "首次建立 TAIFEX 官方歷史快取可能需要 30 至 90 秒；請保持視窗開啟。",
+        "cache": args.taifex_history_cache,
+        "trading_enabled": False,
+        "live_order_allowed": False,
+    }, ensure_ascii=False), flush=True)
     try:
         refresher.refresh_once()
     except Exception:  # noqa: BLE001
@@ -279,6 +296,8 @@ def main(
         "health_url": f"http://{args.host}:{args.port}/api/five-timeframe/health",
         "refresh_seconds": args.refresh_seconds,
         "symbol": symbol,
+        "taifex_official_history_enabled": not args.after_hours,
+        "taifex_history_cache": args.taifex_history_cache,
         "paper_simulation_enabled": args.paper_test_armed,
         "paper_manual_approval_granted": args.paper_test_armed,
         "paper_journal": args.paper_journal if args.paper_test_armed else None,
