@@ -38,6 +38,17 @@ def test_live_chart_exposes_verified_60m_candles_in_memory() -> None:
     assert series.updated_at == datetime(2026, 8, 14, 3, 45, tzinfo=UTC)
 
 
+def test_live_chart_exposes_and_accumulates_verified_15m_candles(tmp_path) -> None:
+    history = tmp_path / "tmf_15m.json"
+    source = FubonLiveChartSource(result, history_15m_path=history)
+
+    series = source.read_series("TMF", "15m")
+
+    assert len(series.candles) == 3
+    assert series.source == "fubon-live:normalized-local-history"
+    assert '"timeframe": "15m"' in history.read_text(encoding="utf-8")
+
+
 def test_live_chart_keeps_unverified_day_and_week_empty() -> None:
     source = FubonLiveChartSource(result)
 

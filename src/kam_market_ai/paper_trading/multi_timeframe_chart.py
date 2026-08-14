@@ -7,8 +7,8 @@ from html import escape
 from math import isfinite
 from typing import Protocol
 
-SUPPORTED_CHART_TIMEFRAMES = ("60m", "1d", "1w")
-TIMEFRAME_LABELS = {"60m": "60 分 K", "1d": "日 K", "1w": "週 K"}
+SUPPORTED_CHART_TIMEFRAMES = ("15m", "60m", "1d", "1w")
+TIMEFRAME_LABELS = {"15m": "15 分 K", "60m": "60 分 K", "1d": "日 K", "1w": "週 K"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,7 +153,7 @@ def render_multi_timeframe_chart_html(source: ChartDataReadOnlySource = EMPTY_CH
     updated = series.updated_at.isoformat() if series.updated_at is not None else "—"
     status = _summary(series, ma_values) if valid else "商品或週期無效"
     return f"""<!doctype html><html class='chart-page' lang='zh-Hant-TW'><head><meta charset='utf-8'><title>KAM 多週期 K 線</title><link rel='stylesheet' href='/static/operator.css'></head><body class='chart-page'><main class='chart-main'>
-      <header><div><h1>多週期 K 線</h1><small>60 分・日・週｜唯讀市場結構檢視</small></div><a class='account-chip' href='/'>返回市場儀表板</a><span>禁止真實下單</span></header>
+      <header><div><h1>多週期 K 線</h1><small>15 分・60 分・日・週｜唯讀市場結構檢視</small></div><a class='account-chip' href='/'>返回市場儀表板</a><span>禁止真實下單</span></header>
       <nav class='chart-toolbar' aria-label='圖表商品與週期'>{instrument_tabs}<span class='chart-toolbar-divider'></span>{timeframe_tabs}</nav>
       <div class='chart-summary'>{escape(status)}</div><section class='chart-panel'>{_chart_svg(series, ma_values)}</section>
       <aside class='chart-overlays' aria-label='圖表顯示項目'><span class='enabled'>K 線</span><span class='enabled'>20MA</span><span>上升趨勢線｜尚未接入</span><span>下降趨勢線｜尚未接入</span><span>支撐壓力｜尚未接入</span><span class='enabled'>成交量</span></aside>

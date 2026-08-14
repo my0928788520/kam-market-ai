@@ -145,6 +145,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--refresh-seconds", type=int, default=60)
     parser.add_argument("--snapshot", default="debug/five_timeframe/live.json")
     parser.add_argument("--chart-history", default="debug/five_timeframe/tmf_60m_history.json")
+    parser.add_argument("--chart-history-15m", default="debug/five_timeframe/tmf_15m_history.json")
     parser.add_argument("--open-browser", action="store_true")
     return parser
 
@@ -191,6 +192,7 @@ def main(
     chart_source = FubonLiveChartSource(
         lambda: verifier.latest_candle_result,
         history_path=args.chart_history,
+        history_15m_path=args.chart_history_15m,
     )
     refresher = LiveFiveTimeframeSnapshotRefresher(
         verifier,

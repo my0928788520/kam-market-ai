@@ -28,6 +28,7 @@ class FubonLiveChartSource:
         ],
         *,
         history_path: str | Path | None = None,
+        history_15m_path: str | Path | None = None,
         history_limit: int = 240,
     ) -> None:
         if not callable(result_provider):
@@ -35,7 +36,10 @@ class FubonLiveChartSource:
         self._result_provider = result_provider
         if isinstance(history_limit, bool) or history_limit < 20:
             raise ValueError("history_limit must be at least 20")
-        self._history_path = Path(history_path) if history_path is not None else None
+        self._history_paths = {
+            FiveTimeframe.M15: Path(history_15m_path) if history_15m_path is not None else None,
+            FiveTimeframe.M60: Path(history_path) if history_path is not None else None,
+        }
         self._history_limit = history_limit
         self._lock = Lock()
 
@@ -48,12 +52,18 @@ class FubonLiveChartSource:
             for item in result.series[selected]
         )
 
-    def _load_history(self) -> tuple[ChartCandle, ...]:
-        if self._history_path is None or not self._history_path.is_file():
+    def _load_history(
+        self, path: Path | None, timeframe: str
+    ) -> tuple[ChartCandle, ...]:
+        if path is None or not path.is_file():
             return ()
         try:
-            payload = json.loads(self._history_path.read_text(encoding="utf-8"))
-            if payload.get("schema") != "kam-normalized-chart-history-v1":
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if (
+                payload.get("schema") != "kam-normalized-chart-history-v1"
+                or payload.get("instrument") != "TMF"
+                or payload.get("timeframe") != timeframe
+            ):
                 return ()
             return tuple(
                 ChartCandle(
@@ -69,14 +79,16 @@ class FubonLiveChartSource:
         except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError):
             return ()
 
-    def _write_history(self, candles: tuple[ChartCandle, ...]) -> None:
-        if self._history_path is None:
+    def _write_history(
+        self, path: Path | None, timeframe: str, candles: tuple[ChartCandle, ...]
+    ) -> None:
+        if path is None:
             return
-        self._history_path.parent.mkdir(parents=True, exist_ok=True)
+        path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "schema": "kam-normalized-chart-history-v1",
             "instrument": "TMF",
-            "timeframe": "60m",
+            "timeframe": timeframe,
             "candles": [
                 {
                     "opened_at": item.opened_at.isoformat(),
@@ -89,32 +101,48 @@ class FubonLiveChartSource:
                 for item in candles
             ],
         }
-        temporary = self._history_path.with_suffix(self._history_path.suffix + ".tmp")
+        temporary = path.with_suffix(path.suffix + ".tmp")
         temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-        os.replace(temporary, self._history_path)
+        os.replace(temporary, path)
 
     def capture_latest(self) -> None:
-        """Persist only normalized verified 60-minute candles, never provider payloads."""
-        live = self._chart_candles(self._result_provider(), FiveTimeframe.M60)
-        if not live or self._history_path is None:
-            return
+        """Persist normalized verified 15/60-minute candles, never provider payloads."""
+        result = self._result_provider()
         with self._lock:
-            merged = {item.opened_at: item for item in self._load_history()}
-            merged.update({item.opened_at: item for item in live})
-            bounded = tuple(sorted(merged.values(), key=lambda item: item.opened_at))[-self._history_limit:]
-            self._write_history(bounded)
+            for selected, label in (
+                (FiveTimeframe.M15, "15m"),
+                (FiveTimeframe.M60, "60m"),
+            ):
+                path = self._history_paths[selected]
+                live = self._chart_candles(result, selected)
+                if not live or path is None:
+                    continue
+                merged = {
+                    item.opened_at: item for item in self._load_history(path, label)
+                }
+                merged.update({item.opened_at: item for item in live})
+                bounded = tuple(
+                    sorted(merged.values(), key=lambda item: item.opened_at)
+                )[-self._history_limit:]
+                self._write_history(path, label, bounded)
 
     def read_series(self, instrument: str, timeframe: str) -> ChartSeries:
-        mapping = {"60m": FiveTimeframe.M60, "1d": FiveTimeframe.DAY, "1w": FiveTimeframe.WEEK}
+        mapping = {
+            "15m": FiveTimeframe.M15,
+            "60m": FiveTimeframe.M60,
+            "1d": FiveTimeframe.DAY,
+            "1w": FiveTimeframe.WEEK,
+        }
         selected = mapping.get(timeframe)
         if instrument != "TMF" or selected is None:
             return ChartSeries(instrument, timeframe, (), "invalid-selection", None)
         result = self._result_provider()
         live = self._chart_candles(result, selected)
-        if selected is FiveTimeframe.M60 and self._history_path is not None:
+        history_path = self._history_paths.get(selected)
+        if history_path is not None:
             self.capture_latest()
             with self._lock:
-                history = self._load_history()
+                history = self._load_history(history_path, timeframe)
             if history:
                 return ChartSeries(
                     instrument,
