@@ -589,7 +589,7 @@ def _runtime_source_status(source: object) -> object:
     return getter() if callable(getter) else getattr(source, "status", "READY")
 
 
-def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], account_source: AccountReadOnlySource = DEMO_ACCOUNT_SOURCE, account_thresholds: CapitalSafetyThresholds = DEMO_ACCOUNT_THRESHOLDS, margin_source: MarginRequirementSource = DEMO_MARGIN_SOURCE, market_data_source: MarketDataReadOnlySource = OFFLINE_DEMO_MARKET_DATA_SOURCE, public_embed_config=None, chart_data_source=None) -> Callable[..., Iterable[bytes]]:
+def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], account_source: AccountReadOnlySource = DEMO_ACCOUNT_SOURCE, account_thresholds: CapitalSafetyThresholds = DEMO_ACCOUNT_THRESHOLDS, margin_source: MarginRequirementSource = DEMO_MARGIN_SOURCE, market_data_source: MarketDataReadOnlySource = OFFLINE_DEMO_MARKET_DATA_SOURCE, public_embed_config=None, chart_data_source=None, session_switcher=None) -> Callable[..., Iterable[bytes]]:
     from kam_market_ai.live_read_only.decision_presentation import SelectedSnapshotDecisionPresenter
     from kam_market_ai.paper_trading.embed_presenter import EmbedPagePresenter
     from kam_market_ai.paper_trading.public_routes import build_health_response
@@ -624,6 +624,17 @@ def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], a
             }
             body = json.dumps(payload, separators=(",", ":")).encode()
             start_response("200 OK" if ready else "503 Service Unavailable", [("Content-Type", "application/json; charset=utf-8"), *headers]); return [body]
+        if path == "/session-switch" and method == "POST" and callable(session_switcher):
+            try:
+                length = min(int(str(environ.get("CONTENT_LENGTH") or "0")), 128)
+                stream = environ.get("wsgi.input")
+                raw = stream.read(length) if stream is not None else b""
+                requested = parse_qs(raw.decode("ascii"), keep_blank_values=True).get("session", [""])[0]
+                success, message = session_switcher(requested)
+            except (TypeError, ValueError, UnicodeDecodeError):
+                success, message = False, "切換要求無效"
+            location = "/charts?session_notice=" + ("ok" if success else "failed")
+            start_response("303 See Other", [("Location", location), *headers]); return [message.encode("utf-8")]
         if method != "GET":
             start_response("405 Method Not Allowed", [("Content-Type", "text/plain; charset=utf-8"), ("Allow", "GET")]); return ["唯讀端點，不接受此操作。".encode()]
         if path == "/static/operator.css":
