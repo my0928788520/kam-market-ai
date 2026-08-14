@@ -107,6 +107,15 @@ def _timeframe_card(name: object, state: object) -> str:
     """Apply a compact, presentation-only vocabulary to existing timeframe values."""
     raw = str(state)
     code, interpretation = {
+        "AU": ("AU", "偏多・已確認"),
+        "AF": ("AF", "偏多・形成中"),
+        "AD": ("AD", "偏多・資料失效"),
+        "NU": ("NU", "中性・已確認"),
+        "NF": ("NF", "中性・形成中"),
+        "ND": ("ND", "中性・資料失效"),
+        "BU": ("BU", "偏空・已確認"),
+        "BF": ("BF", "偏空・形成中"),
+        "BD": ("BD", "偏空・資料失效"),
         "偏多": ("AU", "多方健康"),
         "整理": ("NF", "整理"),
         "等待確認": ("NF", "等待確認"),
@@ -351,8 +360,10 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
     snapshot = snapshot or OFFLINE_DEMO_MARKET_DATA_SOURCE.read_snapshot(DEFAULT_MARKET_PRODUCT)
     presentation = SelectedSnapshotDecisionPresenter().present(snapshot, view.demo)
     demo = dict(view.demo or {})
+    preserve_five_timeframe = demo.get("source_kind") == "FUBON_LIVE_FIVE_TIMEFRAME"
     bull_cells = presentation.control.bull_score
-    demo.update({"direction": presentation.direction.label, "direction_reason": presentation.direction.reason, "bull_score": bull_cells * 10 if bull_cells is not None else 50, "cycle_label": presentation.cycle.label, "trend_health": presentation.trend_health.label, "next_step": presentation.next_step.label, "timeframes": tuple((item.timeframe, item.label) for item in presentation.timeframes), "u_stage": "U0" if presentation.cycle.state in {"closed", "halted", "invalid", "live-data-only"} else "U3"})
+    if not preserve_five_timeframe:
+        demo.update({"direction": presentation.direction.label, "direction_reason": presentation.direction.reason, "bull_score": bull_cells * 10 if bull_cells is not None else 50, "cycle_label": presentation.cycle.label, "trend_health": presentation.trend_health.label, "next_step": presentation.next_step.label, "timeframes": tuple((item.timeframe, item.label) for item in presentation.timeframes), "u_stage": "U0" if presentation.cycle.state in {"closed", "halted", "invalid", "live-data-only"} else "U3"})
     rendered_view = view
     if snapshot.data_source is MarketDataSource.FUTURE_LIVE:
         demo.update(
@@ -368,7 +379,13 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
             matching={"state": "尚未接入"},
         )
     html = _render_terminal_html(replace(rendered_view, demo=demo), snapshot)
-    if bull_cells is None:
+    if preserve_five_timeframe:
+        html = html.replace(
+            " · 目前僅 Header 已切換至離線示範行情；決策卡尚未接入此商品 snapshot。",
+            f" · 商品 {escape(str(demo.get('instrument', 'TMF')))}",
+            1,
+        )
+    if bull_cells is None and not preserve_five_timeframe:
         html = html.replace("多方 5｜空方 5", "不可判讀", 1)
         html = html.replace("<small>控制權分裂</small>", "<small>等待四週期資料</small>", 1)
         html = html.replace(
@@ -391,9 +408,10 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
     html = html.replace("<a class='account-chip' href='/account'>期貨帳戶｜資金安全</a>", trigger, 1)
     html = html.replace(trigger, trigger + "<a class='account-chip' href='/charts'>多週期 K 線</a><a class='account-chip' href='/help'>使用說明｜SOP</a>", 1)
     html = html.replace("<span class='header-readonly-note'>帳戶未連線・券商未連線・唯讀模式・模擬執行・禁止真實下單</span>", "", 1)
-    banner_start = html.index("<div class='banner'>")
-    banner_end = html.index("</div>", banner_start) + len("</div>")
-    html = html[:banner_start] + f"<div class='banner market-status-line' title='OFFLINE_DEMO'>離線示範行情｜{_market_status_line(snapshot)}</div>" + html[banner_end:]
+    if not preserve_five_timeframe:
+        banner_start = html.index("<div class='banner'>")
+        banner_end = html.index("</div>", banner_start) + len("</div>")
+        html = html[:banner_start] + f"<div class='banner market-status-line' title='OFFLINE_DEMO'>離線示範行情｜{_market_status_line(snapshot)}</div>" + html[banner_end:]
     html = html.replace("<h2>模擬委託建議</h2>", "<h2>模擬委託建議</h2><p>決策呈現已切換；模擬委託流程尚未接入此商品 snapshot。</p>", 1)
     html = html.replace("<h2>模擬撮合結果</h2>", "<h2>模擬撮合結果</h2><p>決策呈現已切換；模擬委託流程尚未接入此商品 snapshot。</p>", 1)
     return html.replace("</main></body>", _account_drawer_html() + "</main></body>", 1)
