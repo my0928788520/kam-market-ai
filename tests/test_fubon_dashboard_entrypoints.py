@@ -95,3 +95,7 @@ def test_windows_launcher_preserves_read_only_local_boundary() -> None:
     assert "0.0.0.0" not in source
     assert "git push" not in source
     assert "--paper-test-armed" in source
+    assert "startswith('txf')" in source
+    assert "startswith('mxf')" in source
+    assert '"debug\\five_timeframe\\${productslug}_live.json"' in source
+    assert '"debug\\paper_trading\\${productslug}_live_journal.json"' in source
