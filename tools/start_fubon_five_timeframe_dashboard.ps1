@@ -16,12 +16,21 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $python = Join-Path $projectRoot '.venv\Scripts\python.exe'
 $envFile = Join-Path $projectRoot '.env'
+$sourceRoot = Join-Path $projectRoot 'src'
 
 if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
     throw 'Missing .venv\Scripts\python.exe. Install the project environment first.'
 }
 if (-not (Test-Path -LiteralPath $envFile -PathType Leaf)) {
     throw 'Missing local .env. Fubon credentials must remain local and must not be committed or deployed.'
+}
+
+# Support a source checkout even when the package has not been installed into .venv.
+if ($env:PYTHONPATH) {
+    $env:PYTHONPATH = "$sourceRoot$([IO.Path]::PathSeparator)$env:PYTHONPATH"
+}
+else {
+    $env:PYTHONPATH = $sourceRoot
 }
 
 $arguments = @(
