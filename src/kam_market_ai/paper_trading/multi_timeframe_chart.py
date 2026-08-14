@@ -242,7 +242,7 @@ def _price_board(
         + "<button class='chart-overlay-toggle' type='button' data-manual-tool='horizontal' aria-pressed='false'>手動畫水平線</button>"
         + "<button class='chart-overlay-toggle' type='button' data-manual-action='undo'>復原上一條</button>"
         + "<button class='chart-overlay-toggle' type='button' data-manual-action='clear'>清除全部</button>"
-        + "<small id='chart-drawing-help'>壓力／支撐自動顯示；斜線請在圖上依序點兩個位置</small></div>"
+        + "<small id='chart-drawing-help'>所有線均由手動畫線；斜線請在圖上依序點兩個位置</small></div>"
     )
 
 
@@ -454,7 +454,6 @@ def _recent_trend_anchors(
 
 
 def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
-    metrics = _reference_metrics(series, ma_values)
     display_bars = 48 if series.timeframe == "60m" else 64
     candles, ma_values = series.candles[-display_bars:], ma_values[-display_bars:]
     if not candles:
@@ -540,25 +539,6 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     )
     latest = candles[-1]
     latest_y = y(displayed_price)
-    overlay_lines: list[str] = []
-    if metrics.resistance is not None and metrics.support is not None:
-        resistance_y = y(metrics.resistance)
-        support_y = y(metrics.support)
-        overlay_lines.extend((
-            (
-                "<g class='chart-overlay-line chart-auto-level'>"
-                f"<line class='chart-resistance-line' x1='{left:.0f}' y1='{resistance_y:.2f}' x2='{right:.0f}' y2='{resistance_y:.2f}'/>"
-                f"<text class='chart-resistance-label' x='{right - 4:.0f}' y='{resistance_y - 5:.2f}' text-anchor='end'>上壓 {_price_text(metrics.resistance)}</text>"
-                "</g>"
-            ),
-            (
-                "<g class='chart-overlay-line chart-auto-level'>"
-                f"<line class='chart-support-line' x1='{left:.0f}' y1='{support_y:.2f}' x2='{right:.0f}' y2='{support_y:.2f}'/>"
-                f"<text class='chart-support-label' x='{right - 4:.0f}' y='{support_y - 5:.2f}' text-anchor='end'>下撐 {_price_text(metrics.support)}</text>"
-                "</g>"
-            ),
-        ))
-    range_lines = "".join(overlay_lines)
     time_labels = (
         f"<text class='chart-time-label' x='{first_x:.2f}' y='378' text-anchor='start'>{_time_label(candles[0].opened_at, series.timeframe)}</text>"
         f"<text class='chart-time-label' x='{first_x + (len(candles) - 1) * step:.2f}' y='378' text-anchor='end'>{_time_label(latest.opened_at, series.timeframe)}</text>"
@@ -567,7 +547,7 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
         "<svg class='candlestick-chart' viewBox='0 0 1024 392' role='img' aria-label='唯讀 K 線、20MA、即時水平線與成交量'>"
         f"{grid}<line class='chart-current-line' x1='{left:.0f}' y1='{latest_y:.2f}' x2='{right:.0f}' y2='{latest_y:.2f}'/>"
         f"<text class='chart-current-price-label' x='{right - 4:.0f}' y='{latest_y - 6:.2f}' text-anchor='end'>即時 {_price_text(displayed_price)}</text>"
-        f"<g class='chart-candles'>{''.join(bodies)}</g>{ma_line}{range_lines}<g class='chart-manual-drawings'></g><g class='chart-volumes'>{''.join(volumes)}</g>"
+        f"<g class='chart-candles'>{''.join(bodies)}</g>{ma_line}<g class='chart-manual-drawings'></g><g class='chart-volumes'>{''.join(volumes)}</g>"
         f"<text class='chart-volume-label' x='{left:.0f}' y='288'>成交量</text>{time_labels}"
         f"<g class='chart-crosshair' hidden><line class='chart-crosshair-x' x1='0' y1='{top:.2f}' x2='0' y2='{volume_bottom:.2f}'/><line class='chart-crosshair-y' x1='{left:.2f}' y1='0' x2='{right:.2f}' y2='0'/></g>"
         f"<g class='chart-hover-zones'>{''.join(hover_zones)}</g></svg>"
@@ -602,7 +582,7 @@ def render_multi_timeframe_chart_html(
     status = _summary(series, ma_values) if valid else "商品或週期無效"
     metrics = _reference_metrics(series, ma_values)
     range_overlay = (
-        "<span class='enabled'>20 棒壓力／支撐</span>"
+        "<span>20 棒壓力／支撐｜僅數字參考</span>"
         if metrics.resistance is not None and metrics.support is not None
         else "<span>支撐壓力｜資料不足</span>"
     )
