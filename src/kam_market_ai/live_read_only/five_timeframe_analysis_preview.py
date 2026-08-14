@@ -64,6 +64,14 @@ _ENGINE_TIMEFRAMES = {
     FiveTimeframe.WEEK: PositionTimeframe.W1,
 }
 
+_REFERENCE_WINDOW_BARS = 20
+_REFERENCE_MINIMUM_BARS = 5
+_FORMING_CAPABLE_TIMEFRAMES = {
+    FiveTimeframe.M5,
+    FiveTimeframe.M15,
+    FiveTimeframe.M60,
+}
+
 
 def _five_timeframe_timing_config() -> TimingEngineConfig:
     """Keep every frame usable until its existing hard stale threshold.
@@ -115,6 +123,29 @@ def _ma20_display_metrics(candles: tuple[Candle, ...]) -> dict[str, object]:
         "ma20": ma20,
         "price_vs_ma20": position,
         "ma20_direction": direction,
+    }
+
+
+def _range_reference_metrics(
+    candles: tuple[Candle, ...],
+    *,
+    exclude_latest: bool,
+) -> dict[str, object]:
+    """Expose bounded 20-bar range references without retaining candle history.
+
+    Intraday feeds may include a still-forming final bar, so the latest 5/15/60
+    minute candle is excluded.  Verified day/week history contains only closed
+    bars and can use its latest candle.  Five bars are required before a range
+    is presented as a reference.
+    """
+    reference = candles[:-1] if exclude_latest else candles
+    window = reference[-_REFERENCE_WINDOW_BARS:]
+    enough = len(window) >= _REFERENCE_MINIMUM_BARS
+    return {
+        "range_resistance": max(float(item.high) for item in window) if enough else None,
+        "range_support": min(float(item.low) for item in window) if enough else None,
+        "range_window_bars": len(window),
+        "range_excludes_latest": exclude_latest,
     }
 
 
@@ -236,6 +267,10 @@ def build_verified_five_timeframe_analysis_preview(
             "timing": frame.timing.normalized_state.value,
             "error_codes": list(frame.error_codes),
             **_ma20_display_metrics(series[source_timeframe]),
+            **_range_reference_metrics(
+                series[source_timeframe],
+                exclude_latest=source_timeframe in _FORMING_CAPABLE_TIMEFRAMES,
+            ),
         }
 
     blockers: list[str] = []

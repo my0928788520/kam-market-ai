@@ -17,12 +17,36 @@ def test_live_five_timeframe_uses_established_kam_operator_ui() -> None:
                     "status": "ambiguous",
                     "position": "bullish",
                     "trend": "bullish",
+                    "ma20": 41771.05,
+                    "range_resistance": 47000,
+                    "range_support": 40000,
+                    "range_window_bars": 20,
                 },
                 "1d": {
                     "ma20": 45700,
                     "price_vs_ma20": "above",
                     "ma20_direction": "rising",
+                    "range_resistance": 46500,
+                    "range_support": 43000,
+                    "range_window_bars": 20,
                 },
+                "60m": {
+                    "ma20": 45582.45,
+                    "price_vs_ma20": "above",
+                    "ma20_direction": "rising",
+                    "range_resistance": 46100,
+                    "range_support": 45500,
+                    "range_window_bars": 20,
+                },
+                "15m": {
+                    "ma20": 45889.60,
+                    "price_vs_ma20": "above",
+                    "ma20_direction": "rising",
+                    "range_resistance": 45950,
+                    "range_support": 45800,
+                    "range_window_bars": 20,
+                },
+                "5m": {"last_price": 45920},
             },
             "kam_rule_decision": {
                 "direction": "觀望",
@@ -52,7 +76,14 @@ def test_live_five_timeframe_uses_established_kam_operator_ui() -> None:
     assert "多方 4｜空方 0｜未確認 6" in page
     assert "價格相對 20MA：上方（20MA 45,700）" in page
     assert "20MA 方向：上彎" in page
+    assert "20棒壓力：46,500" in page
+    assert "20棒支撐：43,000" in page
     assert "偏多觀察・結構待確認" in page
+    assert "即時微台</dt><dd>45,920" in page
+    assert "60分20MA</dt><dd>45,582.45（現價在上・上彎）" in page
+    assert "最近上壓</dt><dd>45,950（15分／+30點）" in page
+    assert "最近下撐</dt><dd>45,800（15分／−120點）" in page
+    assert "壓力／支撐為 20 棒區間參考，不是買賣訊號" in page
     assert page.count("control-cell unconfirmed") == 6
     assert "風險</dt><dd>不可判讀" in page
     assert "禁止真實下單" in page

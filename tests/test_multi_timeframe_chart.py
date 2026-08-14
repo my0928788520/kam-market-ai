@@ -49,7 +49,7 @@ def test_chart_page_is_fail_closed_without_historical_source() -> None:
     assert "每 3 秒更新" in html
     assert "id='chart-summary'" in html and "id='chart-panel'" in html
     assert "<svg class='candlestick-chart'" not in html
-    assert "上升趨勢線｜尚未接入" in html and "支撐壓力｜尚未接入" in html
+    assert "上升趨勢線｜尚未接入" in html and "支撐壓力｜資料不足" in html
 
 
 def test_chart_page_renders_injected_candles_ma20_volume_and_summary() -> None:
@@ -63,6 +63,13 @@ def test_chart_page_renders_injected_candles_ma20_volume_and_summary() -> None:
     assert "data-high='125'" in html and "data-low='122'" in html
     assert "data-ma20='114.5'" in html and "data-ma-label='20 日線'" in html
     assert "class='chart-crosshair'" in html and "class='chart-tooltip'" in html
+    assert "class='chart-price-board'" in html
+    assert "<span>最新收盤</span><strong>124</strong>" in html
+    assert "<span>20 日線</span><strong>114.50</strong>" in html
+    assert "<span>20 棒上壓力</span><strong>125</strong>" in html
+    assert "<span>20 棒下支撐</span><strong>103</strong>" in html
+    assert "20 棒支撐壓力已更新" in html
+    assert "class='chart-current-price'" not in html
 
 
 def test_chart_page_renders_15m_reference_tab() -> None:
@@ -92,7 +99,9 @@ def test_sparse_live_series_keeps_candle_bodies_at_readable_width() -> None:
     assert "已累積 3/20 根" in html
     assert "尚缺 17 根建立 20MA" in html
     assert "class='chart-current-line'" in html
-    assert "最新收盤 102" in html
+    assert "<span>最新收盤</span><strong>102</strong>" in html
+    assert "<span>20 棒上壓力</span><strong>—</strong>" in html
+    assert "已完成 3/5 根；資料仍不足" in html
     assert "08/13 08:00" in html
     assert "data-ma20=''" in html
 
@@ -114,8 +123,10 @@ def test_chart_uses_live_quote_for_current_line_without_changing_candle_close() 
 
     html = render_multi_timeframe_chart_html(LiveQuoteSource(), timeframe="15m")
 
-    assert "即時 105" in html
-    assert "最新收盤 102" not in html
+    assert "<span>即時微台</span><strong>105</strong>" in html
+    assert "富邦即時報價・每 3 秒刷新" in html
+    assert "<span>最新收盤</span>" not in html
+    assert "class='chart-current-price'" not in html
     assert "即時報價時間：2026-08-14T00:12:00+00:00" in html
     assert html.count("<g class='chart-up'>") == 1
 
@@ -142,6 +153,43 @@ def test_chart_marks_forming_daily_candle_as_display_only() -> None:
     assert "class='chart-up chart-forming'" in html
     assert "本日形成中｜僅供顯示、不進入 KAM 或 Paper" in html
     assert "2026/08/14" in html
+
+
+def test_chart_pressure_and_support_exclude_forming_candle() -> None:
+    start = datetime(2026, 8, 1, tzinfo=UTC)
+
+    class FormingRangeSource:
+        def read_series(self, instrument: str, timeframe: str) -> ChartSeries:
+            closed = tuple(
+                ChartCandle(
+                    start + timedelta(days=index),
+                    100 + index,
+                    102 + index,
+                    99 + index,
+                    101 + index,
+                    10,
+                )
+                for index in range(20)
+            )
+            forming = ChartCandle(start + timedelta(days=20), 120, 999, 1, 121, 5)
+            return ChartSeries(
+                instrument,
+                timeframe,
+                (*closed, forming),
+                "closed+forming",
+                start + timedelta(days=20),
+                121,
+                start + timedelta(days=20),
+                True,
+                "本日形成中",
+            )
+
+    html = render_multi_timeframe_chart_html(FormingRangeSource(), timeframe="1d")
+
+    assert "<span>20 棒上壓力</span><strong>121</strong>" in html
+    assert "<span>20 棒下支撐</span><strong>99</strong>" in html
+    assert "<span>20 棒上壓力</span><strong>999</strong>" not in html
+    assert "最近 20 根已完成 K 棒" in html
 
 
 @pytest.mark.parametrize("instrument,timeframe", [("BAD", "60m"), ("TMF", "5m")])

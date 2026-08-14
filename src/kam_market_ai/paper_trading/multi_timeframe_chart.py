@@ -63,6 +63,15 @@ class ChartSeries:
             raise ValueError("forming label requires a forming candle")
 
 
+@dataclass(frozen=True, slots=True)
+class _ChartReferenceMetrics:
+    current_price: float | None
+    ma20: float | None
+    resistance: float | None
+    support: float | None
+    range_window_bars: int
+
+
 class ChartDataReadOnlySource(Protocol):
     def read_series(self, instrument: str, timeframe: str) -> ChartSeries: ...
 
@@ -88,19 +97,163 @@ def _ma20(candles: tuple[ChartCandle, ...]) -> tuple[float | None, ...]:
     return tuple(values)
 
 
+def _reference_metrics(
+    series: ChartSeries,
+    ma_values: tuple[float | None, ...],
+) -> _ChartReferenceMetrics:
+    current_price = series.current_price
+    if current_price is None and series.candles:
+        current_price = series.candles[-1].close
+    reference_candles = (
+        series.candles[:-1] if series.last_candle_is_forming else series.candles
+    )
+    range_window = reference_candles[-20:]
+    if len(range_window) < 5:
+        resistance = None
+        support = None
+    else:
+        resistance = max(item.high for item in range_window)
+        support = min(item.low for item in range_window)
+    return _ChartReferenceMetrics(
+        current_price=current_price,
+        ma20=ma_values[-1] if ma_values else None,
+        resistance=resistance,
+        support=support,
+        range_window_bars=len(range_window),
+    )
+
+
+def _price_text(value: float | None, *, fixed_decimals: bool = False) -> str:
+    if value is None:
+        return "—"
+    rendered = f"{value:,.2f}"
+    return rendered if fixed_decimals else rendered.rstrip("0").rstrip(".")
+
+
+def _ma_caption(
+    metrics: _ChartReferenceMetrics,
+    ma_values: tuple[float | None, ...],
+) -> str:
+    if metrics.ma20 is None:
+        return "累積滿 20 根 K 棒後形成"
+    relation = "現價在均線上方"
+    if metrics.current_price is not None:
+        if metrics.current_price < metrics.ma20:
+            relation = "現價在均線下方"
+        elif metrics.current_price == metrics.ma20:
+            relation = "現價位於均線"
+    previous = next((value for value in reversed(ma_values[:-1]) if value is not None), None)
+    direction = "走平"
+    if previous is not None:
+        direction = (
+            "上彎"
+            if metrics.ma20 > previous
+            else "下彎"
+            if metrics.ma20 < previous
+            else "走平"
+        )
+    return f"{relation}・均線{direction}"
+
+
+def _range_caption(
+    level: float | None,
+    current_price: float | None,
+    *,
+    window_bars: int,
+    resistance: bool,
+) -> str:
+    if level is None:
+        return f"已完成 {window_bars}/5 根；資料仍不足"
+    prefix = f"最近 {window_bars} 根已完成 K 棒"
+    if current_price is None:
+        return prefix
+    distance = abs(level - current_price)
+    if resistance:
+        relation = (
+            f"距現價 {distance:,.0f} 點"
+            if level >= current_price
+            else f"現價高於區間上緣 {distance:,.0f} 點"
+        )
+    else:
+        relation = (
+            f"距現價 {distance:,.0f} 點"
+            if level <= current_price
+            else f"現價低於區間下緣 {distance:,.0f} 點"
+        )
+    return f"{prefix}・{relation}"
+
+
+def _price_board(
+    series: ChartSeries,
+    ma_values: tuple[float | None, ...],
+) -> str:
+    metrics = _reference_metrics(series, ma_values)
+    current_label = (
+        "即時微台"
+        if series.current_price is not None and series.instrument == "TMF"
+        else "即時價"
+        if series.current_price is not None
+        else "最新收盤"
+    )
+    current_caption = (
+        "富邦即時報價・每 3 秒刷新"
+        if series.current_price is not None
+        else "目前以最新 K 棒收盤顯示"
+    )
+    ma_label = {
+        "15m": "15 分 20MA",
+        "60m": "60 分 20MA",
+        "1d": "20 日線",
+        "1w": "20 週線",
+    }.get(series.timeframe, "20MA")
+    resistance_caption = _range_caption(
+        metrics.resistance,
+        metrics.current_price,
+        window_bars=metrics.range_window_bars,
+        resistance=True,
+    )
+    support_caption = _range_caption(
+        metrics.support,
+        metrics.current_price,
+        window_bars=metrics.range_window_bars,
+        resistance=False,
+    )
+    return (
+        "<div class='chart-price-board' aria-label='即時價位與區間參考'>"
+        "<div class='chart-price-metric chart-price-current'>"
+        f"<span>{current_label}</span><strong>{_price_text(metrics.current_price)}</strong>"
+        f"<small>{current_caption}</small></div>"
+        "<div class='chart-price-metric chart-price-ma'>"
+        f"<span>{ma_label}</span><strong>{_price_text(metrics.ma20, fixed_decimals=True)}</strong>"
+        f"<small>{_ma_caption(metrics, ma_values)}</small></div>"
+        "<div class='chart-price-metric chart-price-resistance'>"
+        f"<span>20 棒上壓力</span><strong>{_price_text(metrics.resistance)}</strong>"
+        f"<small>{resistance_caption}</small></div>"
+        "<div class='chart-price-metric chart-price-support'>"
+        f"<span>20 棒下支撐</span><strong>{_price_text(metrics.support)}</strong>"
+        f"<small>{support_caption}</small></div></div>"
+    )
+
+
 def _summary(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     if not series.candles:
         return f"{TIMEFRAME_LABELS.get(series.timeframe, '週期無效')}｜資料不足"
+    metrics = _reference_metrics(series, ma_values)
+    range_status = (
+        f"{metrics.range_window_bars} 棒支撐壓力已更新"
+        if metrics.resistance is not None and metrics.support is not None
+        else "支撐壓力資料不足"
+    )
     latest_ma = ma_values[-1]
     if latest_ma is None:
         count = len(series.candles)
         missing = max(0, 20 - count)
         summary = (
             f"{TIMEFRAME_LABELS[series.timeframe]}｜已累積 {count}/20 根｜"
-            f"尚缺 {missing} 根建立 20MA｜資料持續自動累積"
+            f"尚缺 {missing} 根建立 20MA｜{range_status}｜資料持續自動累積"
         )
     else:
-        close = series.candles[-1].close
+        close = metrics.current_price or series.candles[-1].close
         relation = (
             "價格在 20MA 上方"
             if close > latest_ma
@@ -116,7 +269,7 @@ def _summary(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
             if previous is not None and latest_ma < previous
             else "均線走平"
         )
-        summary = f"{TIMEFRAME_LABELS[series.timeframe]}｜{relation}｜{direction}｜趨勢線資料不足｜支撐壓力資料不足｜量能僅顯示原始成交量"
+        summary = f"{TIMEFRAME_LABELS[series.timeframe]}｜{relation}｜{direction}｜趨勢線資料不足｜{range_status}｜量能僅顯示原始成交量"
     if series.last_candle_is_forming:
         return f"{summary}｜{series.forming_label}｜僅供顯示、不進入 KAM 或 Paper"
     return summary
@@ -213,15 +366,13 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     )
     latest = candles[-1]
     latest_y = y(displayed_price)
-    price_label = "即時" if series.current_price is not None else "最新收盤"
     time_labels = (
         f"<text class='chart-time-label' x='{first_x:.2f}' y='378' text-anchor='start'>{_time_label(candles[0].opened_at, series.timeframe)}</text>"
         f"<text class='chart-time-label' x='{first_x + (len(candles) - 1) * step:.2f}' y='378' text-anchor='end'>{_time_label(latest.opened_at, series.timeframe)}</text>"
     )
     return (
-        "<svg class='candlestick-chart' viewBox='0 0 1024 392' role='img' aria-label='唯讀 K 線、20MA 與成交量'>"
+        "<svg class='candlestick-chart' viewBox='0 0 1024 392' role='img' aria-label='唯讀 K 線、20MA、即時水平線與成交量'>"
         f"{grid}<line class='chart-current-line' x1='{left:.0f}' y1='{latest_y:.2f}' x2='{right:.0f}' y2='{latest_y:.2f}'/>"
-        f"<text class='chart-current-price' x='976' y='{latest_y - 5:.2f}' text-anchor='end'>{price_label} {displayed_price:,.0f}</text>"
         f"<g class='chart-candles'>{''.join(bodies)}</g>{ma_line}<g class='chart-volumes'>{''.join(volumes)}</g>"
         f"<text class='chart-volume-label' x='{left:.0f}' y='288'>成交量</text>{time_labels}"
         f"<g class='chart-crosshair' hidden><line class='chart-crosshair-x' x1='0' y1='{top:.2f}' x2='0' y2='{volume_bottom:.2f}'/><line class='chart-crosshair-y' x1='{left:.2f}' y1='0' x2='{right:.2f}' y2='0'/></g>"
@@ -255,10 +406,16 @@ def render_multi_timeframe_chart_html(
         series.current_price_at.isoformat() if series.current_price_at is not None else "—"
     )
     status = _summary(series, ma_values) if valid else "商品或週期無效"
+    metrics = _reference_metrics(series, ma_values)
+    range_overlay = (
+        "<span class='enabled'>20 棒壓力／支撐</span>"
+        if metrics.resistance is not None and metrics.support is not None
+        else "<span>支撐壓力｜資料不足</span>"
+    )
     return f"""<!doctype html><html class='chart-page' lang='zh-Hant-TW'><head><meta charset='utf-8'><title>KAM 多週期 K 線</title><link rel='stylesheet' href='/static/operator.css'><script src='/static/chart-refresh.js' defer></script></head><body class='chart-page'><main class='chart-main'>
       <header><div><h1>多週期 K 線</h1><small>15 分・60 分・日・週｜唯讀市場結構檢視</small></div><a class='account-chip' href='/'>返回市場儀表板</a><span id='chart-live-status' class='chart-live-status' role='status' aria-live='polite'>每 3 秒更新・禁止真實下單</span></header>
       <nav class='chart-toolbar' aria-label='圖表商品與週期'>{instrument_tabs}<span class='chart-toolbar-divider'></span>{timeframe_tabs}</nav>
-      <div id='chart-summary' class='chart-summary'>{escape(status)}</div><section id='chart-panel' class='chart-panel'>{_chart_svg(series, ma_values)}<div class='chart-tooltip' role='status' aria-live='polite' hidden></div></section>
-      <aside class='chart-overlays' aria-label='圖表顯示項目'><span class='enabled'>K 線</span><span class='enabled'>20MA</span><span>上升趨勢線｜尚未接入</span><span>下降趨勢線｜尚未接入</span><span>支撐壓力｜尚未接入</span><span class='enabled'>成交量</span></aside>
+      <div id='chart-summary' class='chart-summary'>{escape(status)}</div><section id='chart-panel' class='chart-panel'>{_price_board(series, ma_values)}{_chart_svg(series, ma_values)}<div class='chart-tooltip' role='status' aria-live='polite' hidden></div></section>
+      <aside class='chart-overlays' aria-label='圖表顯示項目'><span class='enabled'>K 線</span><span class='enabled'>20MA</span><span>上升趨勢線｜尚未接入</span><span>下降趨勢線｜尚未接入</span>{range_overlay}<span class='enabled'>成交量</span></aside>
       <footer id='chart-footer' class='chart-footer'><span>資料來源：{escape(series.source)}</span><span>K 線時間：{escape(updated)}</span><span>即時報價時間：{escape(quote_updated)}</span><span>資料不足時不補假資料</span><span>任何單一指標均不構成進出場訊號</span></footer>
     </main></body></html>"""

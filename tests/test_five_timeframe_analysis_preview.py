@@ -88,10 +88,18 @@ def test_preview_runs_all_five_timeframes_and_remains_fail_closed() -> None:
         "ma20",
         "price_vs_ma20",
         "ma20_direction",
+        "range_resistance",
+        "range_support",
+        "range_window_bars",
+        "range_excludes_latest",
     }
     assert payload["timeframes"]["5m"]["last_price"] == 102
     assert payload["timeframes"]["5m"]["ma20"] is None
     assert payload["timeframes"]["5m"]["price_vs_ma20"] == "insufficient"
+    assert payload["timeframes"]["5m"]["range_resistance"] is None
+    assert payload["timeframes"]["5m"]["range_support"] is None
+    assert payload["timeframes"]["5m"]["range_window_bars"] == 0
+    assert payload["timeframes"]["5m"]["range_excludes_latest"] is True
     assert payload["decision_status"] == "BLOCKED"
     assert payload["action"] == "HOLD"
     assert "M5_ANALYSIS_ENGINE_REQUIRED" not in payload["blockers"]
@@ -151,4 +159,13 @@ def test_preview_exposes_bounded_ma20_display_metrics_without_raw_candles() -> N
     assert daily["ma20"] == 110.5
     assert daily["price_vs_ma20"] == "above"
     assert daily["ma20_direction"] == "rising"
+    assert daily["range_resistance"] == 122
+    assert daily["range_support"] == 99
+    assert daily["range_window_bars"] == 20
+    assert daily["range_excludes_latest"] is False
+    intraday = payload["timeframes"]["15m"]
+    assert intraday["range_resistance"] == 121
+    assert intraday["range_support"] == 98
+    assert intraday["range_window_bars"] == 20
+    assert intraday["range_excludes_latest"] is True
     assert payload["raw_candles_retained"] is False

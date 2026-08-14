@@ -336,7 +336,7 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
 
     assert '@import "../../ui/design_tokens.css"' in css
     assert "height: 100vh" in css and "overflow: hidden" in css
-    assert "grid-template-rows: minmax(142px, 178px) minmax(144px, 146px) minmax(96px, 110px) minmax(0, 1fr)" in css
+    assert "grid-template-rows: minmax(126px, 132px) minmax(184px, 192px) minmax(96px, 110px) minmax(0, 1fr)" in css
     assert "footer { grid-row: 4; position: static;" in css
     assert ".risk-disclaimer" in css and ".footer-metrics" in css
     assert "font-size: 11px" in css and ".risk-disclaimer span { display: block; }" in css
@@ -344,6 +344,9 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert ".cycle-chart svg" in css and "height: 230px" in css
     assert ".cycle-stage-label" in css and "font-size: 10.5px" in css
     assert ".cycle-info dt" in css and "font-size: 12px" in css
+    assert ".cycle-market-current dd" in css and "#8ff0db" in css
+    assert ".cycle-market-resistance dd" in css and "#ff9eb2" in css
+    assert ".cycle-market-support dd" in css and "#82e4bd" in css
     assert "marker-breathe 5s" in css
     assert ".proposal, .matching { display: flex; flex-direction: column; padding: 13px 16px; }" in css
     assert ".proposal p, .matching p" in css and "font-size: 13px" in css
@@ -358,6 +361,7 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert ".timeframe-card b { display: block; color: #f8fbff; font-size: 18px;" in css
     assert ".timeframe-card strong { font-size: 26px;" in css
     assert ".timeframe-card span { display: block; color: #ffffff; font-size: 13px;" in css
+    assert ".timeframe-resistance" in css and ".timeframe-support" in css
     assert ".trend-health-card { grid-column: 1; grid-row: 3; display: grid;" in css
     assert ".position-card { grid-column: 2; grid-row: 3; display: grid;" in css
     assert ".next-card { grid-column: 3; grid-row: 3; display: grid;" in css

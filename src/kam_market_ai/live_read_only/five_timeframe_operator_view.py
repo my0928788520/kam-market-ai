@@ -33,6 +33,8 @@ def build_five_timeframe_operator_view(payload: Mapping[str, object]) -> PaperTr
     states = states if isinstance(states, Mapping) else {}
     analysis = preview.get("timeframes")
     analysis = analysis if isinstance(analysis, Mapping) else {}
+    five_minute = analysis.get("5m")
+    five_minute = five_minute if isinstance(five_minute, Mapping) else {}
 
     direction = str(decision.get("direction", summary.get("direction", "觀望")))
     state_codes = []
@@ -57,7 +59,7 @@ def build_five_timeframe_operator_view(payload: Mapping[str, object]) -> PaperTr
         "data_freshness": status,
         "instrument": str(payload.get("symbol", "TMF")),
         "snapshot_time": payload.get("snapshot_written_at", "—"),
-        "current_price": "—",
+        "current_price": five_minute.get("last_price", "—"),
         "u_stage": "U0",
         "cycle_label": (
             "等待有效週期資料" if status != "READY_VERIFIED_FIVE_TIMEFRAMES" else "等待循環位置判讀"

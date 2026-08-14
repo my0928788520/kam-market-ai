@@ -6,6 +6,7 @@ from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
 from html import escape
+from math import isfinite
 from pathlib import Path
 from typing import Callable, Iterable, Mapping
 from urllib.parse import parse_qs
@@ -64,6 +65,96 @@ def _control_label(view: PaperTradingOperatorView, bull: int) -> str:
     bear = max(0, min(10 - bull, bear))
     return f"多方 {bull}｜空方 {bear}｜未確認 {10-bull-bear}"
 
+
+def _numeric_price(value: object) -> float | None:
+    try:
+        number = float(str(value).replace(",", ""))
+    except (TypeError, ValueError):
+        return None
+    return number if isfinite(number) else None
+
+
+def _display_price(value: object) -> str:
+    number = _numeric_price(value)
+    if number is None:
+        return "尚未形成"
+    return f"{number:,.2f}".replace(".00", "")
+
+
+def _reference_level_text(
+    candidates: list[tuple[float, str]],
+    *,
+    current: float | None,
+    resistance: bool,
+) -> str:
+    if not candidates:
+        return "尚未形成"
+    if current is None:
+        level, source = (min if resistance else max)(candidates)
+        return f"{_display_price(level)}（{source.replace(' ', '')}）"
+    preferred = [item for item in candidates if item[0] >= current]
+    if not resistance:
+        preferred = [item for item in candidates if item[0] <= current]
+    if preferred:
+        level, source = (min if resistance else max)(preferred)
+        distance = abs(level - current)
+        sign = "+" if resistance else "−"
+        relation = f"{sign}{_display_price(distance)}點"
+    else:
+        level, source = (max if resistance else min)(candidates)
+        distance = abs(level - current)
+        relation = f"已突破 {_display_price(distance)}點" if resistance else f"已跌破 {_display_price(distance)}點"
+    return f"{_display_price(level)}（{source.replace(' ', '')}／{relation}）"
+
+
+def _cycle_market_references(demo: Mapping[str, object]) -> str:
+    details = demo.get("timeframe_details")
+    details = details if isinstance(details, Mapping) else {}
+    current = _numeric_price(demo.get("current_price"))
+    sixty = details.get("60 分")
+    sixty = sixty if isinstance(sixty, Mapping) else {}
+    ma20 = _display_price(sixty.get("ma20"))
+    ma_relation = {"above": "現價在上", "below": "現價在下", "equal": "現價貼近"}.get(
+        str(sixty.get("price_vs_ma20", "")),
+        "",
+    )
+    ma_direction = {"rising": "上彎", "falling": "下彎", "flat": "走平"}.get(
+        str(sixty.get("ma20_direction", "")),
+        "",
+    )
+    if ma20 != "尚未形成" and (ma_relation or ma_direction):
+        ma20 += f"（{'・'.join(item for item in (ma_relation, ma_direction) if item)}）"
+    resistance_levels: list[tuple[float, str]] = []
+    support_levels: list[tuple[float, str]] = []
+    for label in ("15 分", "60 分", "日線", "週線"):
+        frame = details.get(label)
+        if not isinstance(frame, Mapping):
+            continue
+        resistance_value = _numeric_price(frame.get("range_resistance"))
+        support_value = _numeric_price(frame.get("range_support"))
+        if resistance_value is not None:
+            resistance_levels.append((resistance_value, label))
+        if support_value is not None:
+            support_levels.append((support_value, label))
+    rows = (
+        ("cycle-market-current", "即時微台", _display_price(current)),
+        ("cycle-market-ma", "60分20MA", ma20),
+        (
+            "cycle-market-resistance",
+            "最近上壓",
+            _reference_level_text(resistance_levels, current=current, resistance=True),
+        ),
+        (
+            "cycle-market-support",
+            "最近下撐",
+            _reference_level_text(support_levels, current=current, resistance=False),
+        ),
+    )
+    return "".join(
+        f"<div class='cycle-market-reference {class_name}'><dt>{label}</dt><dd>{escape(value)}</dd></div>"
+        for class_name, label, value in rows
+    )
+
 def _cycle(view: PaperTradingOperatorView) -> str:
     """Render the complete, read-only MarketCycleCard from existing view data."""
     demo = view.demo or {}
@@ -78,6 +169,7 @@ def _cycle(view: PaperTradingOperatorView) -> str:
     following = "資料恢復後判讀" if index == 0 else _STAGES[min(8, index + 1)][0]
     next_step = str(demo.get("next_step", "等待資料完整"))
     risk = "不可判讀" if index == 0 else "偏高" if index >= 5 else "風險受控"
+    market_references = _cycle_market_references(demo)
     labels = (
         ("低檔確認", 30, 164), ("起漲形成", 96, 79), ("多方延伸", 156, 30),
         ("高檔回落", 229, 74), ("起跌形成", 275, 105), ("空方延伸", 329, 151), ("低點止跌", 367, 169),
@@ -109,6 +201,7 @@ def _cycle(view: PaperTradingOperatorView) -> str:
           </svg>
         </div>
         <dl class='cycle-info'>
+          {market_references}
           <div><dt>目前位置</dt><dd>{escape(stage)}</dd></div>
           <div><dt>循環狀態</dt><dd>{escape(state)}</dd></div>
           <div><dt>上一階段</dt><dd>{escape(previous)}</dd></div>
@@ -117,7 +210,7 @@ def _cycle(view: PaperTradingOperatorView) -> str:
           <div><dt>風險</dt><dd>{risk}</dd></div>
         </dl>
       </div>
-      <p class='cycle-note'>倒 U 為市場位置判讀，不是價格預測。</p>
+      <p class='cycle-note'>倒 U 為市場位置判讀；壓力／支撐為 20 棒區間參考，不是買賣訊號。</p>
     </section>"""
 
 def _rows(values: dict[str, str]) -> str:
@@ -178,10 +271,19 @@ def _timeframe_card(name: object, state: object, details: Mapping[str, object] |
         ma_text = f"（20MA {float(ma20):,.2f}）".replace(".00", "") if ma20 is not None else ""
     except (TypeError, ValueError):
         ma_text = ""
+    resistance = _display_price(details.get("range_resistance"))
+    support = _display_price(details.get("range_support"))
+    try:
+        range_bars = max(0, int(details.get("range_window_bars", 0)))
+    except (TypeError, ValueError):
+        range_bars = 0
+    range_label = f"{range_bars}棒" if range_bars else "區間"
     return (
         "<article class='timeframe-card'>"
         f"<b>{escape(str(name))}</b><strong>{code}</strong><span>{escape(interpretation)}</span>"
-        f"<small>價格相對 20MA：{escape(relation + ma_text)}</small><small>20MA 方向：{escape(direction)}</small></article>"
+        f"<small>價格相對 20MA：{escape(relation + ma_text)}</small><small>20MA 方向：{escape(direction)}</small>"
+        f"<small class='timeframe-resistance'>{range_label}壓力：{escape(resistance)}</small>"
+        f"<small class='timeframe-support'>{range_label}支撐：{escape(support)}</small></article>"
     )
 
 
