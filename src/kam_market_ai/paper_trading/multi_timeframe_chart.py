@@ -46,6 +46,7 @@ class ChartSeries:
     current_price_at: datetime | None = None
     last_candle_is_forming: bool = False
     forming_label: str | None = None
+    trading_session: str | None = None
 
     def __post_init__(self) -> None:
         if self.current_price is not None and (
@@ -63,6 +64,8 @@ class ChartSeries:
                 raise ValueError("forming series requires a candle and label")
         elif self.forming_label is not None:
             raise ValueError("forming label requires a forming candle")
+        if self.trading_session not in {None, "regular", "afterhours"}:
+            raise ValueError("trading_session must be regular or afterhours")
 
 
 @dataclass(frozen=True, slots=True)
@@ -627,8 +630,12 @@ def render_multi_timeframe_chart_html(
         f"<span class='enabled'>下降趨勢｜{'可顯示' if falling_anchors is not None else '錨點不足'}</span>"
         f"<span class='enabled'>W 頸線｜{'可顯示' if neckline_anchor is not None else '結構不足'}</span>"
     )
+    session_text = {"regular": "日盤", "afterhours": "夜盤"}.get(
+        series.trading_session, "時段未確認"
+    )
+    session_class = series.trading_session or "unknown"
     return f"""<!doctype html><html class='chart-page' lang='zh-Hant-TW'><head><meta charset='utf-8'><title>KAM 多週期 K 線</title><link rel='stylesheet' href='/static/operator.css'><script src='/static/chart-refresh.js' defer></script></head><body class='chart-page'><main class='chart-main'>
-      <header><div><h1>多週期 K 線</h1><small>15 分・60 分・日・週｜唯讀市場結構檢視</small></div><a class='account-chip' href='/'>返回市場儀表板</a><span id='chart-live-status' class='chart-live-status' role='status' aria-live='polite'>每 3 秒更新・禁止真實下單</span></header>
+      <header><div><h1>多週期 K 線</h1><small>15 分・60 分・日・週｜唯讀市場結構檢視</small></div><a class='account-chip' href='/'>返回市場儀表板</a><strong class='chart-session-badge chart-session-{escape(session_class)}' aria-label='目前交易時段'>{escape(session_text)}</strong><span id='chart-live-status' class='chart-live-status' role='status' aria-live='polite'>每 3 秒更新・禁止真實下單</span></header>
       <nav class='chart-toolbar' aria-label='圖表商品與週期'>{instrument_tabs}<span class='chart-toolbar-divider'></span>{timeframe_tabs}</nav>
       <div id='chart-summary' class='chart-summary'>{escape(status)}</div><section id='chart-panel' class='chart-panel'>{_price_board(series, ma_values)}{_chart_svg(series, ma_values)}<div class='chart-tooltip' role='status' aria-live='polite' hidden></div></section>
       <aside class='chart-overlays' aria-label='圖表顯示項目'><span class='enabled'>K 線</span><span class='enabled'>20MA</span>{trend_overlay}{range_overlay}<span class='enabled'>成交量</span></aside>
