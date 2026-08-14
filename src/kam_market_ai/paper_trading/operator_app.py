@@ -29,6 +29,6 @@ def create_kam_rule_demo_operator_app(market_data_source=None, chart_data_source
     return build_operator_wsgi(lambda: build_demo_operator_presenter(proposal, None, DEMO_SNAPSHOT), market_data_source=market_data_source, chart_data_source=chart_data_source) if market_data_source is not None else build_operator_wsgi(lambda: build_demo_operator_presenter(proposal, None, DEMO_SNAPSHOT), chart_data_source=chart_data_source)
 
 
-def create_operator_app(view_provider: Callable[[], PaperTradingOperatorView], market_data_source=None, chart_data_source=None):
+def create_operator_app(view_provider: Callable[[], PaperTradingOperatorView], market_data_source=None, chart_data_source=None, session_switcher=None):
     """Return the GET-only WSGI app; no server is started here."""
-    return build_operator_wsgi(view_provider, market_data_source=market_data_source, chart_data_source=chart_data_source) if market_data_source is not None else build_operator_wsgi(view_provider, chart_data_source=chart_data_source)
+    return build_operator_wsgi(view_provider, market_data_source=market_data_source, chart_data_source=chart_data_source, session_switcher=session_switcher) if market_data_source is not None else build_operator_wsgi(view_provider, chart_data_source=chart_data_source, session_switcher=session_switcher)
