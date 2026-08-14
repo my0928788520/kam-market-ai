@@ -42,6 +42,7 @@ from .fubon_live_chart_source import (
     FubonLiveQuoteSource,
 )
 from .fubon_live_five_timeframe_verifier import FubonLiveFiveTimeframeVerifier
+from .index_futures_product import index_futures_product, infer_index_futures_instrument
 from .fubon_neo import (
     FubonIntradayCandlesAdapter,
     ResolvedFuturesContract,
@@ -146,10 +147,11 @@ def build_local_dashboard_router(operator_app: Any, diagnostic_app: Any) -> Any:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="KAM 富邦 TMF 本機五週期唯讀儀表板")
+    parser = argparse.ArgumentParser(description="KAM 富邦 TX／MTX／TMF 本機五週期唯讀儀表板")
     parser.add_argument("--live", action="store_true")
     parser.add_argument("--env", default=".env")
     parser.add_argument("--symbol", help="省略時以已驗證成交量自動解析活動 TMF 契約")
+    parser.add_argument("--instrument", choices=("TX", "MTX", "TMF"), help="商品；提供 symbol 時可自動辨識")
     parser.add_argument("--session", default=None)
     parser.add_argument("--after-hours", action="store_true")
     parser.add_argument("--host", default="127.0.0.1")
@@ -203,8 +205,14 @@ def main(
     try:
         if args.symbol:
             symbol = args.symbol
+            instrument = infer_index_futures_instrument(symbol)
+            if args.instrument is not None and Instrument(args.instrument) is not instrument:
+                raise ValueError("instrument and symbol identity mismatch")
             contract_month = None
         else:
+            instrument = Instrument(args.instrument or "TMF")
+            if instrument is not Instrument.TMF:
+                raise ValueError("TX and MTX currently require an explicit verified symbol")
             active_contract = FubonTmfContractProbe(result.clients).resolve_active(
                 after_hours=args.after_hours,
             )
@@ -214,22 +222,38 @@ def main(
         print(json.dumps({"success": False, "failure_stage": "ACTIVE_CONTRACT_RESOLUTION_ERROR"}))
         return 1
 
+    product_slug = instrument.value.lower()
+    if args.snapshot == "debug/five_timeframe/live.json":
+        args.snapshot = f"debug/five_timeframe/{product_slug}_live.json"
+    if args.chart_history == "debug/five_timeframe/tmf_60m_history.json":
+        args.chart_history = f"debug/five_timeframe/{product_slug}_60m_history.json"
+    if args.chart_history_15m == "debug/five_timeframe/tmf_15m_history.json":
+        args.chart_history_15m = f"debug/five_timeframe/{product_slug}_15m_history.json"
+    if args.paper_journal == "debug/paper_trading/tmf_live_journal.json":
+        args.paper_journal = f"debug/paper_trading/{product_slug}_live_journal.json"
+
     resolver = VerifiedContractResolver(
-        (ResolvedFuturesContract(Instrument.TMF, symbol, args.after_hours),)
+        (ResolvedFuturesContract(instrument, symbol, args.after_hours),)
     )
     pipeline = FubonFiveTimeframeCandlePipeline(
         FubonIntradayCandlesAdapter(result.clients, resolver),
     )
     official_history_source = TaifexOfficialHistorySource(args.taifex_history_cache)
-    verifier = FubonLiveFiveTimeframeVerifier(pipeline, official_history_source)
+    verifier = FubonLiveFiveTimeframeVerifier(
+        pipeline,
+        official_history_source if instrument is Instrument.TMF else None,
+        instrument=instrument,
+    )
     quote_source = FubonLiveQuoteSource(
         result.clients,
         symbol=symbol,
+        instrument=instrument,
         after_hours=args.after_hours,
     )
     dashboard_market_source = FubonLiveDashboardMarketSource(
         quote_source,
         symbol=symbol,
+        instrument=instrument,
         contract_month=contract_month,
         after_hours=args.after_hours,
     )
@@ -248,18 +272,23 @@ def main(
     chart_source = FubonLiveChartSource(
         lambda: verifier.latest_candle_result,
         current_price_provider=lambda: quote_source.latest,
-        closed_higher_timeframe_provider=closed_higher_timeframes,
+        closed_higher_timeframe_provider=(closed_higher_timeframes if instrument is Instrument.TMF else None),
         after_hours=args.after_hours,
         history_path=args.chart_history,
         history_15m_path=args.chart_history_15m,
+        instrument=instrument,
     )
 
     paper_session: LiveTmfPaperSimulation | None = None
     paper_runtime: dict[str, object] = {"armed": False, "action": "DISARMED"}
     if args.paper_test_armed:
         try:
+            product = index_futures_product(instrument)
             paper_config = TmfPaperSimulationConfig(
                 instrument=symbol,
+                point_value=product.point_value,
+                initial_margin=product.initial_margin,
+                maintenance_margin=product.maintenance_margin,
                 paper_trading_enabled=True,
                 manual_approval_granted=True,
             )
@@ -363,6 +392,7 @@ def main(
                 "health_url": f"http://{args.host}:{args.port}/api/five-timeframe/health",
                 "refresh_seconds": args.refresh_seconds,
                 "symbol": symbol,
+                "instrument": instrument.value,
                 "live_quote_source": "FUBON_INTRADAY_QUOTE",
                 "live_quote_refresh_seconds": args.refresh_seconds,
                 "main_dashboard_live_quote_enabled": True,
@@ -377,10 +407,10 @@ def main(
                 "paper_journal": args.paper_journal if args.paper_test_armed else None,
                 "paper_stop_loss_points": 20 if args.paper_test_armed else None,
                 "paper_take_profit_points": 40 if args.paper_test_armed else None,
-                "paper_point_value": 10 if args.paper_test_armed else None,
+                "paper_point_value": int(index_futures_product(instrument).point_value) if args.paper_test_armed else None,
                 "paper_margin_model": "RESERVE_RELEASE_V1" if args.paper_test_armed else None,
-                "paper_initial_margin": 35050 if args.paper_test_armed else None,
-                "paper_maintenance_margin": 26900 if args.paper_test_armed else None,
+                "paper_initial_margin": int(index_futures_product(instrument).initial_margin) if args.paper_test_armed else None,
+                "paper_maintenance_margin": int(index_futures_product(instrument).maintenance_margin) if args.paper_test_armed else None,
                 "paper_margin_effective_at": (
                     "2026-08-12T05:45:00Z" if args.paper_test_armed else None
                 ),
