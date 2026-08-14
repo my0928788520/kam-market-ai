@@ -65,7 +65,7 @@ def test_chart_page_is_fail_closed_without_historical_source() -> None:
     assert "每 3 秒更新" in html
     assert "id='chart-summary'" in html and "id='chart-panel'" in html
     assert "<svg class='candlestick-chart'" not in html
-    assert "上升趨勢線｜尚未接入" in html and "支撐壓力｜資料不足" in html
+    assert "上升趨勢｜錨點不足" in html and "支撐壓力｜資料不足" in html
 
 
 def test_chart_page_renders_injected_candles_ma20_volume_and_summary() -> None:
@@ -86,10 +86,11 @@ def test_chart_page_renders_injected_candles_ma20_volume_and_summary() -> None:
     assert "<span>20 棒上壓力</span><strong>125</strong>" in html
     assert "<span>20 棒下支撐</span><strong>103</strong>" in html
     assert "20 棒支撐壓力已更新" in html
-    assert "id='chart-range-toggle'" in html
-    assert "顯示支撐／壓力＋趨勢線" in html
-    assert "水平線＝最近上下緣・斜線＝最近有效波段高低點" in html
-    assert "class='chart-range-lines' hidden" in html
+    assert "data-chart-overlay='resistance'" in html
+    assert "data-chart-overlay='support'" in html
+    assert "預設不顯示，需要時個別開啟" in html
+    assert "data-chart-overlay-line='resistance' hidden" in html
+    assert "data-chart-overlay-line='support' hidden" in html
     assert "class='chart-resistance-line'" in html
     assert "class='chart-support-line'" in html
     assert "上壓 125" in html and "下撐 103" in html
@@ -128,6 +129,23 @@ def test_sparse_live_series_keeps_candle_bodies_at_readable_width() -> None:
     assert "已完成 3/5 根；資料仍不足" in html
     assert "08/13 08:00" in html
     assert "data-ma20=''" in html
+
+
+def test_60m_chart_limits_view_to_latest_48_bars_for_readable_spacing() -> None:
+    start = datetime(2026, 8, 1, tzinfo=UTC)
+
+    class DenseSource:
+        def read_series(self, instrument: str, timeframe: str) -> ChartSeries:
+            candles = tuple(
+                ChartCandle(start + timedelta(hours=index), 100, 103, 99, 102, 10)
+                for index in range(80)
+            )
+            return ChartSeries(instrument, timeframe, candles, "dense-60m", candles[-1].opened_at)
+
+    html = render_multi_timeframe_chart_html(DenseSource(), timeframe="60m")
+
+    assert html.count("class='chart-hover-zone'") == 48
+    assert "width='9.90'" in html
 
 
 def test_chart_uses_live_quote_for_current_line_without_changing_candle_close() -> None:
@@ -240,6 +258,8 @@ def test_chart_draws_latest_rising_and_falling_pivot_trend_lines() -> None:
 
     assert "class='chart-rising-trend-line'" in html
     assert "class='chart-falling-trend-line'" in html
+    assert "data-chart-overlay='rising'" in html
+    assert "data-chart-overlay='falling'" in html
     assert ">上升趨勢</text>" in html
     assert ">下降趨勢</text>" in html
 
