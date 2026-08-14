@@ -17,6 +17,8 @@ direction and one next step.
 - Atomic safe snapshots with freshness enforcement.
 - Periodic refresh recovery: failed calls never replace the last verified
   snapshot, and subsequent cycles retry automatically.
+- A no-store health endpoint reports refresh counts, consecutive failures, and
+  last success/failure timestamps without exposing exceptions or credentials.
 - Explicit degradation for unusable input, analysis error codes, stale data,
   invalid data, calculation errors, and higher-timeframe conflict.
 
