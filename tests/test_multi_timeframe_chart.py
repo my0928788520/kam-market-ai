@@ -117,11 +117,11 @@ def test_chart_page_renders_injected_candles_ma20_volume_and_summary() -> None:
     assert "data-manual-tool='horizontal'" in html
     assert "data-manual-action='undo'" in html
     assert "data-manual-action='clear'" in html
-    assert "壓力／支撐自動顯示" in html
-    assert "chart-auto-level" in html and "chart-auto-level' hidden" not in html
-    assert "class='chart-resistance-line'" in html
-    assert "class='chart-support-line'" in html
-    assert "上壓 125" in html and "下撐 103" in html
+    assert "所有線均由手動畫線" in html
+    assert "20 棒壓力／支撐｜僅數字參考" in html
+    assert "chart-auto-level" not in html
+    assert "class='chart-resistance-line'" not in html
+    assert "class='chart-support-line'" not in html
     assert "class='chart-current-price'" not in html
 
 
