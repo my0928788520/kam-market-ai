@@ -169,6 +169,10 @@ def test_account_center_localizes_visible_status_source_and_read_only_settings()
     assert "資料不足／無法判讀" in visible_water
     assert "UNKNOWN" not in visible_water
 
+    margin_detail = render_account_html(selected_view="water-level", detail=True)
+    assert "TMF：原始 35,050／維持 26,900" in margin_detail
+    assert "期交所 2026-08-12 股價指數類保證金" in margin_detail
+
     settings = render_account_html(selected_view="settings")
     for label in ("原始保證金倍數", "最低可用保證金", "最高資金使用率", "警示緩衝金額"):
         assert label in settings

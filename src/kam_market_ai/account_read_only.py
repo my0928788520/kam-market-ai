@@ -212,11 +212,11 @@ class DemoMarginRequirementSource:
 
 
 DEMO_ACCOUNT_THRESHOLDS = CapitalSafetyThresholds(Decimal("0.50"), Decimal("0.75"))
-_DEMO_MARGIN_TIME = datetime(2026, 8, 5, tzinfo=UTC)
+_DEMO_MARGIN_TIME = datetime(2026, 8, 12, 5, 45, tzinfo=UTC)
 DEMO_MARGIN_SOURCE = DemoMarginRequirementSource((
-    MarginRequirement("TX", Decimal("636000"), Decimal("488000"), _DEMO_MARGIN_TIME, "offline-demo-margin-snapshot", _DEMO_MARGIN_TIME, AccountDataFreshness.DEMO),
-    MarginRequirement("MTX", Decimal("159000"), Decimal("122000"), _DEMO_MARGIN_TIME, "offline-demo-margin-snapshot", _DEMO_MARGIN_TIME, AccountDataFreshness.DEMO),
-    MarginRequirement("TMF", Decimal("31800"), Decimal("24400"), _DEMO_MARGIN_TIME, "offline-demo-margin-snapshot", _DEMO_MARGIN_TIME, AccountDataFreshness.DEMO),
+    MarginRequirement("TX", Decimal("701000"), Decimal("538000"), _DEMO_MARGIN_TIME, "taifex-index-margin-2026-08-12", _DEMO_MARGIN_TIME, AccountDataFreshness.DEMO),
+    MarginRequirement("MTX", Decimal("175250"), Decimal("134500"), _DEMO_MARGIN_TIME, "taifex-index-margin-2026-08-12", _DEMO_MARGIN_TIME, AccountDataFreshness.DEMO),
+    MarginRequirement("TMF", Decimal("35050"), Decimal("26900"), _DEMO_MARGIN_TIME, "taifex-index-margin-2026-08-12", _DEMO_MARGIN_TIME, AccountDataFreshness.DEMO),
 ))
 DEMO_ACCOUNT_SOURCE = DemoAccountReadOnlySource(FuturesAccountSnapshot(
     account_status="示範帳戶・尚未連線",

@@ -10,6 +10,7 @@ from kam_market_ai.account_read_only import (
     AccountPositionSummary,
     CapitalSafetyLevel,
     CapitalSafetyThresholds,
+    DEMO_MARGIN_SOURCE,
     DemoMarginRequirementSource,
     FuturesAccountSnapshot,
     MarginRequirement,
@@ -20,6 +21,26 @@ from kam_market_ai.account_read_only import (
 
 
 _TIME = datetime(2026, 8, 5, tzinfo=UTC)
+
+
+def test_demo_margin_snapshot_matches_current_taifex_index_requirements() -> None:
+    requirements = {item.product_code: item for item in DEMO_MARGIN_SOURCE.read_requirements()}
+
+    assert requirements["TX"].initial_margin == Decimal(701000)
+    assert requirements["TX"].maintenance_margin == Decimal(538000)
+    assert requirements["MTX"].initial_margin == Decimal(175250)
+    assert requirements["MTX"].maintenance_margin == Decimal(134500)
+    assert requirements["TMF"].initial_margin == Decimal(35050)
+    assert requirements["TMF"].maintenance_margin == Decimal(26900)
+    assert requirements["TMF"].effective_at == datetime(
+        2026,
+        8,
+        12,
+        5,
+        45,
+        tzinfo=UTC,
+    )
+    assert requirements["TMF"].source == "taifex-index-margin-2026-08-12"
 
 
 def _margin_source(*, freshness: AccountDataFreshness = AccountDataFreshness.FRESH) -> DemoMarginRequirementSource:

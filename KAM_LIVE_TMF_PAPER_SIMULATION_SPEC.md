@@ -33,6 +33,22 @@ stops at `pending_manual_confirmation` and creates no fill.
 - Maximum quote age: 360 seconds.
 - Short paper entries: disabled in this phase.
 
+## Official margin model
+
+The offline margin snapshot follows the TAIFEX index-futures schedule effective
+after the 2026-08-12 regular session:
+
+- TMF initial margin: NT$35,050 per contract.
+- TMF maintenance margin: NT$26,900 per contract.
+- Source identity: `TAIFEX_INDEX_MARGIN_2026-08-12`.
+
+A paper entry reserves initial margin instead of debiting the quoted futures
+index level as if it were a cash security. A stop-loss or take-profit exit
+releases the reserved margin and applies realized P&L at NT$10 per point. The
+journal exposes available cash, reserved margin, account equity and maintenance
+status. Insufficient initial margin fails closed; margin equity at or below the
+maintenance requirement records `MARGIN_MAINTENANCE_WARNING`.
+
 The matching-price policy is explicit because the five-timeframe candle source
 does not provide a bid/ask book. No synthetic spread or provider raw payload is
 claimed or stored.
@@ -42,6 +58,7 @@ claimed or stored.
 The local JSON journal stores only normalized paper state:
 
 - simulated fills, cash ledger and position;
+- official margin requirement, reserved margin, available cash and account equity;
 - entry, mark-to-market, stop-loss exit and take-profit exit events;
 - entry/current/protection prices;
 - unrealized and realized P&L, MFE and MAE using the TMF point value;
@@ -52,6 +69,11 @@ Writes are atomic. Loading verifies the ledger hash, event chain and final
 journal hash. A malformed, wrong-contract or modified journal is rejected; it
 is never silently repaired. Repeated three-second refreshes of the same 5-minute
 quote do not create duplicate fills or performance events.
+
+The v0.2 loader verifies and migrates only a completely empty v0.1 journal.
+Legacy journals containing positions, fills or events fail closed and require
+manual archival rather than being silently reinterpreted under the new margin
+accounting model.
 
 ## Permanent safety flags
 

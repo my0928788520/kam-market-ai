@@ -15,6 +15,7 @@ from hashlib import sha256
 from json import dumps, loads
 from os import replace
 from pathlib import Path
+from typing import Any, cast
 
 from kam_market_ai.live_read_only.five_timeframe_analysis_preview import (
     build_verified_five_timeframe_analysis_preview,
@@ -27,6 +28,7 @@ from kam_market_ai.market_data.fubon_five_timeframe_pipeline import (
 
 from .contracts import (
     PaperTradingAccountSnapshot,
+    PaperTradingFill,
     PaperTradingOrderRequest,
     PaperTradingPosition,
     PaperTradingRiskLimits,
@@ -59,8 +61,10 @@ from .proposal_runner import (
     confirm_paper_order_proposal,
 )
 
-LIVE_TMF_PAPER_SIMULATION_VERSION = "0.1"
-LIVE_TMF_PAPER_JOURNAL_SCHEMA = "kam-live-tmf-paper-journal-v1"
+LIVE_TMF_PAPER_SIMULATION_VERSION = "0.2"
+LIVE_TMF_PAPER_JOURNAL_SCHEMA = "kam-live-tmf-paper-journal-v2"
+LEGACY_TMF_PAPER_SIMULATION_VERSION = "0.1"
+LEGACY_TMF_PAPER_JOURNAL_SCHEMA = "kam-live-tmf-paper-journal-v1"
 
 
 def _hash(payload: object) -> str:
@@ -113,6 +117,45 @@ class TmfPaperPerformanceEventType(StrEnum):
     TAKE_PROFIT_EXIT = "take_profit_exit"
 
 
+class TmfPaperMarginStatus(StrEnum):
+    NO_POSITION = "no_position"
+    SAFE = "safe"
+    MAINTENANCE_WARNING = "maintenance_warning"
+
+
+@dataclass(frozen=True, slots=True)
+class TmfPaperMarginRequirement:
+    initial_margin: Decimal
+    maintenance_margin: Decimal
+    effective_at: datetime
+    source: str
+
+    def __post_init__(self) -> None:
+        _decimal(self.initial_margin, "initial_margin", positive=True)
+        _decimal(self.maintenance_margin, "maintenance_margin", positive=True)
+        if self.initial_margin < self.maintenance_margin:
+            raise ValueError("initial margin must cover maintenance margin.")
+        _utc(self.effective_at, "margin_effective_at")
+        if not self.source or self.source != self.source.strip():
+            raise ValueError("margin source is required.")
+
+    def canonical_payload(self) -> dict[str, str]:
+        return {
+            "initial_margin": _decimal(
+                self.initial_margin,
+                "initial_margin",
+                positive=True,
+            ),
+            "maintenance_margin": _decimal(
+                self.maintenance_margin,
+                "maintenance_margin",
+                positive=True,
+            ),
+            "effective_at": _utc(self.effective_at, "margin_effective_at"),
+            "source": self.source,
+        }
+
+
 @dataclass(frozen=True, slots=True)
 class TmfPaperSimulationConfig:
     instrument: str = "TMF"
@@ -125,6 +168,10 @@ class TmfPaperSimulationConfig:
     max_order_notional: Decimal = Decimal(1000000)
     max_daily_loss: Decimal = Decimal(10000)
     max_quote_age_seconds: int = 360
+    initial_margin: Decimal = Decimal(35050)
+    maintenance_margin: Decimal = Decimal(26900)
+    margin_effective_at: datetime = datetime(2026, 8, 12, 5, 45, tzinfo=UTC)
+    margin_source: str = "TAIFEX_INDEX_MARGIN_2026-08-12"
     paper_trading_enabled: bool = False
     manual_approval_granted: bool = False
     dry_run: bool = True
@@ -144,8 +191,15 @@ class TmfPaperSimulationConfig:
             ("initial_cash", self.initial_cash),
             ("max_order_notional", self.max_order_notional),
             ("max_daily_loss", self.max_daily_loss),
+            ("initial_margin", self.initial_margin),
+            ("maintenance_margin", self.maintenance_margin),
         ):
             _decimal(value, field, positive=True)
+        if self.initial_margin < self.maintenance_margin:
+            raise ValueError("initial margin must cover maintenance margin.")
+        _utc(self.margin_effective_at, "margin_effective_at")
+        if not self.margin_source or self.margin_source != self.margin_source.strip():
+            raise ValueError("margin_source is required.")
         if self.quantity > Decimal(1):
             raise ValueError("TMF paper simulation is limited to one contract.")
         if (
@@ -162,6 +216,15 @@ class TmfPaperSimulationConfig:
             or self.account_credentials_allowed is not False
         ):
             raise ValueError("TMF simulation is permanently isolated from live trading.")
+
+    @property
+    def margin_requirement(self) -> TmfPaperMarginRequirement:
+        return TmfPaperMarginRequirement(
+            self.initial_margin,
+            self.maintenance_margin,
+            self.margin_effective_at,
+            self.margin_source,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -304,7 +367,11 @@ class TmfPaperPerformanceEvent:
             "entry_price": _decimal(self.entry_price, "entry_price", positive=True),
             "current_price": _decimal(self.current_price, "current_price", positive=True),
             "stop_loss_price": _decimal(self.stop_loss_price, "stop_loss_price", positive=True),
-            "take_profit_price": _decimal(self.take_profit_price, "take_profit_price", positive=True),
+            "take_profit_price": _decimal(
+                self.take_profit_price,
+                "take_profit_price",
+                positive=True,
+            ),
             "unrealized_pnl": _decimal(self.unrealized_pnl, "unrealized_pnl"),
             "realized_pnl": _decimal(self.realized_pnl, "realized_pnl"),
             "max_favorable_excursion": _decimal(
@@ -334,6 +401,7 @@ class TmfPaperPerformanceEvent:
 class TmfPaperSimulationJournal:
     instrument: str
     point_value: Decimal
+    margin_requirement: TmfPaperMarginRequirement
     ledger: PaperTradingLedger
     events: tuple[TmfPaperPerformanceEvent, ...] = ()
     version: str = LIVE_TMF_PAPER_SIMULATION_VERSION
@@ -342,6 +410,8 @@ class TmfPaperSimulationJournal:
         if not self.instrument or self.instrument != self.instrument.upper():
             raise ValueError("journal instrument must be canonical.")
         _decimal(self.point_value, "point_value", positive=True)
+        if not isinstance(self.margin_requirement, TmfPaperMarginRequirement):
+            raise TypeError("journal margin requirement is required.")
         if self.version != LIVE_TMF_PAPER_SIMULATION_VERSION:
             raise ValueError("unsupported live TMF paper journal version.")
         previous: str | None = None
@@ -363,20 +433,79 @@ class TmfPaperSimulationJournal:
                 if open_trade != event.trade_id:
                     raise ValueError("journal exit does not match an open paper trade.")
                 open_trade = None
+        if bool(self.ledger.positions) != (open_trade is not None):
+            raise ValueError("journal position and event state do not match.")
 
     @classmethod
     def empty(cls, config: TmfPaperSimulationConfig) -> TmfPaperSimulationJournal:
         return cls(
             config.instrument,
             config.point_value,
+            config.margin_requirement,
             PaperTradingLedger(config.initial_cash),
         )
+
+    @property
+    def reserved_margin(self) -> Decimal:
+        return sum(
+            (
+                abs(position.quantity) * self.margin_requirement.initial_margin
+                for position in self.ledger.positions
+            ),
+            Decimal(0),
+        )
+
+    @property
+    def required_maintenance_margin(self) -> Decimal:
+        return sum(
+            (
+                abs(position.quantity) * self.margin_requirement.maintenance_margin
+                for position in self.ledger.positions
+            ),
+            Decimal(0),
+        )
+
+    @property
+    def unrealized_pnl(self) -> Decimal:
+        entry = self.open_entry
+        if entry is None:
+            return Decimal(0)
+        latest = self.last_event_for(entry.trade_id)
+        return Decimal(0) if latest is None else latest.unrealized_pnl
+
+    @property
+    def account_equity(self) -> Decimal:
+        return self.ledger.cash_balance + self.reserved_margin + self.unrealized_pnl
+
+    @property
+    def margin_status(self) -> TmfPaperMarginStatus:
+        if not self.ledger.positions:
+            return TmfPaperMarginStatus.NO_POSITION
+        margin_equity = self.reserved_margin + self.unrealized_pnl
+        if margin_equity <= self.required_maintenance_margin:
+            return TmfPaperMarginStatus.MAINTENANCE_WARNING
+        return TmfPaperMarginStatus.SAFE
+
+    def margin_state_payload(self) -> dict[str, str]:
+        return {
+            "reserved_margin": _decimal(self.reserved_margin, "reserved_margin"),
+            "required_maintenance_margin": _decimal(
+                self.required_maintenance_margin,
+                "required_maintenance_margin",
+            ),
+            "available_cash": _decimal(self.ledger.cash_balance, "available_cash"),
+            "unrealized_pnl": _decimal(self.unrealized_pnl, "unrealized_pnl"),
+            "account_equity": _decimal(self.account_equity, "account_equity"),
+            "status": self.margin_status.value,
+        }
 
     def canonical_payload(self) -> dict[str, object]:
         return {
             "version": self.version,
             "instrument": self.instrument,
             "point_value": _decimal(self.point_value, "point_value", positive=True),
+            "margin_requirement": self.margin_requirement.canonical_payload(),
+            "margin_state": self.margin_state_payload(),
             "ledger": self.ledger.canonical_payload(),
             "ledger_hash": self.ledger.ledger_hash,
             "events": [event.canonical_payload() for event in self.events],
@@ -410,6 +539,7 @@ class TmfPaperSimulationJournal:
         return TmfPaperSimulationJournal(
             self.instrument,
             self.point_value,
+            self.margin_requirement,
             ledger,
             (*self.events, event),
             self.version,
@@ -440,7 +570,12 @@ class TmfPaperJournalStore:
         if not self.path.is_file():
             return TmfPaperSimulationJournal.empty(config)
         try:
-            payload = loads(self.path.read_text(encoding="utf-8"))
+            payload = cast(
+                dict[str, Any],
+                loads(self.path.read_text(encoding="utf-8")),
+            )
+            if payload.get("schema") == LEGACY_TMF_PAPER_JOURNAL_SCHEMA:
+                return self._migrate_legacy_empty_journal(payload, config)
             if (
                 payload["schema"] != LIVE_TMF_PAPER_JOURNAL_SCHEMA
                 or payload["version"] != LIVE_TMF_PAPER_SIMULATION_VERSION
@@ -448,41 +583,19 @@ class TmfPaperJournalStore:
                 or Decimal(payload["point_value"]) != config.point_value
             ):
                 raise ValueError("PAPER_JOURNAL_IDENTITY_MISMATCH")
-            ledger_payload = payload["ledger"]
-            positions = tuple(
-                PaperTradingPosition(
-                    item["instrument"],
-                    Decimal(item["quantity"]),
-                    Decimal(item["average_price"]),
-                    Decimal(item["realized_pnl"]),
-                    _parse_utc(item["updated_at"], "position.updated_at"),
-                )
-                for item in ledger_payload["positions"]
+            margin_requirement = self._margin_from_payload(
+                payload["margin_requirement"]
             )
-            cash_entries = tuple(
-                PaperTradingCashLedgerEntry(
-                    item["entry_id"],
-                    item["fill_id"],
-                    Decimal(item["cash_delta"]),
-                    Decimal(item["fees"]),
-                    Decimal(item["balance_after"]),
-                )
-                for item in ledger_payload["cash_entries"]
-            )
-            ledger = PaperTradingLedger(
-                Decimal(ledger_payload["cash_balance"]),
-                positions,
-                cash_entries,
-                tuple(ledger_payload["used_idempotency_keys"]),
-                bool(ledger_payload["allow_negative_cash"]),
-                bool(ledger_payload["allow_short"]),
-            )
+            if margin_requirement != config.margin_requirement:
+                raise ValueError("PAPER_JOURNAL_MARGIN_IDENTITY_MISMATCH")
+            ledger = self._ledger_from_payload(payload["ledger"])
             if ledger.ledger_hash != payload["ledger_hash"]:
                 raise ValueError("PAPER_JOURNAL_LEDGER_HASH_MISMATCH")
             events = tuple(self._event_from_payload(item) for item in payload["events"])
             journal = TmfPaperSimulationJournal(
                 config.instrument,
                 config.point_value,
+                margin_requirement,
                 ledger,
                 events,
             )
@@ -491,6 +604,84 @@ class TmfPaperJournalStore:
             return journal
         except (KeyError, TypeError, ValueError, OSError) as error:
             raise ValueError("PAPER_JOURNAL_INVALID") from error
+
+    @staticmethod
+    def _margin_from_payload(item: dict[str, Any]) -> TmfPaperMarginRequirement:
+        return TmfPaperMarginRequirement(
+            Decimal(str(item["initial_margin"])),
+            Decimal(str(item["maintenance_margin"])),
+            _parse_utc(item["effective_at"], "margin.effective_at"),
+            str(item["source"]),
+        )
+
+    @staticmethod
+    def _ledger_from_payload(ledger_payload: dict[str, Any]) -> PaperTradingLedger:
+        positions = tuple(
+            PaperTradingPosition(
+                item["instrument"],
+                Decimal(item["quantity"]),
+                Decimal(item["average_price"]),
+                Decimal(item["realized_pnl"]),
+                _parse_utc(item["updated_at"], "position.updated_at"),
+            )
+            for item in ledger_payload["positions"]
+        )
+        cash_entries = tuple(
+            PaperTradingCashLedgerEntry(
+                item["entry_id"],
+                item["fill_id"],
+                Decimal(item["cash_delta"]),
+                Decimal(item["fees"]),
+                Decimal(item["balance_after"]),
+            )
+            for item in ledger_payload["cash_entries"]
+        )
+        return PaperTradingLedger(
+            Decimal(ledger_payload["cash_balance"]),
+            positions,
+            cash_entries,
+            tuple(ledger_payload["used_idempotency_keys"]),
+            bool(ledger_payload["allow_negative_cash"]),
+            bool(ledger_payload["allow_short"]),
+        )
+
+    def _migrate_legacy_empty_journal(
+        self,
+        payload: dict[str, Any],
+        config: TmfPaperSimulationConfig,
+    ) -> TmfPaperSimulationJournal:
+        if (
+            payload["version"] != LEGACY_TMF_PAPER_SIMULATION_VERSION
+            or payload["instrument"] != config.instrument
+            or Decimal(payload["point_value"]) != config.point_value
+        ):
+            raise ValueError("PAPER_JOURNAL_LEGACY_IDENTITY_MISMATCH")
+        ledger = self._ledger_from_payload(payload["ledger"])
+        if ledger.ledger_hash != payload["ledger_hash"]:
+            raise ValueError("PAPER_JOURNAL_LEGACY_LEDGER_HASH_MISMATCH")
+        if (
+            payload["events"]
+            or ledger.positions
+            or ledger.cash_entries
+            or ledger.used_idempotency_keys
+        ):
+            raise ValueError("PAPER_JOURNAL_LEGACY_TRADES_REQUIRE_ARCHIVE")
+        legacy_canonical = {
+            "version": LEGACY_TMF_PAPER_SIMULATION_VERSION,
+            "instrument": config.instrument,
+            "point_value": _decimal(config.point_value, "point_value", positive=True),
+            "ledger": ledger.canonical_payload(),
+            "ledger_hash": ledger.ledger_hash,
+            "events": [],
+        }
+        if _hash(legacy_canonical) != payload["journal_hash"]:
+            raise ValueError("PAPER_JOURNAL_LEGACY_HASH_MISMATCH")
+        return TmfPaperSimulationJournal(
+            config.instrument,
+            config.point_value,
+            config.margin_requirement,
+            ledger,
+        )
 
     @staticmethod
     def _event_from_payload(item: dict[str, object]) -> TmfPaperPerformanceEvent:
@@ -556,6 +747,8 @@ class TmfPaperCycleResult:
             "reason_codes": list(self.reason_codes),
             "journal_hash": self.journal.journal_hash,
             "cash_balance": str(self.journal.ledger.cash_balance),
+            "margin_requirement": self.journal.margin_requirement.canonical_payload(),
+            "margin_state": self.journal.margin_state_payload(),
             "open_positions": len(self.journal.ledger.positions),
             "performance_event": (
                 None
@@ -589,6 +782,7 @@ class LiveTmfPaperSimulation:
         if (
             self.journal.instrument != config.instrument
             or self.journal.point_value != config.point_value
+            or self.journal.margin_requirement != config.margin_requirement
         ):
             raise ValueError("paper journal does not match the simulation config.")
 
@@ -690,6 +884,16 @@ class LiveTmfPaperSimulation:
                 reasons=("MANUAL_CONFIRMATION_REQUIRED",),
             )
 
+        required_initial_margin = self.config.initial_margin * self.config.quantity
+        if self.journal.ledger.cash_balance < required_initial_margin:
+            return self._result(
+                TmfPaperCycleAction.REJECTED,
+                direction.direction,
+                quote,
+                proposal_hash=proposal.proposal_hash,
+                reasons=("INSUFFICIENT_INITIAL_MARGIN",),
+            )
+
         safety = self._safety(evaluated_at)
         runner = PaperOrderProposalRunnerState(self.journal.ledger.used_idempotency_keys)
         confirmation, request, _ = confirm_paper_order_proposal(
@@ -711,7 +915,7 @@ class LiveTmfPaperSimulation:
             request,
             PaperTradingOrderType.MARKET,
             self._book(quote),
-            self.journal.ledger,
+            self._matching_ledger(quote),
             safety,
         )
         if matched.state is not PaperTradingMatchState.FILLED or not matched.fills:
@@ -745,7 +949,8 @@ class LiveTmfPaperSimulation:
             self.journal.events[-1].event_hash if self.journal.events else None,
             self.config.point_value,
         )
-        self._publish(self.journal.with_event(event, matched.ledger))
+        margin_ledger = self._reserve_margin(matched.ledger, fill)
+        self._publish(self.journal.with_event(event, margin_ledger))
         return self._result(
             TmfPaperCycleAction.ENTRY_FILLED,
             direction.direction,
@@ -753,6 +958,43 @@ class LiveTmfPaperSimulation:
             proposal_hash=proposal.proposal_hash,
             fills=(fill.fill_hash,),
             event=event,
+        )
+
+    def _matching_ledger(self, quote: TmfPaperQuote) -> PaperTradingLedger:
+        """Give the generic matcher enough synthetic cash; final cash uses futures margin."""
+        required_notional = quote.price * self.config.quantity
+        source = self.journal.ledger
+        return PaperTradingLedger(
+            cash_balance=max(source.cash_balance, required_notional),
+            positions=source.positions,
+            cash_entries=source.cash_entries,
+            used_idempotency_keys=source.used_idempotency_keys,
+            allow_negative_cash=False,
+            allow_short=False,
+        )
+
+    def _reserve_margin(
+        self,
+        matched_ledger: PaperTradingLedger,
+        fill: PaperTradingFill,
+    ) -> PaperTradingLedger:
+        required = self.config.initial_margin * fill.quantity
+        debit = required + fill.fees
+        balance = self.journal.ledger.cash_balance - debit
+        entry = PaperTradingCashLedgerEntry(
+            fill.fill_id,
+            fill.fill_id,
+            -debit,
+            fill.fees,
+            balance,
+        )
+        return PaperTradingLedger(
+            cash_balance=balance,
+            positions=matched_ledger.positions,
+            cash_entries=(*self.journal.ledger.cash_entries, entry),
+            used_idempotency_keys=matched_ledger.used_idempotency_keys,
+            allow_negative_cash=False,
+            allow_short=False,
         )
 
     def _proposal_input(
@@ -782,7 +1024,7 @@ class LiveTmfPaperSimulation:
             Decimal(1),
             PaperOrderProposalRisk(
                 PaperOrderProposalRiskStatus.ACCEPTABLE,
-                "五週期 AU 完整一致；僅建立 TMF 模擬買進。",
+                "五週期 AU 完整一致；僅建立 TMF 模擬買進並保留官方原始保證金。",
             ),
             (
                 PaperOrderProposalReason(
@@ -909,7 +1151,7 @@ class LiveTmfPaperSimulation:
                 request,
                 PaperTradingOrderType.MARKET,
                 self._book(quote),
-                self.journal.ledger,
+                self._matching_ledger(quote),
                 self._safety(evaluated_at),
             )
             if matched.state is not PaperTradingMatchState.FILLED or not matched.fills:
@@ -920,8 +1162,9 @@ class LiveTmfPaperSimulation:
                     proposal_hash=entry.proposal_hash,
                     reasons=matched.reason_codes or ("PAPER_EXIT_NOT_COMPLETED",),
                 )
-            fill_hash = matched.fills[0].fill_hash
-            ledger = matched.ledger
+            fill = matched.fills[0]
+            fill_hash = fill.fill_hash
+            ledger = self._release_margin(matched.ledger, fill, pnl)
             action = TmfPaperCycleAction.EXIT_FILLED
 
         event = TmfPaperPerformanceEvent(
@@ -945,13 +1188,44 @@ class LiveTmfPaperSimulation:
             self.config.point_value,
         )
         self._publish(self.journal.with_event(event, ledger))
+        reasons = (
+            ("MARGIN_MAINTENANCE_WARNING",)
+            if exit_type is None
+            and self.journal.margin_status is TmfPaperMarginStatus.MAINTENANCE_WARNING
+            else ()
+        )
         return self._result(
             action,
             direction.direction,
             quote,
             proposal_hash=entry.proposal_hash,
             fills=() if fill_hash is None else (fill_hash,),
+            reasons=reasons,
             event=event,
+        )
+
+    def _release_margin(
+        self,
+        matched_ledger: PaperTradingLedger,
+        fill: PaperTradingFill,
+        realized_pnl: Decimal,
+    ) -> PaperTradingLedger:
+        release = self.config.initial_margin * fill.quantity + realized_pnl - fill.fees
+        balance = self.journal.ledger.cash_balance + release
+        entry = PaperTradingCashLedgerEntry(
+            fill.fill_id,
+            fill.fill_id,
+            release,
+            fill.fees,
+            balance,
+        )
+        return PaperTradingLedger(
+            cash_balance=balance,
+            positions=matched_ledger.positions,
+            cash_entries=(*self.journal.ledger.cash_entries, entry),
+            used_idempotency_keys=matched_ledger.used_idempotency_keys,
+            allow_negative_cash=False,
+            allow_short=False,
         )
 
     def _publish(self, journal: TmfPaperSimulationJournal) -> None:
@@ -983,12 +1257,16 @@ class LiveTmfPaperSimulation:
 
 
 __all__ = [
+    "LEGACY_TMF_PAPER_JOURNAL_SCHEMA",
+    "LEGACY_TMF_PAPER_SIMULATION_VERSION",
     "LIVE_TMF_PAPER_JOURNAL_SCHEMA",
     "LIVE_TMF_PAPER_SIMULATION_VERSION",
     "LiveTmfPaperSimulation",
     "TmfPaperCycleAction",
     "TmfPaperCycleResult",
     "TmfPaperJournalStore",
+    "TmfPaperMarginRequirement",
+    "TmfPaperMarginStatus",
     "TmfPaperPerformanceEvent",
     "TmfPaperPerformanceEventType",
     "TmfPaperQuote",

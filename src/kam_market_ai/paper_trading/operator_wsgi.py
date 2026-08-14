@@ -369,6 +369,7 @@ _ACCOUNT_DISPLAY_TEXT = {
     "DEMO": "示範資料",
     "offline-demo-account-snapshot": "離線示範帳戶快照",
     "offline-demo-margin-snapshot": "離線示範保證金快照",
+    "taifex-index-margin-2026-08-12": "期交所 2026-08-12 股價指數類保證金",
 }
 
 

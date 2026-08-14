@@ -356,6 +356,15 @@ def main(
                 "paper_stop_loss_points": 20 if args.paper_test_armed else None,
                 "paper_take_profit_points": 40 if args.paper_test_armed else None,
                 "paper_point_value": 10 if args.paper_test_armed else None,
+                "paper_margin_model": "RESERVE_RELEASE_V1" if args.paper_test_armed else None,
+                "paper_initial_margin": 35050 if args.paper_test_armed else None,
+                "paper_maintenance_margin": 26900 if args.paper_test_armed else None,
+                "paper_margin_effective_at": (
+                    "2026-08-12T05:45:00Z" if args.paper_test_armed else None
+                ),
+                "paper_margin_source": (
+                    "TAIFEX_INDEX_MARGIN_2026-08-12" if args.paper_test_armed else None
+                ),
                 "trading_enabled": False,
                 "live_order_allowed": False,
             },
