@@ -115,7 +115,10 @@ class FubonLiveFiveTimeframeVerifier:
                 try:
                     official = self._higher_timeframe_source.fetch(
                         observed_at=observed_at,
-                        after_hours=after_hours,
+                        # TAIFEX certifies only closed regular-session history.
+                        # Night-session candles remain the current Fubon slice;
+                        # the official history is used only as a bounded warm-up.
+                        after_hours=False,
                     )
                     complete = complete_with_verified_higher_timeframes(
                         _merge_official_intraday_history(partial, official, observed_at),
@@ -141,6 +144,9 @@ class FubonLiveFiveTimeframeVerifier:
                         "external_endpoint_call_count": 3,
                         "fubon_endpoint_call_count": 3,
                         "taifex_history": official.safe_payload(),
+                        "live_session": "afterhours" if after_hours else "regular",
+                        "history_session": "regular",
+                        "night_session_history_warmup": after_hours,
                         "verified_trading_dates": [
                             item.isoformat()
                             for item in official.source_trading_dates

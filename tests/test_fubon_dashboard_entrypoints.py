@@ -48,6 +48,8 @@ def test_live_dashboard_opens_the_established_operator_homepage() -> None:
     assert '"url": f"http://{args.host}:{args.port}/"' in source
     assert "FubonLiveDashboardMarketSource" in source
     assert "market_data_source=dashboard_market_source" in source
+    assert '"taifex_official_history_kam_enabled": True' in source
+    assert '"night_session_history_warmup_enabled": args.after_hours' in source
 
 
 def test_live_dashboard_routes_operator_styles_and_tools_to_operator_app() -> None:

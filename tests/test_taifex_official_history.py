@@ -246,3 +246,33 @@ def test_live_verifier_reaches_ready_with_official_closed_history(tmp_path) -> N
         values[-1].end <= datetime(2026, 8, 20, 2, tzinfo=UTC)
         for values in tuple(verifier.latest_candle_result.series.values())[:3]
     )
+
+
+def test_live_verifier_after_hours_warms_from_closed_regular_history(tmp_path) -> None:
+    source, _ = _source(tmp_path, date(2026, 8, 20))
+    clients = AuthorizedMarketDataClients(WebSocket(), Rest(), WebSocket(), Rest())
+    resolver = VerifiedContractResolver((
+        ResolvedFuturesContract(Instrument.TMF, "TMFH6", True),
+    ))
+    pipeline = FubonFiveTimeframeCandlePipeline(
+        FubonIntradayCandlesAdapter(clients, resolver)
+    )
+    verifier = FubonLiveFiveTimeframeVerifier(pipeline, source)
+
+    payload = verifier.run(
+        symbol="TMFH6",
+        session="afterhours",
+        after_hours=True,
+        verified_at=datetime(2026, 8, 20, 12, 36, tzinfo=UTC),
+    )
+
+    assert payload["status"] == "READY_VERIFIED_FIVE_TIMEFRAMES"
+    assert payload["session"] == "afterhours"
+    assert payload["live_session"] == "afterhours"
+    assert payload["history_session"] == "regular"
+    assert payload["night_session_history_warmup"] is True
+    assert payload["taifex_history"]["session"] == "regular"
+    assert payload["analysis_preview"]["timeframes"]["60m"]["ma20"] is not None
+    assert payload["analysis_preview"]["timeframes"]["1d"]["ma20"] is not None
+    assert payload["analysis_preview"]["timeframes"]["1w"]["ma20"] is not None
+    assert payload["live_order_allowed"] is False
