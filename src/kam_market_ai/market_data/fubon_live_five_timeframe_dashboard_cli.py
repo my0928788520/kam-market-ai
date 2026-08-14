@@ -6,7 +6,7 @@ import argparse
 import json
 import threading
 import webbrowser
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -66,6 +66,7 @@ class LiveFiveTimeframeSnapshotRefresher:
         session: str | None,
         after_hours: bool,
         snapshot_path: str | Path,
+        on_success: Callable[[], None] | None = None,
     ) -> None:
         if not isinstance(verifier, FubonLiveFiveTimeframeVerifier):
             raise TypeError("FubonLiveFiveTimeframeVerifier is required")
@@ -74,6 +75,7 @@ class LiveFiveTimeframeSnapshotRefresher:
         self.session = session
         self.after_hours = after_hours
         self.snapshot_path = Path(snapshot_path)
+        self.on_success = on_success
         self._successful_refreshes = 0
         self._consecutive_failures = 0
         self._last_success_at: datetime | None = None
@@ -96,6 +98,8 @@ class LiveFiveTimeframeSnapshotRefresher:
             after_hours=self.after_hours,
         )
         write_five_timeframe_snapshot(self.snapshot_path, payload)
+        if self.on_success is not None:
+            self.on_success()
         self._successful_refreshes += 1
         self._consecutive_failures = 0
         self._last_success_at = datetime.now(UTC)
@@ -140,6 +144,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--refresh-seconds", type=int, default=60)
     parser.add_argument("--snapshot", default="debug/five_timeframe/live.json")
+    parser.add_argument("--chart-history", default="debug/five_timeframe/tmf_60m_history.json")
     parser.add_argument("--open-browser", action="store_true")
     return parser
 
@@ -183,12 +188,17 @@ def main(
         FubonIntradayCandlesAdapter(result.clients, resolver),
     )
     verifier = FubonLiveFiveTimeframeVerifier(pipeline)
+    chart_source = FubonLiveChartSource(
+        lambda: verifier.latest_candle_result,
+        history_path=args.chart_history,
+    )
     refresher = LiveFiveTimeframeSnapshotRefresher(
         verifier,
         symbol=symbol,
         session=args.session,
         after_hours=args.after_hours,
         snapshot_path=args.snapshot,
+        on_success=chart_source.capture_latest,
     )
     try:
         refresher.refresh_once()
@@ -227,9 +237,7 @@ def main(
             lambda: build_five_timeframe_operator_view(
                 read_five_timeframe_snapshot(args.snapshot)
             ),
-            chart_data_source=FubonLiveChartSource(
-                lambda: verifier.latest_candle_result
-            ),
+            chart_data_source=chart_source,
         )
 
         application = build_local_dashboard_router(operator_app, diagnostic_app)

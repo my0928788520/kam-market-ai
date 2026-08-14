@@ -41,6 +41,7 @@ $arguments = @(
     '--port', [string]$Port,
     '--refresh-seconds', [string]$RefreshSeconds,
     '--snapshot', (Join-Path $projectRoot 'debug\five_timeframe\live.json'),
+    '--chart-history', (Join-Path $projectRoot 'debug\five_timeframe\tmf_60m_history.json'),
     '--open-browser'
 )
 

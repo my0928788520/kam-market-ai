@@ -88,20 +88,26 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     volume_top, volume_bottom = 350.0, 450.0
     high, low = max(item.high for item in candles), min(item.low for item in candles)
     span = high - low or 1.0
-    step, max_volume = (right - left) / len(candles), max((item.volume for item in candles), default=0) or 1
-    body_width = max(2.0, step * 0.58)
+    # Keep sparse live series visually comparable with a normal chart.  Using
+    # the candle count directly makes two or three early-session bars expand
+    # into enormous blocks across the full viewport.
+    visible_slots = max(len(candles), 20)
+    step = (right - left) / visible_slots
+    first_x = right - (len(candles) - 0.5) * step
+    max_volume = max((item.volume for item in candles), default=0) or 1
+    body_width = min(18.0, max(2.0, step * 0.58))
     y = lambda value: top + (high - value) / span * (bottom - top)
     bodies: list[str] = []
     volumes: list[str] = []
     for index, candle in enumerate(candles):
-        x = left + (index + 0.5) * step
+        x = first_x + index * step
         colour = "chart-up" if candle.close >= candle.open else "chart-down"
         body_top = min(y(candle.open), y(candle.close))
         body_height = max(1.5, abs(y(candle.open) - y(candle.close)))
         bodies.append(f"<g class='{colour}'><line x1='{x:.2f}' y1='{y(candle.high):.2f}' x2='{x:.2f}' y2='{y(candle.low):.2f}'/><rect x='{x-body_width/2:.2f}' y='{body_top:.2f}' width='{body_width:.2f}' height='{body_height:.2f}'/></g>")
         volume_height = candle.volume / max_volume * (volume_bottom - volume_top)
         volumes.append(f"<rect class='{colour}' x='{x-body_width/2:.2f}' y='{volume_bottom-volume_height:.2f}' width='{body_width:.2f}' height='{volume_height:.2f}'/>")
-    points = [f"{left + (index + .5) * step:.2f},{y(value):.2f}" for index, value in enumerate(ma_values) if value is not None]
+    points = [f"{first_x + index * step:.2f},{y(value):.2f}" for index, value in enumerate(ma_values) if value is not None]
     ma_line = f"<polyline class='chart-ma20' points='{' '.join(points)}'/>" if len(points) > 1 else ""
     return ("<svg class='candlestick-chart' viewBox='0 0 1024 480' role='img' aria-label='唯讀 K 線、20MA 與成交量'>"
             f"<text class='chart-price-label' x='8' y='{top+8:.0f}'>{high:,.2f}</text><text class='chart-price-label' x='8' y='{bottom:.0f}'>{low:,.2f}</text>"

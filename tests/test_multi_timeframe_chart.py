@@ -35,6 +35,23 @@ def test_chart_page_renders_injected_candles_ma20_volume_and_summary() -> None:
     assert "fixture-historical-bars" in html and "任何單一指標均不構成進出場訊號" in html
 
 
+def test_sparse_live_series_keeps_candle_bodies_at_readable_width() -> None:
+    start = datetime(2026, 8, 13, tzinfo=UTC)
+
+    class SparseSource:
+        def read_series(self, instrument: str, timeframe: str) -> ChartSeries:
+            candles = tuple(
+                ChartCandle(start + timedelta(hours=index), 100, 103, 99, 102, 10)
+                for index in range(3)
+            )
+            return ChartSeries(instrument, timeframe, candles, "sparse-live-bars", start)
+
+    html = render_multi_timeframe_chart_html(SparseSource())
+
+    assert html.count("width='18.00'") == 6
+    assert "width='269.12'" not in html
+
+
 @pytest.mark.parametrize("instrument,timeframe", [("BAD", "60m"), ("TMF", "5m")])
 def test_chart_page_rejects_unknown_instrument_or_timeframe(instrument: str, timeframe: str) -> None:
     html = render_multi_timeframe_chart_html(FixtureChartSource(), instrument=instrument, timeframe=timeframe)
