@@ -39,6 +39,21 @@ class ChartSeries:
     candles: tuple[ChartCandle, ...]
     source: str
     updated_at: datetime | None
+    current_price: float | None = None
+    current_price_at: datetime | None = None
+
+    def __post_init__(self) -> None:
+        if self.current_price is not None and (
+            not isfinite(self.current_price) or self.current_price <= 0
+        ):
+            raise ValueError("current_price must be finite and positive")
+        if self.current_price_at is not None and (
+            self.current_price_at.tzinfo is None
+            or self.current_price_at.utcoffset() is None
+        ):
+            raise ValueError("current_price_at must be timezone-aware")
+        if (self.current_price is None) != (self.current_price_at is None):
+            raise ValueError("current price and timestamp must be supplied together")
 
 
 class ChartDataReadOnlySource(Protocol):
@@ -96,7 +111,9 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
         return "<div class='chart-empty' role='status'><strong>資料不足</strong><p>歷史 K 線來源尚未接入；系統不補假資料。</p></div>"
     top, bottom, left, right = 28.0, 270.0, 66.0, 980.0
     volume_top, volume_bottom = 292.0, 356.0
-    raw_high, raw_low = max(item.high for item in candles), min(item.low for item in candles)
+    displayed_price = series.current_price if series.current_price is not None else candles[-1].close
+    raw_high = max(max(item.high for item in candles), displayed_price)
+    raw_low = min(min(item.low for item in candles), displayed_price)
     raw_span = raw_high - raw_low or max(abs(raw_high) * 0.002, 1.0)
     high, low = raw_high + raw_span * 0.08, raw_low - raw_span * 0.08
     span = high - low
@@ -110,7 +127,8 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     first_x = (left + right) / 2 - (len(candles) - 1) * step / 2
     max_volume = max((item.volume for item in candles), default=0) or 1
     body_width = min(11.0, max(2.0, step * 0.52))
-    y = lambda value: top + (high - value) / span * (bottom - top)
+    def y(value: float) -> float:
+        return top + (high - value) / span * (bottom - top)
     bodies: list[str] = []
     volumes: list[str] = []
     for index, candle in enumerate(candles):
@@ -130,14 +148,15 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
         for value in reversed(grid_values)
     )
     latest = candles[-1]
-    latest_y = y(latest.close)
+    latest_y = y(displayed_price)
+    price_label = "即時" if series.current_price is not None else "最新收盤"
     time_labels = (
         f"<text class='chart-time-label' x='{first_x:.2f}' y='378' text-anchor='start'>{_time_label(candles[0].opened_at)}</text>"
         f"<text class='chart-time-label' x='{first_x + (len(candles)-1)*step:.2f}' y='378' text-anchor='end'>{_time_label(latest.opened_at)}</text>"
     )
     return ("<svg class='candlestick-chart' viewBox='0 0 1024 392' role='img' aria-label='唯讀 K 線、20MA 與成交量'>"
             f"{grid}<line class='chart-current-line' x1='{left:.0f}' y1='{latest_y:.2f}' x2='{right:.0f}' y2='{latest_y:.2f}'/>"
-            f"<text class='chart-current-price' x='976' y='{latest_y-5:.2f}' text-anchor='end'>最新 {latest.close:,.0f}</text>"
+            f"<text class='chart-current-price' x='976' y='{latest_y-5:.2f}' text-anchor='end'>{price_label} {displayed_price:,.0f}</text>"
             f"<g class='chart-candles'>{''.join(bodies)}</g>{ma_line}<g class='chart-volumes'>{''.join(volumes)}</g>"
             f"<text class='chart-volume-label' x='{left:.0f}' y='288'>成交量</text>{time_labels}</svg>")
 
@@ -149,11 +168,16 @@ def render_multi_timeframe_chart_html(source: ChartDataReadOnlySource = EMPTY_CH
     timeframe_tabs = "".join(f"<a class='chart-tab {'active' if item == timeframe else ''}' href='/charts?instrument={escape(instrument)}&timeframe={item}'>{TIMEFRAME_LABELS[item]}</a>" for item in SUPPORTED_CHART_TIMEFRAMES)
     instrument_tabs = "".join(f"<a class='chart-tab {'active' if item == instrument else ''}' href='/charts?instrument={item}&timeframe={escape(timeframe)}'>{item}</a>" for item in ("TX", "MTX", "TMF"))
     updated = series.updated_at.isoformat() if series.updated_at is not None else "—"
+    quote_updated = (
+        series.current_price_at.isoformat()
+        if series.current_price_at is not None
+        else "—"
+    )
     status = _summary(series, ma_values) if valid else "商品或週期無效"
     return f"""<!doctype html><html class='chart-page' lang='zh-Hant-TW'><head><meta charset='utf-8'><title>KAM 多週期 K 線</title><link rel='stylesheet' href='/static/operator.css'><script src='/static/chart-refresh.js' defer></script></head><body class='chart-page'><main class='chart-main'>
       <header><div><h1>多週期 K 線</h1><small>15 分・60 分・日・週｜唯讀市場結構檢視</small></div><a class='account-chip' href='/'>返回市場儀表板</a><span id='chart-live-status' class='chart-live-status' role='status' aria-live='polite'>每 3 秒更新・禁止真實下單</span></header>
       <nav class='chart-toolbar' aria-label='圖表商品與週期'>{instrument_tabs}<span class='chart-toolbar-divider'></span>{timeframe_tabs}</nav>
       <div id='chart-summary' class='chart-summary'>{escape(status)}</div><section id='chart-panel' class='chart-panel'>{_chart_svg(series, ma_values)}</section>
       <aside class='chart-overlays' aria-label='圖表顯示項目'><span class='enabled'>K 線</span><span class='enabled'>20MA</span><span>上升趨勢線｜尚未接入</span><span>下降趨勢線｜尚未接入</span><span>支撐壓力｜尚未接入</span><span class='enabled'>成交量</span></aside>
-      <footer id='chart-footer' class='chart-footer'><span>資料來源：{escape(series.source)}</span><span>更新時間：{escape(updated)}</span><span>資料不足時不補假資料</span><span>任何單一指標均不構成進出場訊號</span></footer>
+      <footer id='chart-footer' class='chart-footer'><span>資料來源：{escape(series.source)}</span><span>K 線時間：{escape(updated)}</span><span>即時報價時間：{escape(quote_updated)}</span><span>資料不足時不補假資料</span><span>任何單一指標均不構成進出場訊號</span></footer>
     </main></body></html>"""

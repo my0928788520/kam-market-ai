@@ -36,7 +36,7 @@ from kam_market_ai.paper_trading.live_tmf_simulation import (
 from kam_market_ai.paper_trading.operator_app import create_operator_app
 
 from .fubon_five_timeframe_pipeline import FubonFiveTimeframeCandlePipeline
-from .fubon_live_chart_source import FubonLiveChartSource
+from .fubon_live_chart_source import FubonLiveChartSource, FubonLiveQuoteSource
 from .fubon_live_five_timeframe_verifier import FubonLiveFiveTimeframeVerifier
 from .fubon_neo import (
     FubonIntradayCandlesAdapter,
@@ -214,8 +214,14 @@ def main(
         pipeline,
         TaifexOfficialHistorySource(args.taifex_history_cache),
     )
+    quote_source = FubonLiveQuoteSource(
+        result.clients,
+        symbol=symbol,
+        after_hours=args.after_hours,
+    )
     chart_source = FubonLiveChartSource(
         lambda: verifier.latest_candle_result,
+        current_price_provider=lambda: quote_source.latest,
         history_path=args.chart_history,
         history_15m_path=args.chart_history_15m,
     )
@@ -241,6 +247,7 @@ def main(
             return 2
 
     def capture_verified_refresh() -> None:
+        quote_source.refresh_safely()
         chart_source.capture_latest()
         if paper_session is None or verifier.latest_candle_result is None:
             return
@@ -296,6 +303,8 @@ def main(
         "health_url": f"http://{args.host}:{args.port}/api/five-timeframe/health",
         "refresh_seconds": args.refresh_seconds,
         "symbol": symbol,
+        "live_quote_source": "FUBON_INTRADAY_QUOTE",
+        "live_quote_refresh_seconds": args.refresh_seconds,
         "taifex_official_history_enabled": not args.after_hours,
         "taifex_history_cache": args.taifex_history_cache,
         "paper_simulation_enabled": args.paper_test_armed,

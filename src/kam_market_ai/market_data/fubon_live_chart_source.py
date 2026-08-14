@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from datetime import datetime
 import json
 import os
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from math import isfinite
 from pathlib import Path
 from threading import Lock
 
@@ -16,6 +18,112 @@ from .fubon_five_timeframe_pipeline import (
     FiveTimeframe,
     FiveTimeframeCandleResult,
 )
+from .fubon_neo import AuthorizedMarketDataClients
+
+
+class FubonLiveQuoteError(ValueError):
+    """Sanitized failure from the read-only intraday quote boundary."""
+
+
+@dataclass(frozen=True, slots=True)
+class LiveChartPrice:
+    instrument: str
+    symbol: str
+    price: float
+    observed_at: datetime
+
+    def __post_init__(self) -> None:
+        if self.instrument != "TMF" or not self.symbol or self.symbol.strip() != self.symbol:
+            raise ValueError("live chart price identity is invalid")
+        if not isfinite(self.price) or self.price <= 0:
+            raise ValueError("live chart price must be finite and positive")
+        if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
+            raise ValueError("live chart price timestamp must be timezone-aware")
+
+
+def _provider_timestamp(value: object) -> datetime:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise FubonLiveQuoteError("QUOTE_TIMESTAMP_INVALID")
+    numeric = float(value)
+    if not isfinite(numeric) or numeric <= 0:
+        raise FubonLiveQuoteError("QUOTE_TIMESTAMP_INVALID")
+    if numeric > 100_000_000_000_000:
+        numeric /= 1_000_000
+    elif numeric > 100_000_000_000:
+        numeric /= 1_000
+    try:
+        return datetime.fromtimestamp(numeric, tz=UTC)
+    except (OverflowError, OSError, ValueError):
+        raise FubonLiveQuoteError("QUOTE_TIMESTAMP_INVALID") from None
+
+
+class FubonLiveQuoteSource:
+    """Keep only the latest normalized TMF trade from the documented quote API."""
+
+    def __init__(
+        self,
+        clients: AuthorizedMarketDataClients,
+        *,
+        symbol: str,
+        after_hours: bool = False,
+    ) -> None:
+        if not isinstance(clients, AuthorizedMarketDataClients):
+            raise TypeError("AuthorizedMarketDataClients is required")
+        if not symbol or symbol.strip() != symbol:
+            raise ValueError("verified futures symbol is required")
+        self._intraday = clients.futopt_rest.intraday
+        self._symbol = symbol
+        self._after_hours = after_hours
+        self._latest: LiveChartPrice | None = None
+        self._lock = Lock()
+
+    @property
+    def latest(self) -> LiveChartPrice | None:
+        with self._lock:
+            return self._latest
+
+    def refresh(self) -> LiveChartPrice:
+        request: dict[str, object] = {"symbol": self._symbol}
+        if self._after_hours:
+            request["session"] = "afterhours"
+        try:
+            payload = self._intraday.quote(**request)
+        except Exception:  # noqa: BLE001
+            raise FubonLiveQuoteError("QUOTE_ENDPOINT_ERROR") from None
+        value = self._decode(payload)
+        with self._lock:
+            if self._latest is None or value.observed_at >= self._latest.observed_at:
+                self._latest = value
+            return self._latest
+
+    def refresh_safely(self) -> bool:
+        try:
+            self.refresh()
+        except (FubonLiveQuoteError, TypeError, ValueError):
+            return False
+        return True
+
+    def _decode(self, payload: object) -> LiveChartPrice:
+        if not isinstance(payload, Mapping) or payload.get("symbol") != self._symbol:
+            raise FubonLiveQuoteError("QUOTE_IDENTITY_MISMATCH")
+        last_trade = payload.get("lastTrade")
+        if isinstance(last_trade, Mapping):
+            price = last_trade.get("price")
+            observed_at = last_trade.get("time")
+        else:
+            price = payload.get("closePrice")
+            observed_at = payload.get("closeTime")
+        if isinstance(price, bool) or not isinstance(price, (int, float)):
+            raise FubonLiveQuoteError("QUOTE_PRICE_INVALID")
+        normalized_price = float(price)
+        if not isfinite(normalized_price) or normalized_price <= 0:
+            raise FubonLiveQuoteError("QUOTE_PRICE_INVALID")
+        return LiveChartPrice(
+            "TMF",
+            self._symbol,
+            normalized_price,
+            _provider_timestamp(observed_at),
+        )
 
 
 class FubonLiveChartSource:
@@ -27,6 +135,7 @@ class FubonLiveChartSource:
             [], FiveTimeframeCandleResult | CompleteFiveTimeframeCandleResult | None
         ],
         *,
+        current_price_provider: Callable[[], LiveChartPrice | None] | None = None,
         history_path: str | Path | None = None,
         history_15m_path: str | Path | None = None,
         history_limit: int = 240,
@@ -34,6 +143,9 @@ class FubonLiveChartSource:
         if not callable(result_provider):
             raise TypeError("result_provider must be callable")
         self._result_provider = result_provider
+        if current_price_provider is not None and not callable(current_price_provider):
+            raise TypeError("current_price_provider must be callable")
+        self._current_price_provider = current_price_provider
         if isinstance(history_limit, bool) or history_limit < 20:
             raise ValueError("history_limit must be at least 20")
         self._history_paths = {
@@ -43,8 +155,43 @@ class FubonLiveChartSource:
         self._history_limit = history_limit
         self._lock = Lock()
 
+    def _current_price(self) -> LiveChartPrice | None:
+        if self._current_price_provider is None:
+            return None
+        try:
+            value = self._current_price_provider()
+        except Exception:  # noqa: BLE001
+            return None
+        if not isinstance(value, LiveChartPrice) or value.instrument != "TMF":
+            return None
+        return value
+
+    def _series(
+        self,
+        instrument: str,
+        timeframe: str,
+        candles: tuple[ChartCandle, ...],
+        source: str,
+        updated_at: datetime | None,
+    ) -> ChartSeries:
+        current = self._current_price()
+        if current is None:
+            return ChartSeries(instrument, timeframe, candles, source, updated_at)
+        return ChartSeries(
+            instrument,
+            timeframe,
+            candles,
+            f"{source}+fubon-live-quote",
+            updated_at,
+            current.price,
+            current.observed_at,
+        )
+
     @staticmethod
-    def _chart_candles(result, selected: FiveTimeframe) -> tuple[ChartCandle, ...]:
+    def _chart_candles(
+        result: FiveTimeframeCandleResult | CompleteFiveTimeframeCandleResult | None,
+        selected: FiveTimeframe,
+    ) -> tuple[ChartCandle, ...]:
         if result is None or selected not in result.series:
             return ()
         return tuple(
@@ -144,7 +291,7 @@ class FubonLiveChartSource:
             with self._lock:
                 history = self._load_history(history_path, timeframe)
             if history:
-                return ChartSeries(
+                return self._series(
                     instrument,
                     timeframe,
                     history,
@@ -152,10 +299,28 @@ class FubonLiveChartSource:
                     max(item.opened_at for item in history),
                 )
         if not live:
-            return ChartSeries(instrument, timeframe, (), "fubon-live:not-yet-verified", None)
+            return self._series(
+                instrument,
+                timeframe,
+                (),
+                "fubon-live:not-yet-verified",
+                None,
+            )
+        assert result is not None
         values = result.series[selected]
         updated_at = max((item.end for item in values), default=None)
-        return ChartSeries(instrument, timeframe, live, "fubon-live:verified-candles", updated_at)
+        return self._series(
+            instrument,
+            timeframe,
+            live,
+            "fubon-live:verified-candles",
+            updated_at,
+        )
 
 
-__all__ = ["FubonLiveChartSource"]
+__all__ = [
+    "FubonLiveChartSource",
+    "FubonLiveQuoteError",
+    "FubonLiveQuoteSource",
+    "LiveChartPrice",
+]

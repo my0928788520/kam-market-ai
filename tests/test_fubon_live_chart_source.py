@@ -5,8 +5,57 @@ from kam_market_ai.market_data.fubon_five_timeframe_pipeline import (
     FiveTimeframe,
     FiveTimeframeCandleResult,
 )
-from kam_market_ai.market_data.fubon_live_chart_source import FubonLiveChartSource
+from kam_market_ai.market_data.fubon_live_chart_source import (
+    FubonLiveChartSource,
+    FubonLiveQuoteSource,
+    LiveChartPrice,
+)
+from kam_market_ai.market_data.fubon_neo import AuthorizedMarketDataClients
 from kam_market_ai.models import Candle, Instrument
+
+
+class WebSocket:
+    def on(self, *_args): pass
+    def off(self, *_args): pass
+    def connect(self): pass
+    def subscribe(self, *_args): pass
+    def unsubscribe(self, *_args): pass
+    def disconnect(self): pass
+
+
+class IntradayQuote:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+        self.symbol = "TMFH6"
+        self.price = 45839
+        self.observed_at = datetime(2026, 8, 14, 5, 30, tzinfo=UTC)
+
+    def quote(self, **params: object) -> dict[str, object]:
+        self.calls.append(dict(params))
+        return {
+            "symbol": self.symbol,
+            "lastTrade": {
+                "price": self.price,
+                "time": int(self.observed_at.timestamp() * 1_000_000),
+            },
+        }
+
+
+class Rest:
+    def __init__(self, intraday: object) -> None:
+        self.intraday = intraday
+        self.historical = object()
+
+
+def quote_clients() -> tuple[AuthorizedMarketDataClients, IntradayQuote]:
+    intraday = IntradayQuote()
+    clients = AuthorizedMarketDataClients(
+        WebSocket(),
+        Rest(intraday),
+        WebSocket(),
+        Rest(IntradayQuote()),
+    )
+    return clients, intraday
 
 
 def result() -> FiveTimeframeCandleResult:
@@ -91,3 +140,56 @@ def test_corrupt_local_history_fails_closed_to_current_verified_data(tmp_path) -
 
     assert len(series.candles) == 3
     assert series.source == "fubon-live:normalized-local-history"
+
+
+def test_live_quote_source_normalizes_last_trade_without_retaining_payload() -> None:
+    clients, intraday = quote_clients()
+    source = FubonLiveQuoteSource(clients, symbol="TMFH6")
+
+    first = source.refresh()
+    intraday.price = 45842
+    intraday.observed_at += timedelta(seconds=3)
+    second = source.refresh()
+
+    assert first.price == 45839
+    assert second.price == 45842
+    assert second.observed_at == datetime(2026, 8, 14, 5, 30, 3, tzinfo=UTC)
+    assert intraday.calls == [{"symbol": "TMFH6"}, {"symbol": "TMFH6"}]
+    assert not hasattr(second, "raw_payload")
+
+
+def test_after_hours_quote_uses_official_session_and_bad_identity_keeps_last_good() -> None:
+    clients, intraday = quote_clients()
+    source = FubonLiveQuoteSource(clients, symbol="TMFH6", after_hours=True)
+    assert source.refresh_safely() is True
+    good = source.latest
+
+    intraday.symbol = "TMFI6"
+
+    assert source.refresh_safely() is False
+    assert source.latest == good
+    assert intraday.calls == [
+        {"symbol": "TMFH6", "session": "afterhours"},
+        {"symbol": "TMFH6", "session": "afterhours"},
+    ]
+
+
+def test_chart_series_overlays_live_quote_but_keeps_verified_candle_history() -> None:
+    current = LiveChartPrice(
+        "TMF",
+        "TMFH6",
+        45839,
+        datetime(2026, 8, 14, 5, 30, tzinfo=UTC),
+    )
+    source = FubonLiveChartSource(
+        result,
+        current_price_provider=lambda: current,
+    )
+
+    series = source.read_series("TMF", "60m")
+
+    assert len(series.candles) == 3
+    assert series.candles[-1].close == 104
+    assert series.current_price == 45839
+    assert series.current_price_at == current.observed_at
+    assert series.source.endswith("+fubon-live-quote")

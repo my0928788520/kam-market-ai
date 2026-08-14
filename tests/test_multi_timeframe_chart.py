@@ -2,7 +2,11 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from kam_market_ai.paper_trading.multi_timeframe_chart import ChartCandle, ChartSeries, render_multi_timeframe_chart_html
+from kam_market_ai.paper_trading.multi_timeframe_chart import (
+    ChartCandle,
+    ChartSeries,
+    render_multi_timeframe_chart_html,
+)
 from kam_market_ai.paper_trading.operator_presenter import PaperTradingOperatorView
 from kam_market_ai.paper_trading.operator_wsgi import build_operator_wsgi
 
@@ -64,8 +68,31 @@ def test_sparse_live_series_keeps_candle_bodies_at_readable_width() -> None:
     assert "已累積 3/20 根" in html
     assert "尚缺 17 根建立 20MA" in html
     assert "class='chart-current-line'" in html
-    assert "最新 102" in html
+    assert "最新收盤 102" in html
     assert "08/13 08:00" in html
+
+
+def test_chart_uses_live_quote_for_current_line_without_changing_candle_close() -> None:
+    start = datetime(2026, 8, 14, tzinfo=UTC)
+
+    class LiveQuoteSource:
+        def read_series(self, instrument: str, timeframe: str) -> ChartSeries:
+            return ChartSeries(
+                instrument,
+                timeframe,
+                (ChartCandle(start, 100, 103, 99, 102, 10),),
+                "verified-bars+live-quote",
+                start + timedelta(minutes=15),
+                105,
+                start + timedelta(minutes=12),
+            )
+
+    html = render_multi_timeframe_chart_html(LiveQuoteSource(), timeframe="15m")
+
+    assert "即時 105" in html
+    assert "最新收盤 102" not in html
+    assert "即時報價時間：2026-08-14T00:12:00+00:00" in html
+    assert html.count("<g class='chart-up'>") == 1
 
 
 @pytest.mark.parametrize("instrument,timeframe", [("BAD", "60m"), ("TMF", "5m")])
