@@ -229,7 +229,7 @@
           ? "請在 K 線圖依序點選斜線的起點與終點"
           : activeDrawingTool === "horizontal"
             ? "請在 K 線圖點選水平線價位"
-            : "壓力／支撐自動顯示；已停止手動畫線",
+            : "所有線均由手動畫線；已停止畫線",
       );
       renderManualDrawings();
       return;
