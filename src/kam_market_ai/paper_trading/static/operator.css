@@ -111,6 +111,10 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
 .chart-overlays { display: flex; flex-wrap: wrap; gap: 7px; padding: 9px 11px; border: 1px solid #293040; border-radius: 12px; background: #0d131d; }.chart-overlays span, .chart-overlay-toggle { padding: 5px 8px; border: 1px dashed #495263; border-radius: 8px; color: #7f8a9c; background: transparent; font: inherit; font-size: 10px; }.chart-overlays .enabled { border-style: solid; border-color: #7e6336; color: #f2ce86; background: #2b2215; }.chart-overlay-toggle:not(:disabled) { cursor: pointer; border-style: solid; border-color: #8f7445; color: #f2ce86; background: #2b2215; }.chart-overlay-toggle[aria-pressed='true'] { border-color: #e6bd69; color: #fff2ce; box-shadow: 0 0 0 2px #e6bd6922; }.chart-overlay-toggle:disabled { cursor: not-allowed; opacity: .65; }
 .chart-footer { grid-row: auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; font-size: 10px; }
 .chart-live-status { color: #9adfca; transition: color 160ms ease; }
+.chart-session-badge { padding: 5px 11px; border: 1px solid; border-radius: 999px; font-size: 12px; letter-spacing: .08em; white-space: nowrap; }
+.chart-session-regular { border-color: #c99a3e; color: #ffe09a; background: #3b2a0f; box-shadow: 0 0 14px #eeb94c22; }
+.chart-session-afterhours { border-color: #6f79d8; color: #cbd0ff; background: #20264e; box-shadow: 0 0 14px #8791ff2b; }
+.chart-session-unknown { border-color: #586273; color: #aab3c1; background: #202630; }
 .chart-live-status[data-state='refreshing'] { color: #f2ce86; }
 .chart-live-status[data-state='error'] { color: #ff9a83; }
 .dashboard-live-status { color: #9adfca; font-size: 10px; transition: color 160ms ease; }
