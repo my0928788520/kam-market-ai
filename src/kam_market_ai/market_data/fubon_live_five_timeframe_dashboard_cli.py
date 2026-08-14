@@ -111,6 +111,23 @@ class LiveFiveTimeframeSnapshotRefresher:
         return True
 
 
+def build_local_dashboard_router(operator_app, diagnostic_app):
+    """Keep the canonical operator UI and its assets on their original routes."""
+    diagnostic_paths = {
+        "/five-timeframe",
+        "/api/five-timeframe",
+        "/api/five-timeframe/health",
+        "/static/dashboard.css",
+    }
+
+    def application(environ, start_response):
+        if str(environ.get("PATH_INFO", "/")) in diagnostic_paths:
+            return diagnostic_app(environ, start_response)
+        return operator_app(environ, start_response)
+
+    return application
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="KAM 富邦 TMF 本機五週期唯讀儀表板")
     parser.add_argument("--live", action="store_true")
@@ -210,10 +227,7 @@ def main(
             )
         )
 
-        def application(environ, start_response):
-            if str(environ.get("PATH_INFO", "/")) == "/":
-                return operator_app(environ, start_response)
-            return diagnostic_app(environ, start_response)
+        application = build_local_dashboard_router(operator_app, diagnostic_app)
 
         with make_server(
             args.host,
@@ -235,4 +249,10 @@ if __name__ == "__main__":
     raise SystemExit(main())
 
 
-__all__ = ["LiveFiveTimeframeSnapshotRefresher", "RefreshHealth", "build_parser", "main"]
+__all__ = [
+    "LiveFiveTimeframeSnapshotRefresher",
+    "RefreshHealth",
+    "build_local_dashboard_router",
+    "build_parser",
+    "main",
+]
