@@ -353,9 +353,22 @@ def _recent_trend_anchors(
     def is_w_pair(left: int, right: int) -> bool:
         neck = max(candles[index].high for index in range(left + 1, right))
         floor = min(candles[left].low, candles[right].low)
-        return neck > floor and (
+        if neck <= floor:
+            return False
+        legs_are_similar = (
             abs(candles[right].low - candles[left].low) <= (neck - floor) * 0.60
         )
+        if not legs_are_similar or right >= len(candles) - 1:
+            return False
+        # A high between two lows is still only resistance until the right
+        # side of the W recovers most of the distance back toward that high.
+        # This prevents an old spike above a sideways decline from being
+        # mislabeled as a neckline.
+        recovery_high = max(candle.high for candle in candles[right + 1 :])
+        if series.current_price is not None:
+            recovery_high = max(recovery_high, series.current_price)
+        second_leg_depth = neck - candles[right].low
+        return recovery_high >= candles[right].low + second_leg_depth * 0.65
 
     def w_prominence(pair: tuple[int, int]) -> tuple[float, int]:
         """Rank the visually dominant W before using recency as a tie-breaker."""
