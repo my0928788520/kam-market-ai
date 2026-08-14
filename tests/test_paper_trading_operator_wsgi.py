@@ -393,6 +393,7 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert ".timeframe-card strong { font-size: 26px;" in css
     assert ".timeframe-card span { display: block; color: #ffffff; font-size: 13px;" in css
     assert ".timeframe-resistance" in css and ".timeframe-support" in css
+    assert ".chart-overlay-line[hidden] { display: none; }" in css
     assert ".trend-health-card { grid-column: 1; grid-row: 3; display: grid;" in css
     assert ".position-card { grid-column: 2; grid-row: 3; display: grid;" in css
     assert ".next-card { grid-column: 3; grid-row: 3; display: grid;" in css
