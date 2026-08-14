@@ -50,6 +50,11 @@ def test_sparse_live_series_keeps_candle_bodies_at_readable_width() -> None:
 
     assert html.count("width='18.00'") == 6
     assert "width='269.12'" not in html
+    assert "已累積 3/20 根" in html
+    assert "尚缺 17 根建立 20MA" in html
+    assert "class='chart-current-line'" in html
+    assert "最新 102" in html
+    assert "08/13 08:00" in html
 
 
 @pytest.mark.parametrize("instrument,timeframe", [("BAD", "60m"), ("TMF", "5m")])

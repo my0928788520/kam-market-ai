@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from html import escape
 from math import isfinite
 from typing import Protocol
@@ -71,7 +71,12 @@ def _summary(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
         return f"{TIMEFRAME_LABELS.get(series.timeframe, '週期無效')}｜資料不足"
     latest_ma = ma_values[-1]
     if latest_ma is None:
-        relation, direction = "20MA 資料不足", "均線方向資料不足"
+        count = len(series.candles)
+        missing = max(0, 20 - count)
+        return (
+            f"{TIMEFRAME_LABELS[series.timeframe]}｜已累積 {count}/20 根｜"
+            f"尚缺 {missing} 根建立 20MA｜資料持續自動累積"
+        )
     else:
         close = series.candles[-1].close
         relation = "價格在 20MA 上方" if close > latest_ma else "價格在 20MA 下方" if close < latest_ma else "價格位於 20MA"
@@ -80,20 +85,27 @@ def _summary(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     return f"{TIMEFRAME_LABELS[series.timeframe]}｜{relation}｜{direction}｜趨勢線資料不足｜支撐壓力資料不足｜量能僅顯示原始成交量"
 
 
+def _time_label(value: datetime) -> str:
+    taiwan = timezone(timedelta(hours=8))
+    return value.astimezone(taiwan).strftime("%m/%d %H:%M")
+
+
 def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     candles, ma_values = series.candles[-80:], ma_values[-80:]
     if not candles:
         return "<div class='chart-empty' role='status'><strong>資料不足</strong><p>歷史 K 線來源尚未接入；系統不補假資料。</p></div>"
-    top, bottom, left, right = 28.0, 330.0, 52.0, 980.0
-    volume_top, volume_bottom = 350.0, 450.0
-    high, low = max(item.high for item in candles), min(item.low for item in candles)
-    span = high - low or 1.0
+    top, bottom, left, right = 28.0, 270.0, 66.0, 980.0
+    volume_top, volume_bottom = 292.0, 356.0
+    raw_high, raw_low = max(item.high for item in candles), min(item.low for item in candles)
+    raw_span = raw_high - raw_low or max(abs(raw_high) * 0.002, 1.0)
+    high, low = raw_high + raw_span * 0.08, raw_low - raw_span * 0.08
+    span = high - low
     # Keep sparse live series visually comparable with a normal chart.  Using
     # the candle count directly makes two or three early-session bars expand
     # into enormous blocks across the full viewport.
-    visible_slots = max(len(candles), 20)
+    visible_slots = max(len(candles), 12)
     step = (right - left) / visible_slots
-    first_x = right - (len(candles) - 0.5) * step
+    first_x = (left + right) / 2 - (len(candles) - 1) * step / 2
     max_volume = max((item.volume for item in candles), default=0) or 1
     body_width = min(18.0, max(2.0, step * 0.58))
     y = lambda value: top + (high - value) / span * (bottom - top)
@@ -109,10 +121,23 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
         volumes.append(f"<rect class='{colour}' x='{x-body_width/2:.2f}' y='{volume_bottom-volume_height:.2f}' width='{body_width:.2f}' height='{volume_height:.2f}'/>")
     points = [f"{first_x + index * step:.2f},{y(value):.2f}" for index, value in enumerate(ma_values) if value is not None]
     ma_line = f"<polyline class='chart-ma20' points='{' '.join(points)}'/>" if len(points) > 1 else ""
-    return ("<svg class='candlestick-chart' viewBox='0 0 1024 480' role='img' aria-label='唯讀 K 線、20MA 與成交量'>"
-            f"<text class='chart-price-label' x='8' y='{top+8:.0f}'>{high:,.2f}</text><text class='chart-price-label' x='8' y='{bottom:.0f}'>{low:,.2f}</text>"
-            "<line class='chart-axis' x1='52' y1='330' x2='980' y2='330'/><line class='chart-axis' x1='52' y1='450' x2='980' y2='450'/>"
-            f"<g class='chart-candles'>{''.join(bodies)}</g>{ma_line}<g class='chart-volumes'>{''.join(volumes)}</g></svg>")
+    grid_values = tuple(low + span * index / 4 for index in range(5))
+    grid = "".join(
+        f"<line class='chart-grid' x1='{left:.0f}' y1='{y(value):.2f}' x2='{right:.0f}' y2='{y(value):.2f}'/>"
+        f"<text class='chart-price-label' x='8' y='{y(value)+4:.2f}'>{value:,.0f}</text>"
+        for value in reversed(grid_values)
+    )
+    latest = candles[-1]
+    latest_y = y(latest.close)
+    time_labels = (
+        f"<text class='chart-time-label' x='{first_x:.2f}' y='378' text-anchor='start'>{_time_label(candles[0].opened_at)}</text>"
+        f"<text class='chart-time-label' x='{first_x + (len(candles)-1)*step:.2f}' y='378' text-anchor='end'>{_time_label(latest.opened_at)}</text>"
+    )
+    return ("<svg class='candlestick-chart' viewBox='0 0 1024 392' role='img' aria-label='唯讀 K 線、20MA 與成交量'>"
+            f"{grid}<line class='chart-current-line' x1='{left:.0f}' y1='{latest_y:.2f}' x2='{right:.0f}' y2='{latest_y:.2f}'/>"
+            f"<text class='chart-current-price' x='976' y='{latest_y-5:.2f}' text-anchor='end'>最新 {latest.close:,.0f}</text>"
+            f"<g class='chart-candles'>{''.join(bodies)}</g>{ma_line}<g class='chart-volumes'>{''.join(volumes)}</g>"
+            f"<text class='chart-volume-label' x='{left:.0f}' y='288'>成交量</text>{time_labels}</svg>")
 
 
 def render_multi_timeframe_chart_html(source: ChartDataReadOnlySource = EMPTY_CHART_DATA_SOURCE, *, instrument: str = "TMF", timeframe: str = "60m") -> str:
