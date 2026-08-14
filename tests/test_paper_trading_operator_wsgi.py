@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from decimal import Decimal
+from io import BytesIO
 from pathlib import Path
 import re
 
@@ -37,6 +38,27 @@ def test_wsgi_is_get_only_escapes_html_and_serves_static_css() -> None:
     assert response["status"] == "405 Method Not Allowed"
     assert b"body" in b"".join(app({"REQUEST_METHOD": "GET", "PATH_INFO": "/static/operator.css"}, start))
     assert "<KAM>" not in render_operator_html(_view())
+
+
+def test_local_session_switch_post_is_explicit_and_redirects_to_charts() -> None:
+    calls = []
+    app = build_operator_wsgi(
+        _view,
+        session_switcher=lambda value: (calls.append(value) is None, "已切換"),
+    )
+    response = {}
+    body = b"session=afterhours"
+    result = b"".join(app({
+        "REQUEST_METHOD": "POST",
+        "PATH_INFO": "/session-switch",
+        "CONTENT_LENGTH": str(len(body)),
+        "wsgi.input": BytesIO(body),
+    }, lambda status, headers: response.update(status=status, headers=dict(headers))))
+
+    assert calls == ["afterhours"]
+    assert response["status"] == "303 See Other"
+    assert response["headers"]["Location"] == "/charts?session_notice=ok"
+    assert result.decode() == "已切換"
 
 
 def test_help_page_contains_sop_horizons_rollover_and_risk_boundaries() -> None:
