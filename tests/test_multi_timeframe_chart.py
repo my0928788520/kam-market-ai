@@ -22,6 +22,8 @@ def test_chart_page_is_fail_closed_without_historical_source() -> None:
     html = render_multi_timeframe_chart_html()
     assert "多週期 K 線" in html and "15 分 K" in html and "60 分 K" in html and "日 K" in html and "週 K" in html
     assert "資料不足" in html and "系統不補假資料" in html
+    assert "<meta http-equiv='refresh' content='3'>" in html
+    assert "每 3 秒更新" in html
     assert "<svg class='candlestick-chart'" not in html
     assert "上升趨勢線｜尚未接入" in html and "支撐壓力｜尚未接入" in html
 

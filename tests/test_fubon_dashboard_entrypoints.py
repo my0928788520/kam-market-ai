@@ -27,6 +27,7 @@ def test_dashboard_parser_keeps_browser_launch_explicit_and_local() -> None:
     assert args.host == "127.0.0.1"
     assert args.symbol is None
     assert args.open_browser is False
+    assert args.refresh_seconds == 3
 
     args = build_parser().parse_args(["--symbol", "TMFH6", "--open-browser"])
     assert args.open_browser is True

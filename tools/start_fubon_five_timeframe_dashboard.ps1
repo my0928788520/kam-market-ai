@@ -5,8 +5,8 @@ param(
     [ValidateSet('regular', 'afterhours')]
     [string]$Session = 'regular',
 
-    [ValidateRange(15, 3600)]
-    [int]$RefreshSeconds = 60,
+    [ValidateRange(3, 3600)]
+    [int]$RefreshSeconds = 3,
 
     [ValidateRange(1, 65535)]
     [int]$Port = 8765

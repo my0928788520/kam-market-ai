@@ -10,7 +10,6 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from time import monotonic
 from wsgiref.simple_server import make_server
 
 from kam_market_ai.authorization.bootstrap import (
@@ -142,7 +141,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--after-hours", action="store_true")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--refresh-seconds", type=int, default=60)
+    parser.add_argument("--refresh-seconds", type=int, default=3)
     parser.add_argument("--snapshot", default="debug/five_timeframe/live.json")
     parser.add_argument("--chart-history", default="debug/five_timeframe/tmf_60m_history.json")
     parser.add_argument("--chart-history-15m", default="debug/five_timeframe/tmf_15m_history.json")
@@ -159,7 +158,7 @@ def main(
     if not args.live:
         print(json.dumps({"success": False, "failure_stage": "LIVE_FLAG_REQUIRED"}))
         return 2
-    if args.host not in {"127.0.0.1", "localhost"} or args.port <= 0 or args.refresh_seconds < 15:
+    if args.host not in {"127.0.0.1", "localhost"} or args.port <= 0 or args.refresh_seconds < 3:
         print(json.dumps({"success": False, "failure_stage": "LOCAL_SERVICE_INPUT_ERROR"}))
         return 2
     try:
@@ -211,10 +210,14 @@ def main(
     stop = threading.Event()
 
     def refresh_loop() -> None:
-        deadline = monotonic() + args.refresh_seconds
-        while not stop.wait(max(0.0, deadline - monotonic())):
-            refresher.refresh_safely()
-            deadline += args.refresh_seconds
+        delay = args.refresh_seconds
+        while not stop.wait(delay):
+            success = refresher.refresh_safely()
+            delay = (
+                args.refresh_seconds
+                if success
+                else min(60, args.refresh_seconds * (2 ** min(refresher.health.consecutive_failures, 5)))
+            )
 
     worker = threading.Thread(target=refresh_loop, name="kam-five-timeframe-refresh", daemon=True)
     worker.start()
