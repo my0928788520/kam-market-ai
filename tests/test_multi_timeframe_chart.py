@@ -292,9 +292,16 @@ def test_chart_draws_latest_rising_and_falling_pivot_trend_lines() -> None:
     assert "class='chart-neckline'" in html
     assert ">上升趨勢</text>" in html
     assert ">下降趨勢</text>" in html
-    assert rising is not None and rising[1:] == (10, start + timedelta(hours=10), 11)
-    assert falling is not None and falling[1:] == (25, start + timedelta(hours=12), 22)
-    assert neckline == (start + timedelta(hours=4), 25)
+    assert rising is not None and rising[1:] == (11, start + timedelta(hours=12), 14)
+    assert falling is not None and falling[1:] == (23, start + timedelta(hours=12), 22)
+    assert neckline == (start + timedelta(hours=11), 21)
+
+
+def test_chart_shows_live_price_number_on_three_second_refresh_line() -> None:
+    html = render_multi_timeframe_chart_html(FixtureChartSource(), timeframe="60m")
+
+    assert "class='chart-current-price-label'" in html
+    assert ">即時 124</text>" in html
 
 
 def test_broken_rising_trend_is_removed_until_a_new_structure_forms() -> None:
