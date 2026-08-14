@@ -80,7 +80,7 @@ def test_live_five_timeframe_uses_established_kam_operator_ui() -> None:
     assert "20棒支撐：43,000" in page
     assert "偏多觀察・結構待確認" in page
     assert "即時微台</dt><dd>45,920" in page
-    assert "60分20MA</dt><dd>45,582.45（現價在上・上彎）" in page
+    assert "60分20MA</dt><dd>45,582（現價在上・上彎）" in page
     assert "最近上壓</dt><dd>45,950（15分／+30點）" in page
     assert "最近下撐</dt><dd>45,800（15分／−120點）" in page
     assert "壓力／支撐為 20 棒區間參考，不是買賣訊號" in page

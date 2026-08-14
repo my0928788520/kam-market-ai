@@ -314,6 +314,33 @@ def test_dashboard_renders_real_control_cells_and_coloured_cycle_structure() -> 
         assert label in html
 
 
+def test_dashboard_reference_prices_use_standard_half_up_integer_rounding() -> None:
+    view = PaperTradingOperatorView(
+        "KAM",
+        "安全",
+        {},
+        {},
+        {},
+        (),
+        False,
+        demo={
+            "current_price": 45895.5,
+            "timeframe_details": {
+                "60 分": {
+                    "ma20": 45895.5,
+                    "price_vs_ma20": "equal",
+                    "ma20_direction": "flat",
+                }
+            },
+        },
+    )
+
+    html = render_operator_html(view)
+
+    assert html.count("45,896") >= 2
+    assert "45,895.50" not in html
+
+
 def test_halted_and_closed_selected_snapshots_are_presented_fail_closed() -> None:
     proposal, matching = build_demo_session()
     view = build_demo_operator_presenter(proposal, matching, DEMO_SNAPSHOT)

@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from datetime import datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from html import escape
 from math import isfinite
 from pathlib import Path
@@ -78,7 +78,8 @@ def _display_price(value: object) -> str:
     number = _numeric_price(value)
     if number is None:
         return "尚未形成"
-    return f"{number:,.2f}".replace(".00", "")
+    rounded = Decimal(str(number)).quantize(Decimal(1), rounding=ROUND_HALF_UP)
+    return f"{int(rounded):,}"
 
 
 def _reference_level_text(
@@ -268,7 +269,7 @@ def _timeframe_card(name: object, state: object, details: Mapping[str, object] |
     relation = {"above": "上方", "below": "下方", "equal": "貼近", "insufficient": "尚未形成"}.get(str(details.get("price_vs_ma20", "insufficient")), "資料不足")
     direction = {"rising": "上彎", "falling": "下彎", "flat": "走平", "insufficient": "尚未形成"}.get(str(details.get("ma20_direction", "insufficient")), "資料不足")
     try:
-        ma_text = f"（20MA {float(ma20):,.2f}）".replace(".00", "") if ma20 is not None else ""
+        ma_text = f"（20MA {_display_price(ma20)}）" if ma20 is not None else ""
     except (TypeError, ValueError):
         ma_text = ""
     resistance = _display_price(details.get("range_resistance"))

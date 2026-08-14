@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from decimal import ROUND_HALF_UP, Decimal
 from html import escape
 from math import isfinite
 from typing import Protocol
@@ -123,11 +124,11 @@ def _reference_metrics(
     )
 
 
-def _price_text(value: float | None, *, fixed_decimals: bool = False) -> str:
+def _price_text(value: float | None) -> str:
     if value is None:
         return "—"
-    rendered = f"{value:,.2f}"
-    return rendered if fixed_decimals else rendered.rstrip("0").rstrip(".")
+    rounded = Decimal(str(value)).quantize(Decimal(1), rounding=ROUND_HALF_UP)
+    return f"{int(rounded):,}"
 
 
 def _ma_caption(
@@ -224,7 +225,7 @@ def _price_board(
         f"<span>{current_label}</span><strong>{_price_text(metrics.current_price)}</strong>"
         f"<small>{current_caption}</small></div>"
         "<div class='chart-price-metric chart-price-ma'>"
-        f"<span>{ma_label}</span><strong>{_price_text(metrics.ma20, fixed_decimals=True)}</strong>"
+        f"<span>{ma_label}</span><strong>{_price_text(metrics.ma20)}</strong>"
         f"<small>{_ma_caption(metrics, ma_values)}</small></div>"
         "<div class='chart-price-metric chart-price-resistance'>"
         f"<span>20 棒上壓力</span><strong>{_price_text(metrics.resistance)}</strong>"

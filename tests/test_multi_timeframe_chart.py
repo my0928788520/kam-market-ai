@@ -65,7 +65,8 @@ def test_chart_page_renders_injected_candles_ma20_volume_and_summary() -> None:
     assert "class='chart-crosshair'" in html and "class='chart-tooltip'" in html
     assert "class='chart-price-board'" in html
     assert "<span>最新收盤</span><strong>124</strong>" in html
-    assert "<span>20 日線</span><strong>114.50</strong>" in html
+    assert "<span>20 日線</span><strong>115</strong>" in html
+    assert "<strong>114.50</strong>" not in html
     assert "<span>20 棒上壓力</span><strong>125</strong>" in html
     assert "<span>20 棒下支撐</span><strong>103</strong>" in html
     assert "20 棒支撐壓力已更新" in html
@@ -241,3 +242,4 @@ def test_wsgi_serves_external_non_overlapping_chart_refresh_script() -> None:
     assert 'document.addEventListener("pointermove"' in script
     assert "zone.dataset.high" in script and "zone.dataset.low" in script
     assert "zone.dataset.ma20" in script and "尚未形成" in script
+    assert 'maximumFractionDigits: 0' in script

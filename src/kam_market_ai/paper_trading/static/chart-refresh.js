@@ -5,7 +5,7 @@
   const REGION_IDS = ["chart-summary", "chart-panel", "chart-footer"];
   const status = document.getElementById("chart-live-status");
   let refreshInFlight = false;
-  const numberFormatter = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 2 });
+  const numberFormatter = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 0 });
 
   const scheduleNext = () => {
     window.setTimeout(refreshChart, REFRESH_INTERVAL_MS);
