@@ -34,7 +34,7 @@
 
   const applyOverlayVisibility = () => {
     for (const line of document.querySelectorAll("[data-chart-overlay-line]")) {
-      line.hidden = !enabledOverlays.has(line.dataset.chartOverlayLine);
+      line.toggleAttribute("hidden", !enabledOverlays.has(line.dataset.chartOverlayLine));
     }
     for (const button of document.querySelectorAll("[data-chart-overlay]")) {
       button.setAttribute("aria-pressed", String(enabledOverlays.has(button.dataset.chartOverlay)));
