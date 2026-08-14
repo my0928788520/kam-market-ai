@@ -193,7 +193,6 @@ def _price_board(
     ma_values: tuple[float | None, ...],
 ) -> str:
     metrics = _reference_metrics(series, ma_values)
-    rising_anchors, falling_anchors, neckline_anchor = _recent_trend_anchors(series)
     current_label = (
         "即時微台"
         if series.current_price is not None and series.instrument == "TMF"
@@ -239,32 +238,11 @@ def _price_board(
         f"<span>20 棒下支撐</span><strong>{_price_text(metrics.support)}</strong>"
         f"<small>{support_caption}</small></div></div>"
         + "<div class='chart-level-controls' aria-label='圖線顯示控制'>"
-        + (
-            "<button class='chart-overlay-toggle' type='button' data-chart-overlay='rising' aria-pressed='false'>上升趨勢線</button>"
-            if rising_anchors is not None
-            else "<button class='chart-overlay-toggle' type='button' disabled>上升趨勢不足</button>"
-        )
-        + (
-            "<button class='chart-overlay-toggle' type='button' data-chart-overlay='falling' aria-pressed='false'>下降趨勢線</button>"
-            if falling_anchors is not None
-            else "<button class='chart-overlay-toggle' type='button' disabled>下降趨勢不足</button>"
-        )
-        + (
-            "<button class='chart-overlay-toggle' type='button' data-chart-overlay='resistance' aria-pressed='false'>壓力線</button>"
-            if metrics.resistance is not None
-            else "<button class='chart-overlay-toggle' type='button' disabled>壓力資料不足</button>"
-        )
-        + (
-            "<button class='chart-overlay-toggle' type='button' data-chart-overlay='support' aria-pressed='false'>支撐線</button>"
-            if metrics.support is not None
-            else "<button class='chart-overlay-toggle' type='button' disabled>支撐資料不足</button>"
-        )
-        + (
-            "<button class='chart-overlay-toggle' type='button' data-chart-overlay='neckline' aria-pressed='false'>W 頸線</button>"
-            if neckline_anchor is not None
-            else "<button class='chart-overlay-toggle' type='button' disabled>W 頸線不足</button>"
-        )
-        + "<small>預設不顯示，需要時個別開啟</small></div>"
+        + "<button class='chart-overlay-toggle' type='button' data-manual-tool='trend' aria-pressed='false'>手動畫斜線</button>"
+        + "<button class='chart-overlay-toggle' type='button' data-manual-tool='horizontal' aria-pressed='false'>手動畫水平線</button>"
+        + "<button class='chart-overlay-toggle' type='button' data-manual-action='undo'>復原上一條</button>"
+        + "<button class='chart-overlay-toggle' type='button' data-manual-action='clear'>清除全部</button>"
+        + "<small id='chart-drawing-help'>壓力／支撐自動顯示；斜線請在圖上依序點兩個位置</small></div>"
     )
 
 
@@ -272,12 +250,7 @@ def _summary(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     if not series.candles:
         return f"{TIMEFRAME_LABELS.get(series.timeframe, '週期無效')}｜資料不足"
     metrics = _reference_metrics(series, ma_values)
-    rising_anchors, falling_anchors, _ = _recent_trend_anchors(series)
-    trend_status = (
-        "最近趨勢錨點已更新"
-        if rising_anchors is not None or falling_anchors is not None
-        else "最近趨勢錨點不足"
-    )
+    trend_status = "趨勢線改為手動畫線"
     range_status = (
         f"{metrics.range_window_bars} 棒支撐壓力已更新"
         if metrics.resistance is not None and metrics.support is not None
@@ -482,7 +455,6 @@ def _recent_trend_anchors(
 
 def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     metrics = _reference_metrics(series, ma_values)
-    rising_anchors, falling_anchors, neckline_anchor = _recent_trend_anchors(series)
     display_bars = 48 if series.timeframe == "60m" else 64
     candles, ma_values = series.candles[-display_bars:], ma_values[-display_bars:]
     if not candles:
@@ -574,49 +546,18 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
         support_y = y(metrics.support)
         overlay_lines.extend((
             (
-                "<g class='chart-overlay-line' data-chart-overlay-line='resistance' hidden>"
+                "<g class='chart-overlay-line chart-auto-level'>"
                 f"<line class='chart-resistance-line' x1='{left:.0f}' y1='{resistance_y:.2f}' x2='{right:.0f}' y2='{resistance_y:.2f}'/>"
                 f"<text class='chart-resistance-label' x='{right - 4:.0f}' y='{resistance_y - 5:.2f}' text-anchor='end'>上壓 {_price_text(metrics.resistance)}</text>"
                 "</g>"
             ),
             (
-                "<g class='chart-overlay-line' data-chart-overlay-line='support' hidden>"
+                "<g class='chart-overlay-line chart-auto-level'>"
                 f"<line class='chart-support-line' x1='{left:.0f}' y1='{support_y:.2f}' x2='{right:.0f}' y2='{support_y:.2f}'/>"
                 f"<text class='chart-support-label' x='{right - 4:.0f}' y='{support_y - 5:.2f}' text-anchor='end'>下撐 {_price_text(metrics.support)}</text>"
                 "</g>"
             ),
         ))
-    candle_indexes = {item.opened_at: index for index, item in enumerate(candles)}
-    if neckline_anchor is not None:
-        neck_time, neck_price = neckline_anchor
-        neck_index = candle_indexes.get(neck_time)
-        if neck_index is not None:
-            neck_y = y(neck_price)
-            overlay_lines.append(
-                "<g class='chart-overlay-line' data-chart-overlay-line='neckline' hidden>"
-                f"<line class='chart-neckline' x1='{first_x + neck_index * step:.2f}' y1='{neck_y:.2f}' x2='{right:.0f}' y2='{neck_y:.2f}'/>"
-                f"<text class='chart-neckline-label' x='{right - 4:.0f}' y='{neck_y - 5:.2f}' text-anchor='end'>W 頸線 {_price_text(neck_price)}</text>"
-                "</g>"
-            )
-    for overlay, anchors, line_class, label in (
-        ("rising", rising_anchors, "chart-rising-trend-line", "上升趨勢"),
-        ("falling", falling_anchors, "chart-falling-trend-line", "下降趨勢"),
-    ):
-        if anchors is None:
-            continue
-        first_time, first_price, second_time, second_price = anchors
-        first_index = candle_indexes.get(first_time)
-        second_index = candle_indexes.get(second_time)
-        if first_index is None or second_index is None or first_index == second_index:
-            continue
-        slope = (second_price - first_price) / (second_index - first_index)
-        projected_price = second_price + slope * (len(candles) - 1 - second_index)
-        overlay_lines.append(
-                f"<g class='chart-overlay-line' data-chart-overlay-line='{overlay}' hidden>"
-                f"<line class='{line_class}' x1='{first_x + first_index * step:.2f}' y1='{y(first_price):.2f}' x2='{first_x + (len(candles) - 1) * step:.2f}' y2='{y(projected_price):.2f}'/>"
-                f"<text class='{line_class}-label' x='{first_x + (len(candles) - 1) * step - 4:.2f}' y='{y(projected_price) - 5:.2f}' text-anchor='end'>{label}</text>"
-                "</g>"
-            )
     range_lines = "".join(overlay_lines)
     time_labels = (
         f"<text class='chart-time-label' x='{first_x:.2f}' y='378' text-anchor='start'>{_time_label(candles[0].opened_at, series.timeframe)}</text>"
@@ -626,7 +567,7 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
         "<svg class='candlestick-chart' viewBox='0 0 1024 392' role='img' aria-label='唯讀 K 線、20MA、即時水平線與成交量'>"
         f"{grid}<line class='chart-current-line' x1='{left:.0f}' y1='{latest_y:.2f}' x2='{right:.0f}' y2='{latest_y:.2f}'/>"
         f"<text class='chart-current-price-label' x='{right - 4:.0f}' y='{latest_y - 6:.2f}' text-anchor='end'>即時 {_price_text(displayed_price)}</text>"
-        f"<g class='chart-candles'>{''.join(bodies)}</g>{ma_line}{range_lines}<g class='chart-volumes'>{''.join(volumes)}</g>"
+        f"<g class='chart-candles'>{''.join(bodies)}</g>{ma_line}{range_lines}<g class='chart-manual-drawings'></g><g class='chart-volumes'>{''.join(volumes)}</g>"
         f"<text class='chart-volume-label' x='{left:.0f}' y='288'>成交量</text>{time_labels}"
         f"<g class='chart-crosshair' hidden><line class='chart-crosshair-x' x1='0' y1='{top:.2f}' x2='0' y2='{volume_bottom:.2f}'/><line class='chart-crosshair-y' x1='{left:.2f}' y1='0' x2='{right:.2f}' y2='0'/></g>"
         f"<g class='chart-hover-zones'>{''.join(hover_zones)}</g></svg>"
@@ -660,17 +601,12 @@ def render_multi_timeframe_chart_html(
     )
     status = _summary(series, ma_values) if valid else "商品或週期無效"
     metrics = _reference_metrics(series, ma_values)
-    rising_anchors, falling_anchors, neckline_anchor = _recent_trend_anchors(series)
     range_overlay = (
         "<span class='enabled'>20 棒壓力／支撐</span>"
         if metrics.resistance is not None and metrics.support is not None
         else "<span>支撐壓力｜資料不足</span>"
     )
-    trend_overlay = (
-        f"<span class='enabled'>上升趨勢｜{'可顯示' if rising_anchors is not None else '錨點不足'}</span>"
-        f"<span class='enabled'>下降趨勢｜{'可顯示' if falling_anchors is not None else '錨點不足'}</span>"
-        f"<span class='enabled'>W 頸線｜{'可顯示' if neckline_anchor is not None else '結構不足'}</span>"
-    )
+    trend_overlay = "<span class='enabled'>趨勢／頸線｜手動畫線</span>"
     session_text = {"regular": "日盤", "afterhours": "夜盤"}.get(
         series.trading_session, "時段未確認"
     )
