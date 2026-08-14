@@ -120,4 +120,6 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
 .dashboard-live-status { color: #9adfca; font-size: 10px; transition: color 160ms ease; }
 .dashboard-live-status[data-state='refreshing'] { color: #f2ce86; }
 .dashboard-live-status[data-state='error'] { color: #ff9a83; }
+.chart-current-price-label { fill: #ffe08c; stroke: #0b1119; stroke-width: 4px; paint-order: stroke; font-size: 12px; font-weight: 850; animation: chart-price-tick 500ms ease-out; }
+@keyframes chart-price-tick { from { opacity: .25; } to { opacity: 1; } }
 @media (max-width: 760px) { .chart-main { grid-template-rows: auto; }.chart-toolbar { flex-wrap: wrap; }.chart-toolbar-divider { display: none; }.chart-panel { grid-template-rows: auto auto minmax(320px, 1fr); min-height: 560px; padding: 8px; }.chart-price-board { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }.chart-price-metric { min-height: 82px; padding: 9px 10px; }.chart-price-metric span { font-size: 12px; }.chart-price-metric strong { font-size: 24px; }.chart-price-metric small { font-size: 10px; }.chart-level-controls { justify-content: flex-start; flex-wrap: wrap; }.candlestick-chart { min-height: 320px; }.chart-footer { align-items: start; flex-direction: column; } }
