@@ -7,7 +7,16 @@
   const status = document.getElementById("chart-live-status");
   let refreshInFlight = false;
   let tooltipHideTimer = null;
-  const enabledOverlays = new Set();
+  let activeDrawingTool = null;
+  let pendingDrawingPoint = null;
+  const drawingStorageKey = `kam-chart-drawings:${window.location.pathname}:${window.location.search}`;
+  let manualDrawings = [];
+  try {
+    manualDrawings = JSON.parse(window.localStorage.getItem(drawingStorageKey) || "[]");
+    if (!Array.isArray(manualDrawings)) manualDrawings = [];
+  } catch (_error) {
+    manualDrawings = [];
+  }
   const numberFormatter = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 0 });
 
   const scheduleNext = () => {
@@ -29,16 +38,59 @@
       }
       current.replaceChildren(...Array.from(replacement.childNodes).map((node) => document.importNode(node, true)));
     }
-    applyOverlayVisibility();
+    renderManualDrawings();
   };
 
-  const applyOverlayVisibility = () => {
-    for (const line of document.querySelectorAll("[data-chart-overlay-line]")) {
-      line.toggleAttribute("hidden", !enabledOverlays.has(line.dataset.chartOverlayLine));
+  const saveManualDrawings = () => {
+    try {
+      window.localStorage.setItem(drawingStorageKey, JSON.stringify(manualDrawings));
+    } catch (_error) {
+      // Drawing still works for this page even when browser storage is unavailable.
     }
-    for (const button of document.querySelectorAll("[data-chart-overlay]")) {
-      button.setAttribute("aria-pressed", String(enabledOverlays.has(button.dataset.chartOverlay)));
+  };
+
+  const renderManualDrawings = () => {
+    const layer = document.querySelector(".chart-manual-drawings");
+    if (!layer) return;
+    const namespace = "http://www.w3.org/2000/svg";
+    const nodes = manualDrawings.map((drawing) => {
+      const line = document.createElementNS(namespace, "line");
+      line.setAttribute("class", "chart-manual-line");
+      for (const attribute of ["x1", "y1", "x2", "y2"]) {
+        line.setAttribute(attribute, String(drawing[attribute]));
+      }
+      return line;
+    });
+    if (pendingDrawingPoint) {
+      const marker = document.createElementNS(namespace, "circle");
+      marker.setAttribute("class", "chart-manual-anchor");
+      marker.setAttribute("cx", String(pendingDrawingPoint.x));
+      marker.setAttribute("cy", String(pendingDrawingPoint.y));
+      marker.setAttribute("r", "4");
+      nodes.push(marker);
     }
+    layer.replaceChildren(...nodes);
+    for (const button of document.querySelectorAll("[data-manual-tool]")) {
+      button.setAttribute("aria-pressed", String(button.dataset.manualTool === activeDrawingTool));
+    }
+  };
+
+  const setDrawingHelp = (message) => {
+    const help = document.getElementById("chart-drawing-help");
+    if (help) help.textContent = message;
+  };
+
+  const chartPoint = (event, svg) => {
+    const matrix = svg.getScreenCTM();
+    if (!matrix) return null;
+    const point = svg.createSVGPoint();
+    point.x = event.clientX;
+    point.y = event.clientY;
+    const transformed = point.matrixTransform(matrix.inverse());
+    return {
+      x: Math.min(980, Math.max(66, transformed.x)),
+      y: Math.min(270, Math.max(28, transformed.y)),
+    };
   };
 
   const hideChartTooltip = (panel) => {
@@ -167,12 +219,56 @@
   });
 
   document.addEventListener("click", (event) => {
-    const button = event.target.closest?.("[data-chart-overlay]");
-    if (!button || button.disabled) return;
-    const overlay = button.dataset.chartOverlay;
-    if (enabledOverlays.has(overlay)) enabledOverlays.delete(overlay);
-    else enabledOverlays.add(overlay);
-    applyOverlayVisibility();
+    const toolButton = event.target.closest?.("[data-manual-tool]");
+    if (toolButton) {
+      const selected = toolButton.dataset.manualTool;
+      activeDrawingTool = activeDrawingTool === selected ? null : selected;
+      pendingDrawingPoint = null;
+      setDrawingHelp(
+        activeDrawingTool === "trend"
+          ? "請在 K 線圖依序點選斜線的起點與終點"
+          : activeDrawingTool === "horizontal"
+            ? "請在 K 線圖點選水平線價位"
+            : "壓力／支撐自動顯示；已停止手動畫線",
+      );
+      renderManualDrawings();
+      return;
+    }
+    const actionButton = event.target.closest?.("[data-manual-action]");
+    if (!actionButton) return;
+    if (actionButton.dataset.manualAction === "undo") manualDrawings.pop();
+    if (actionButton.dataset.manualAction === "clear") manualDrawings = [];
+    pendingDrawingPoint = null;
+    saveManualDrawings();
+    renderManualDrawings();
+  });
+
+  document.addEventListener("pointerdown", (event) => {
+    if (!activeDrawingTool) return;
+    const svg = event.target.closest?.(".candlestick-chart");
+    if (!svg) return;
+    const point = chartPoint(event, svg);
+    if (!point) return;
+    event.preventDefault();
+    if (activeDrawingTool === "horizontal") {
+      manualDrawings.push({ x1: 66, y1: point.y, x2: 980, y2: point.y });
+      saveManualDrawings();
+      setDrawingHelp("水平線已完成；可繼續點選其他價位");
+    } else if (!pendingDrawingPoint) {
+      pendingDrawingPoint = point;
+      setDrawingHelp("起點已選，請再點選終點");
+    } else {
+      manualDrawings.push({
+        x1: pendingDrawingPoint.x,
+        y1: pendingDrawingPoint.y,
+        x2: point.x,
+        y2: point.y,
+      });
+      pendingDrawingPoint = null;
+      saveManualDrawings();
+      setDrawingHelp("斜線已完成；可繼續畫下一條");
+    }
+    renderManualDrawings();
   });
 
   async function refreshChart() {
@@ -199,5 +295,6 @@
     }
   }
 
+  renderManualDrawings();
   scheduleNext();
 })();
