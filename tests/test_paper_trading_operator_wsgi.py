@@ -60,6 +60,9 @@ def test_help_page_contains_sop_horizons_rollover_and_risk_boundaries() -> None:
         )
     ).decode()
     assert response["status"] == "200 OK" and "KAM 使用說明｜SOP" in body
+    assert "大台 TX" in body and "每點 200 元" in body and "701,000 元" in body
+    assert "小台 MTX" in body and "每點 50 元" in body and "175,250 元" in body
+    assert "微台 TMF" in body and "每點 10 元" in body and "35,050 元" in body
 
 
 def test_help_page_uses_document_flow_instead_of_dashboard_grid() -> None:
