@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from html import escape
+from itertools import pairwise
 from math import isfinite
 from typing import Protocol
 
@@ -189,6 +190,7 @@ def _price_board(
     ma_values: tuple[float | None, ...],
 ) -> str:
     metrics = _reference_metrics(series, ma_values)
+    rising_anchors, falling_anchors = _recent_trend_anchors(series)
     current_label = (
         "即時微台"
         if series.current_price is not None and series.instrument == "TMF"
@@ -233,12 +235,28 @@ def _price_board(
         "<div class='chart-price-metric chart-price-support'>"
         f"<span>20 棒下支撐</span><strong>{_price_text(metrics.support)}</strong>"
         f"<small>{support_caption}</small></div></div>"
+        + "<div class='chart-level-controls' aria-label='圖線顯示控制'>"
         + (
-            "<div class='chart-level-controls'><button id='chart-range-toggle' class='chart-overlay-toggle' type='button' aria-pressed='false'>顯示支撐／壓力＋趨勢線</button>"
-            "<small>水平線＝最近上下緣・斜線＝最近有效波段高低點</small></div>"
-            if metrics.resistance is not None and metrics.support is not None
-            else "<div class='chart-level-controls'><button id='chart-range-toggle' class='chart-overlay-toggle' type='button' disabled>支撐壓力資料不足</button></div>"
+            "<button class='chart-overlay-toggle' type='button' data-chart-overlay='rising' aria-pressed='false'>上升趨勢線</button>"
+            if rising_anchors is not None
+            else "<button class='chart-overlay-toggle' type='button' disabled>上升趨勢不足</button>"
         )
+        + (
+            "<button class='chart-overlay-toggle' type='button' data-chart-overlay='falling' aria-pressed='false'>下降趨勢線</button>"
+            if falling_anchors is not None
+            else "<button class='chart-overlay-toggle' type='button' disabled>下降趨勢不足</button>"
+        )
+        + (
+            "<button class='chart-overlay-toggle' type='button' data-chart-overlay='resistance' aria-pressed='false'>壓力線</button>"
+            if metrics.resistance is not None
+            else "<button class='chart-overlay-toggle' type='button' disabled>壓力資料不足</button>"
+        )
+        + (
+            "<button class='chart-overlay-toggle' type='button' data-chart-overlay='support' aria-pressed='false'>支撐線</button>"
+            if metrics.support is not None
+            else "<button class='chart-overlay-toggle' type='button' disabled>支撐資料不足</button>"
+        )
+        + "<small>預設不顯示，需要時個別開啟</small></div>"
     )
 
 
@@ -246,6 +264,12 @@ def _summary(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     if not series.candles:
         return f"{TIMEFRAME_LABELS.get(series.timeframe, '週期無效')}｜資料不足"
     metrics = _reference_metrics(series, ma_values)
+    rising_anchors, falling_anchors = _recent_trend_anchors(series)
+    trend_status = (
+        "最近趨勢錨點已更新"
+        if rising_anchors is not None or falling_anchors is not None
+        else "最近趨勢錨點不足"
+    )
     range_status = (
         f"{metrics.range_window_bars} 棒支撐壓力已更新"
         if metrics.resistance is not None and metrics.support is not None
@@ -276,7 +300,7 @@ def _summary(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
             if previous is not None and latest_ma < previous
             else "均線走平"
         )
-        summary = f"{TIMEFRAME_LABELS[series.timeframe]}｜{relation}｜{direction}｜趨勢線資料不足｜{range_status}｜量能僅顯示原始成交量"
+        summary = f"{TIMEFRAME_LABELS[series.timeframe]}｜{relation}｜{direction}｜{trend_status}｜{range_status}｜量能僅顯示原始成交量"
     if series.last_candle_is_forming:
         return f"{summary}｜{series.forming_label}｜僅供顯示、不進入 KAM 或 Paper"
     return summary
@@ -296,7 +320,7 @@ def _recent_trend_anchors(
 ]:
     """Return the latest rising-low and falling-high pivot pairs from closed bars."""
     completed = series.candles[:-1] if series.last_candle_is_forming else series.candles
-    candles = completed[-80:]
+    candles = completed[-32:]
     if len(candles) < 5:
         return None, None
     pivot_lows = [
@@ -315,21 +339,21 @@ def _recent_trend_anchors(
         and candles[index].high >= candles[index + 1].high
         and candles[index].high > candles[index + 2].high
     ]
+    low_pairs = tuple(pairwise(pivot_lows))
+    high_pairs = tuple(pairwise(pivot_highs))
     rising = next(
         (
             (candles[left].opened_at, candles[left].low, candles[right].opened_at, candles[right].low)
-            for right in reversed(pivot_lows)
-            for left in reversed([item for item in pivot_lows if item < right])
-            if candles[right].low > candles[left].low
+            for left, right in reversed(low_pairs)
+            if right - left <= 12 and candles[right].low > candles[left].low
         ),
         None,
     )
     falling = next(
         (
             (candles[left].opened_at, candles[left].high, candles[right].opened_at, candles[right].high)
-            for right in reversed(pivot_highs)
-            for left in reversed([item for item in pivot_highs if item < right])
-            if candles[right].high < candles[left].high
+            for left, right in reversed(high_pairs)
+            if right - left <= 12 and candles[right].high < candles[left].high
         ),
         None,
     )
@@ -339,7 +363,8 @@ def _recent_trend_anchors(
 def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     metrics = _reference_metrics(series, ma_values)
     rising_anchors, falling_anchors = _recent_trend_anchors(series)
-    candles, ma_values = series.candles[-80:], ma_values[-80:]
+    display_bars = 48 if series.timeframe == "60m" else 64
+    candles, ma_values = series.candles[-display_bars:], ma_values[-display_bars:]
     if not candles:
         return "<div class='chart-empty' role='status'><strong>資料不足</strong><p>歷史 K 線來源尚未接入；系統不補假資料。</p></div>"
     top, bottom, left, right = 28.0, 270.0, 66.0, 980.0
@@ -423,37 +448,45 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     )
     latest = candles[-1]
     latest_y = y(displayed_price)
-    range_lines = ""
+    overlay_lines: list[str] = []
     if metrics.resistance is not None and metrics.support is not None:
         resistance_y = y(metrics.resistance)
         support_y = y(metrics.support)
-        range_lines = (
-            "<g class='chart-range-lines' hidden>"
-            f"<line class='chart-resistance-line' x1='{left:.0f}' y1='{resistance_y:.2f}' x2='{right:.0f}' y2='{resistance_y:.2f}'/>"
-            f"<text class='chart-resistance-label' x='{right - 4:.0f}' y='{resistance_y - 5:.2f}' text-anchor='end'>上壓 {_price_text(metrics.resistance)}</text>"
-            f"<line class='chart-support-line' x1='{left:.0f}' y1='{support_y:.2f}' x2='{right:.0f}' y2='{support_y:.2f}'/>"
-            f"<text class='chart-support-label' x='{right - 4:.0f}' y='{support_y - 5:.2f}' text-anchor='end'>下撐 {_price_text(metrics.support)}</text>"
-        )
-        candle_indexes = {item.opened_at: index for index, item in enumerate(candles)}
-        trend_parts: list[str] = []
-        for anchors, line_class, label in (
-            (rising_anchors, "chart-rising-trend-line", "上升趨勢"),
-            (falling_anchors, "chart-falling-trend-line", "下降趨勢"),
-        ):
-            if anchors is None:
-                continue
-            first_time, first_price, second_time, second_price = anchors
-            first_index = candle_indexes.get(first_time)
-            second_index = candle_indexes.get(second_time)
-            if first_index is None or second_index is None or first_index == second_index:
-                continue
-            slope = (second_price - first_price) / (second_index - first_index)
-            projected_price = second_price + slope * (len(candles) - 1 - second_index)
-            trend_parts.append(
+        overlay_lines.extend((
+            (
+                "<g class='chart-overlay-line' data-chart-overlay-line='resistance' hidden>"
+                f"<line class='chart-resistance-line' x1='{left:.0f}' y1='{resistance_y:.2f}' x2='{right:.0f}' y2='{resistance_y:.2f}'/>"
+                f"<text class='chart-resistance-label' x='{right - 4:.0f}' y='{resistance_y - 5:.2f}' text-anchor='end'>上壓 {_price_text(metrics.resistance)}</text>"
+                "</g>"
+            ),
+            (
+                "<g class='chart-overlay-line' data-chart-overlay-line='support' hidden>"
+                f"<line class='chart-support-line' x1='{left:.0f}' y1='{support_y:.2f}' x2='{right:.0f}' y2='{support_y:.2f}'/>"
+                f"<text class='chart-support-label' x='{right - 4:.0f}' y='{support_y - 5:.2f}' text-anchor='end'>下撐 {_price_text(metrics.support)}</text>"
+                "</g>"
+            ),
+        ))
+    candle_indexes = {item.opened_at: index for index, item in enumerate(candles)}
+    for overlay, anchors, line_class, label in (
+        ("rising", rising_anchors, "chart-rising-trend-line", "上升趨勢"),
+        ("falling", falling_anchors, "chart-falling-trend-line", "下降趨勢"),
+    ):
+        if anchors is None:
+            continue
+        first_time, first_price, second_time, second_price = anchors
+        first_index = candle_indexes.get(first_time)
+        second_index = candle_indexes.get(second_time)
+        if first_index is None or second_index is None or first_index == second_index:
+            continue
+        slope = (second_price - first_price) / (second_index - first_index)
+        projected_price = second_price + slope * (len(candles) - 1 - second_index)
+        overlay_lines.append(
+                f"<g class='chart-overlay-line' data-chart-overlay-line='{overlay}' hidden>"
                 f"<line class='{line_class}' x1='{first_x + first_index * step:.2f}' y1='{y(first_price):.2f}' x2='{first_x + (len(candles) - 1) * step:.2f}' y2='{y(projected_price):.2f}'/>"
                 f"<text class='{line_class}-label' x='{first_x + (len(candles) - 1) * step - 4:.2f}' y='{y(projected_price) - 5:.2f}' text-anchor='end'>{label}</text>"
+                "</g>"
             )
-        range_lines += "".join(trend_parts) + "</g>"
+    range_lines = "".join(overlay_lines)
     time_labels = (
         f"<text class='chart-time-label' x='{first_x:.2f}' y='378' text-anchor='start'>{_time_label(candles[0].opened_at, series.timeframe)}</text>"
         f"<text class='chart-time-label' x='{first_x + (len(candles) - 1) * step:.2f}' y='378' text-anchor='end'>{_time_label(latest.opened_at, series.timeframe)}</text>"
@@ -495,15 +528,20 @@ def render_multi_timeframe_chart_html(
     )
     status = _summary(series, ma_values) if valid else "商品或週期無效"
     metrics = _reference_metrics(series, ma_values)
+    rising_anchors, falling_anchors = _recent_trend_anchors(series)
     range_overlay = (
         "<span class='enabled'>20 棒壓力／支撐</span>"
         if metrics.resistance is not None and metrics.support is not None
         else "<span>支撐壓力｜資料不足</span>"
     )
+    trend_overlay = (
+        f"<span class='enabled'>上升趨勢｜{'可顯示' if rising_anchors is not None else '錨點不足'}</span>"
+        f"<span class='enabled'>下降趨勢｜{'可顯示' if falling_anchors is not None else '錨點不足'}</span>"
+    )
     return f"""<!doctype html><html class='chart-page' lang='zh-Hant-TW'><head><meta charset='utf-8'><title>KAM 多週期 K 線</title><link rel='stylesheet' href='/static/operator.css'><script src='/static/chart-refresh.js' defer></script></head><body class='chart-page'><main class='chart-main'>
       <header><div><h1>多週期 K 線</h1><small>15 分・60 分・日・週｜唯讀市場結構檢視</small></div><a class='account-chip' href='/'>返回市場儀表板</a><span id='chart-live-status' class='chart-live-status' role='status' aria-live='polite'>每 3 秒更新・禁止真實下單</span></header>
       <nav class='chart-toolbar' aria-label='圖表商品與週期'>{instrument_tabs}<span class='chart-toolbar-divider'></span>{timeframe_tabs}</nav>
       <div id='chart-summary' class='chart-summary'>{escape(status)}</div><section id='chart-panel' class='chart-panel'>{_price_board(series, ma_values)}{_chart_svg(series, ma_values)}<div class='chart-tooltip' role='status' aria-live='polite' hidden></div></section>
-      <aside class='chart-overlays' aria-label='圖表顯示項目'><span class='enabled'>K 線</span><span class='enabled'>20MA</span><span>上升趨勢線｜尚未接入</span><span>下降趨勢線｜尚未接入</span>{range_overlay}<span class='enabled'>成交量</span></aside>
+      <aside class='chart-overlays' aria-label='圖表顯示項目'><span class='enabled'>K 線</span><span class='enabled'>20MA</span>{trend_overlay}{range_overlay}<span class='enabled'>成交量</span></aside>
       <footer id='chart-footer' class='chart-footer'><span>資料來源：{escape(series.source)}</span><span>K 線時間：{escape(updated)}</span><span>即時報價時間：{escape(quote_updated)}</span><span>資料不足時不補假資料</span><span>任何單一指標均不構成進出場訊號</span></footer>
     </main></body></html>"""
