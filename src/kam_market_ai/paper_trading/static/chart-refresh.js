@@ -2,9 +2,12 @@
 
 (() => {
   const REFRESH_INTERVAL_MS = 3000;
+  const TOOLTIP_HIDE_DELAY_MS = 6000;
   const REGION_IDS = ["chart-summary", "chart-panel", "chart-footer"];
   const status = document.getElementById("chart-live-status");
   let refreshInFlight = false;
+  let tooltipHideTimer = null;
+  let rangeLinesEnabled = false;
   const numberFormatter = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 0 });
 
   const scheduleNext = () => {
@@ -26,14 +29,48 @@
       }
       current.replaceChildren(...Array.from(replacement.childNodes).map((node) => document.importNode(node, true)));
     }
+    applyRangeLineVisibility();
+  };
+
+  const applyRangeLineVisibility = () => {
+    const lines = document.querySelector(".chart-range-lines");
+    const button = document.getElementById("chart-range-toggle");
+    if (lines) lines.hidden = !rangeLinesEnabled;
+    if (button && !button.disabled) {
+      button.setAttribute("aria-pressed", String(rangeLinesEnabled));
+      button.textContent = rangeLinesEnabled ? "隱藏支撐／壓力＋趨勢線" : "顯示支撐／壓力＋趨勢線";
+    }
   };
 
   const hideChartTooltip = (panel) => {
+    if (tooltipHideTimer !== null) {
+      window.clearTimeout(tooltipHideTimer);
+      tooltipHideTimer = null;
+    }
     if (!panel) return;
     const tooltip = panel.querySelector(".chart-tooltip");
     const crosshair = panel.querySelector(".chart-crosshair");
     if (tooltip) tooltip.hidden = true;
     if (crosshair) crosshair.setAttribute("hidden", "");
+  };
+
+  const keepChartTooltipVisible = () => {
+    if (tooltipHideTimer === null) return;
+    window.clearTimeout(tooltipHideTimer);
+    tooltipHideTimer = null;
+  };
+
+  const hideChartTooltipLater = (panel) => {
+    keepChartTooltipVisible();
+    tooltipHideTimer = window.setTimeout(() => {
+      tooltipHideTimer = null;
+      hideChartTooltip(panel);
+    }, TOOLTIP_HIDE_DELAY_MS);
+  };
+
+  const isChartTooltipVisible = () => {
+    const tooltip = document.querySelector(".chart-tooltip");
+    return Boolean(tooltip && !tooltip.hidden);
   };
 
   const addTooltipLine = (parent, label, value, className = "") => {
@@ -44,6 +81,7 @@
   };
 
   const showChartTooltip = (zone, clientX, clientY) => {
+    keepChartTooltipVisible();
     const panel = zone.closest(".chart-panel");
     const svg = zone.ownerSVGElement;
     const tooltip = panel?.querySelector(".chart-tooltip");
@@ -111,7 +149,7 @@
 
   document.addEventListener("pointerout", (event) => {
     const panel = event.target.closest?.(".chart-panel");
-    if (panel && !event.relatedTarget?.closest?.(".chart-panel")) hideChartTooltip(panel);
+    if (panel && !event.relatedTarget?.closest?.(".chart-panel")) hideChartTooltipLater(panel);
   });
 
   document.addEventListener("focusin", (event) => {
@@ -122,15 +160,22 @@
   });
 
   document.addEventListener("focusout", (event) => {
-    hideChartTooltip(event.target.closest?.(".chart-panel"));
+    hideChartTooltipLater(event.target.closest?.(".chart-panel"));
   });
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") hideChartTooltip(document.getElementById("chart-panel"));
   });
 
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest?.("#chart-range-toggle");
+    if (!button || button.disabled) return;
+    rangeLinesEnabled = !rangeLinesEnabled;
+    applyRangeLineVisibility();
+  });
+
   async function refreshChart() {
-    if (refreshInFlight || document.hidden) {
+    if (refreshInFlight || document.hidden || isChartTooltipVisible()) {
       scheduleNext();
       return;
     }
