@@ -106,6 +106,12 @@ class FubonLiveQuoteSource:
         with self._lock:
             return self._latest
 
+    def set_after_hours(self, after_hours: bool) -> None:
+        """Atomically change the provider session and discard the old-session quote."""
+        with self._lock:
+            self._after_hours = bool(after_hours)
+            self._latest = None
+
     def refresh(self) -> LiveChartPrice:
         request: dict[str, object] = {"symbol": self._symbol}
         if self._after_hours:
@@ -228,6 +234,9 @@ class FubonLiveDashboardMarketSource:
         self._stale_after_seconds = stale_after_seconds
         self._expire_after_seconds = expire_after_seconds
 
+    def set_after_hours(self, after_hours: bool) -> None:
+        self._after_hours = bool(after_hours)
+
     def _failure_snapshot(self, product_code: str) -> MarketSnapshot:
         return MarketSnapshot(
             product_code,
@@ -345,12 +354,34 @@ class FubonLiveChartSource:
         self._after_hours = bool(after_hours)
         if isinstance(history_limit, bool) or history_limit < 20:
             raise ValueError("history_limit must be at least 20")
-        self._history_paths = {
+        initial_session = "afterhours" if self._after_hours else "regular"
+        base_history_paths = {
             FiveTimeframe.M15: Path(history_15m_path) if history_15m_path is not None else None,
             FiveTimeframe.M60: Path(history_path) if history_path is not None else None,
         }
+        other_session = "regular" if self._after_hours else "afterhours"
+        self._history_paths_by_session: dict[str, dict[FiveTimeframe, Path | None]] = {
+            initial_session: base_history_paths,
+            other_session: {
+                selected: (
+                    path.with_name(f"{path.stem}_{other_session}{path.suffix}")
+                    if path is not None
+                    else None
+                )
+                for selected, path in base_history_paths.items()
+            },
+        }
         self._history_limit = history_limit
         self._lock = Lock()
+
+    def set_after_hours(self, after_hours: bool) -> None:
+        """Switch chart session without retaining any derived old-session state."""
+        with self._lock:
+            self._after_hours = bool(after_hours)
+
+    def _history_path(self, selected: FiveTimeframe) -> Path | None:
+        session = "afterhours" if self._after_hours else "regular"
+        return self._history_paths_by_session[session].get(selected)
 
     def _current_price(self) -> LiveChartPrice | None:
         if self._current_price_provider is None:
@@ -420,6 +451,8 @@ class FubonLiveChartSource:
                 payload.get("schema") != "kam-normalized-chart-history-v1"
                 or payload.get("instrument") != self._instrument.value
                 or payload.get("timeframe") != timeframe
+                or payload.get("session")
+                != ("afterhours" if self._after_hours else "regular")
             ):
                 return ()
             return tuple(
@@ -446,6 +479,7 @@ class FubonLiveChartSource:
             "schema": "kam-normalized-chart-history-v1",
             "instrument": self._instrument.value,
             "timeframe": timeframe,
+            "session": "afterhours" if self._after_hours else "regular",
             "candles": [
                 {
                     "opened_at": item.opened_at.isoformat(),
@@ -599,7 +633,7 @@ class FubonLiveChartSource:
                 (FiveTimeframe.M15, "15m"),
                 (FiveTimeframe.M60, "60m"),
             ):
-                path = self._history_paths[selected]
+                path = self._history_path(selected)
                 live = self._chart_candles(result, selected)
                 if not live or path is None:
                     continue
@@ -662,7 +696,7 @@ class FubonLiveChartSource:
                     max(item.opened_at for item in base),
                 )
         live = self._chart_candles(result, selected)
-        history_path = self._history_paths.get(selected)
+        history_path = self._history_path(selected)
         if history_path is not None:
             self.capture_latest()
             with self._lock:
