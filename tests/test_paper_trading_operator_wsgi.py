@@ -367,6 +367,7 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
 
     assert '@import "../../ui/design_tokens.css"' in css
     assert "height: 100vh" in css and "overflow: hidden" in css
+    assert "grid-template-columns: 1fr 1fr 1.35fr" in css
     assert "grid-template-rows: minmax(126px, 132px) minmax(184px, 192px) minmax(96px, 110px) minmax(0, 1fr)" in css
     assert "footer { grid-row: 4; position: static;" in css
     assert ".risk-disclaimer" in css and ".footer-metrics" in css
