@@ -340,20 +340,27 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert "footer { grid-row: 4; position: static;" in css
     assert ".risk-disclaimer" in css and ".footer-metrics" in css
     assert "font-size: 11px" in css and ".risk-disclaimer span { display: block; }" in css
-    assert ".cycle-chart svg" in css and "height: 180px" in css
+    assert ".cycle-card { grid-column: 3; grid-row: 1 / 3; display: grid;" in css
+    assert ".cycle-chart svg" in css and "height: 230px" in css
+    assert ".cycle-stage-label" in css and "font-size: 10.5px" in css
+    assert ".cycle-info dt" in css and "font-size: 12px" in css
     assert "marker-breathe 5s" in css
+    assert ".proposal, .matching { display: flex; flex-direction: column; padding: 13px 16px; }" in css
+    assert ".proposal p, .matching p" in css and "font-size: 13px" in css
+    assert ".proposal dl, .matching dl" in css and "align-content: center" in css
     assert ".proposal dd, .matching dd" in css and "text-overflow: ellipsis" in css
     assert "grid-template-columns: repeat(4, minmax(0, 1fr))" in css
-    assert ".timeframes { grid-column: 1 / 3; grid-row: 2; padding: 7px 12px 10px; }" in css
-    assert ".timeframes h2 { margin-bottom: 6px; color: #f5f8ff; font-size: 15px;" in css
-    assert ".timeframe-card { padding: 7px 9px; overflow: hidden;" in css
-    assert ".timeframe-card small { display: block; margin: 1px 0 0;" in css
-    assert ".timeframe-card b { display: block; color: #f8fbff; font-size: 16px;" in css
-    assert ".timeframe-card strong { font-size: 22px;" in css
-    assert ".timeframe-card span { display: block; color: #ffffff; font-size: 12px;" in css
-    assert ".trend-health-card { grid-column: 1; grid-row: 3; }" in css
-    assert ".position-card { grid-column: 2; grid-row: 3; }" in css
-    assert ".next-card { grid-column: 3; grid-row: 3;" in css
+    assert ".timeframes { grid-column: 1 / 3; grid-row: 2; display: grid; grid-template-rows: auto minmax(0, 1fr);" in css
+    assert ".timeframes h2 { margin-bottom: 7px; color: #f5f8ff; font-size: 16px;" in css
+    assert ".timeframes > div { display: grid; min-height: 0;" in css
+    assert ".timeframe-card { display: flex; flex-direction: column; justify-content: center; padding: 9px 11px;" in css
+    assert ".timeframe-card small { display: block; margin: 2px 0 0;" in css
+    assert ".timeframe-card b { display: block; color: #f8fbff; font-size: 18px;" in css
+    assert ".timeframe-card strong { font-size: 26px;" in css
+    assert ".timeframe-card span { display: block; color: #ffffff; font-size: 13px;" in css
+    assert ".trend-health-card { grid-column: 1; grid-row: 3; display: grid;" in css
+    assert ".position-card { grid-column: 2; grid-row: 3; display: grid;" in css
+    assert ".next-card { grid-column: 3; grid-row: 3; display: grid;" in css
     assert ".control-cells-unscored" in css
     assert ".control-cell.unconfirmed" in css
     assert "@media (max-height: 650px) and (min-width: 1001px)" in css
