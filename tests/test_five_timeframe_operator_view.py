@@ -88,3 +88,35 @@ def test_live_five_timeframe_uses_established_kam_operator_ui() -> None:
     assert "風險</dt><dd>不可判讀" in page
     assert "禁止真實下單" in page
     assert "place_order" not in page.lower()
+
+
+def test_market_dashboard_exposes_armed_auto_paper_runtime_without_live_execution() -> None:
+    payload = {
+        "status": "READY_VERIFIED_FIVE_TIMEFRAMES",
+        "symbol": "TMFH6",
+        "market_data_only": True,
+        "trading_enabled": False,
+        "analysis_preview": {"kam_rule_decision": {"direction": "觀望", "states": {}}},
+    }
+    runtime = {
+        "armed": True,
+        "action": "hold",
+        "direction": "HOLD",
+        "reason_codes": ["KAM_BUY_CONDITION_NOT_MET"],
+        "cash_balance": "1000000",
+        "open_positions": 0,
+        "journal_hash": "a" * 64,
+        "proposal_hash": None,
+        "fill_hashes": [],
+        "live_order_allowed": False,
+        "broker_connected": False,
+    }
+
+    view = build_five_timeframe_operator_view(payload, runtime)
+    page = render_operator_html(view)
+
+    assert "自動 Paper 已武裝" in page
+    assert "自動 Paper 執行" in page
+    assert "KAM 買進條件尚未成立" in page
+    assert "1000000" in page
+    assert view.live_order_allowed is False and view.broker_connected is False
