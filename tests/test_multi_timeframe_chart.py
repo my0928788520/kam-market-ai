@@ -48,7 +48,7 @@ def test_sparse_live_series_keeps_candle_bodies_at_readable_width() -> None:
 
     html = render_multi_timeframe_chart_html(SparseSource())
 
-    assert html.count("width='18.00'") == 6
+    assert html.count("width='14.00'") == 6
     assert "width='269.12'" not in html
     assert "已累積 3/20 根" in html
     assert "尚缺 17 根建立 20MA" in html
