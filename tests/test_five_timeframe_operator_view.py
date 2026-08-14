@@ -74,7 +74,8 @@ def test_live_five_timeframe_uses_established_kam_operator_ui() -> None:
     assert "等待有效週期資料恢復" in page
     assert "TMFH6" in page
     assert "多方 4｜空方 0\n未確認 6" in page
-    assert "價格相對 20MA：上方（20MA 45,700）" in page
+    assert "在20MA上方（45,700）" in page
+    assert "價格相對 20MA" not in page
     assert "20MA 方向：上彎" in page
     assert "20棒壓力：46,500" in page
     assert "20棒支撐：43,000" in page
