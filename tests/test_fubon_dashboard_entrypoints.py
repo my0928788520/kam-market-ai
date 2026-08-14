@@ -51,8 +51,8 @@ def test_live_dashboard_opens_the_established_operator_homepage() -> None:
     assert '"taifex_official_history_kam_enabled": True' in source
     assert '"night_session_history_warmup_enabled": args.after_hours' in source
     assert '"paper_margin_model": "RESERVE_RELEASE_V1"' in source
-    assert '"paper_initial_margin": 35050' in source
-    assert '"paper_maintenance_margin": 26900' in source
+    assert '"paper_initial_margin": int(index_futures_product(instrument).initial_margin)' in source
+    assert '"paper_maintenance_margin": int(index_futures_product(instrument).maintenance_margin)' in source
     assert '"TAIFEX_INDEX_MARGIN_2026-08-12"' in source
 
 
