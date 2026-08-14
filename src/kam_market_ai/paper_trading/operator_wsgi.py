@@ -599,6 +599,14 @@ def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], a
     css_path = Path(__file__).with_name("static") / "operator.css"
     chart_refresh_path = Path(__file__).with_name("static") / "chart-refresh.js"
     dashboard_refresh_path = Path(__file__).with_name("static") / "dashboard-refresh.js"
+    available_products = tuple(market_data_source.list_available_products())
+    default_market_product = (
+        DEFAULT_MARKET_PRODUCT
+        if DEFAULT_MARKET_PRODUCT in available_products
+        else available_products[0]
+        if available_products
+        else DEFAULT_MARKET_PRODUCT
+    )
     def app(environ: dict[str, object], start_response: Callable[..., object]) -> Iterable[bytes]:
         path, method = str(environ.get("PATH_INFO", "/")), str(environ.get("REQUEST_METHOD", "GET"))
         headers = [("Content-Security-Policy", public_embed_config.content_security_policy), ("X-Content-Type-Options", "nosniff"), ("Referrer-Policy", "strict-origin-when-cross-origin"), ("Permissions-Policy", "geolocation=(), camera=(), microphone=()"), ("Cache-Control", "no-store")]
@@ -627,7 +635,7 @@ def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], a
             if not public_embed_config.enable_embed:
                 start_response("404 Not Found", [("Content-Type", "text/plain; charset=utf-8"), *headers]); return [b"Not found"]
             query = parse_qs(str(environ.get("QUERY_STRING", "")), keep_blank_values=True)
-            selected = query.get("instrument", [DEFAULT_MARKET_PRODUCT])[0]
+            selected = query.get("instrument", [default_market_product])[0]
             snapshot = market_data_source.read_snapshot(selected)
             decision = SelectedSnapshotDecisionPresenter().present(snapshot)
             runtime_status = _runtime_source_status(market_data_source)
@@ -650,7 +658,7 @@ def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], a
             query = parse_qs(str(environ.get("QUERY_STRING", "")), keep_blank_values=True)
             body = render_multi_timeframe_chart_html(
                 chart_data_source,
-                instrument=query.get("instrument", [DEFAULT_MARKET_PRODUCT])[0],
+                instrument=query.get("instrument", [default_market_product])[0],
                 timeframe=query.get("timeframe", ["60m"])[0],
             ).encode()
             start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"), ("Content-Length", str(len(body))), *headers])
@@ -658,7 +666,7 @@ def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], a
         if path != "/":
             start_response("404 Not Found", [("Content-Type", "text/plain; charset=utf-8")]); return ["找不到頁面。".encode()]
         query = parse_qs(str(environ.get("QUERY_STRING", "")), keep_blank_values=True)
-        snapshot = market_data_source.read_snapshot(query.get("instrument", [DEFAULT_MARKET_PRODUCT])[0])
+        snapshot = market_data_source.read_snapshot(query.get("instrument", [default_market_product])[0])
         body = render_operator_html(view_provider(), snapshot)
         runtime_mode = getattr(market_data_source, "mode", None)
         runtime_status = _runtime_source_status(market_data_source)
