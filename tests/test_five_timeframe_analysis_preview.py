@@ -55,6 +55,10 @@ def test_preview_runs_all_five_timeframes_and_remains_fail_closed() -> None:
     assert set(payload["kam_rule_decision"]["states"]) == {"5m", "15m", "60m", "1d", "1w"}
     assert payload["kam_rule_decision"]["action"] == "HOLD"
     assert payload["kam_rule_decision"]["live_order_allowed"] is False
+    assert payload["kam_rule_decision"]["paper_test_direction"]["direction"] in {
+        "LONG", "SHORT", "HOLD"
+    }
+    assert payload["kam_rule_decision"]["paper_test_direction"]["live_order_allowed"] is False
     assert set(payload["decision_diagnostics"]) == {
         "direction",
         "confidence_score",

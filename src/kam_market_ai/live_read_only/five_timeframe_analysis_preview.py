@@ -46,6 +46,9 @@ from kam_market_ai.market_data.fubon_five_timeframe_pipeline import (
     FiveTimeframeCandleResult,
 )
 from kam_market_ai.models import Candle
+from kam_market_ai.paper_trading.five_timeframe_paper_direction import (
+    decide_five_timeframe_paper_direction,
+)
 from .five_timeframe_kam_rule_bridge import (
     KAM_STATE_MAPPING_VERSION,
     evaluate_five_timeframe_kam_rules,
@@ -190,6 +193,7 @@ def build_verified_five_timeframe_analysis_preview(
     if contract.overall_status.value != "ready":
         blockers.append("ANALYSIS_INPUT_NOT_READY")
     mapped_states, kam_decision = evaluate_five_timeframe_kam_rules(analysis)
+    paper_direction = decide_five_timeframe_paper_direction(mapped_states)
     blockers.extend(kam_decision.blockers)
     diagnostics: dict[str, object] = {
         "direction": confidence.overall_direction.value,
@@ -228,6 +232,7 @@ def build_verified_five_timeframe_analysis_preview(
     kam_payload.update({
         "mapping_version": KAM_STATE_MAPPING_VERSION,
         "states": {item.timeframe: item.safe_payload() for item in mapped_states},
+        "paper_test_direction": paper_direction.safe_payload(),
     })
     return VerifiedFiveTimeframeAnalysisPreview(
         evaluated_at=evaluated_at,
