@@ -63,7 +63,7 @@ def _control_label(view: PaperTradingOperatorView, bull: int) -> str:
     except (TypeError, ValueError):
         bear = 0
     bear = max(0, min(10 - bull, bear))
-    return f"多方 {bull}｜空方 {bear}\n未確認 {10-bull-bear}"
+    return f"多方 {bull}｜空方 {bear}｜未確認 {10-bull-bear}"
 
 
 def _numeric_price(value: object) -> float | None:
