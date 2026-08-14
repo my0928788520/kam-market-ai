@@ -32,7 +32,11 @@ def test_dashboard_parser_keeps_browser_launch_explicit_and_local() -> None:
 def test_windows_launcher_preserves_read_only_local_boundary() -> None:
     source = (ROOT / "tools" / "start_fubon_five_timeframe_dashboard.ps1").read_text(
         encoding="utf-8"
-    ).lower()
+    )
+
+    assert source.isascii()
+
+    source = source.lower()
 
     assert "--live" in source
     assert "127.0.0.1" in source
