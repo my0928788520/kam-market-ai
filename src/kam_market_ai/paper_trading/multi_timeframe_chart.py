@@ -357,13 +357,27 @@ def _recent_trend_anchors(
             abs(candles[right].low - candles[left].low) <= (neck - floor) * 0.60
         )
 
+    def w_prominence(pair: tuple[int, int]) -> tuple[float, int]:
+        """Rank the visually dominant W before using recency as a tie-breaker."""
+        left, right = pair
+        neck = max(candles[index].high for index in range(left + 1, right))
+        floor = min(candles[left].low, candles[right].low)
+        depth = neck - floor
+        leg_difference = abs(candles[right].low - candles[left].low)
+        symmetry_adjusted_depth = depth - leg_difference * 0.35
+        return symmetry_adjusted_depth, right
+
     rising = None
     neckline = None
-    w_candidates = [
+    w_candidates = sorted(
+        [
         (left, right)
-        for left, right in reversed(tuple(pairwise(recent_lows)))
+        for left, right in pairwise(recent_lows)
         if 2 <= right - left <= 16 and is_w_pair(left, right)
-    ]
+        ],
+        key=w_prominence,
+        reverse=True,
+    )
     if w_candidates:
         first_leg, second_leg = w_candidates[0]
         neck_index = max(
