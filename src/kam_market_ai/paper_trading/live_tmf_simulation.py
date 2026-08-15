@@ -910,7 +910,7 @@ class LiveTmfPaperSimulation:
         self.store = store
         self.journal = journal or TmfPaperSimulationJournal.empty(config)
         self._pending_entry_direction: str | None = None
-        self._pending_entry_candle_ends: list[datetime] = []
+        self._pending_entry_candles: list[tuple[datetime, Decimal]] = []
         if (
             self.journal.instrument != config.instrument
             or self.journal.point_value != config.point_value
@@ -989,21 +989,37 @@ class LiveTmfPaperSimulation:
                 reasons=("KAM_ENTRY_CONDITION_NOT_MET",),
             )
 
-        if self._pending_entry_direction != direction.direction:
-            self._pending_entry_direction = direction.direction
-            self._pending_entry_candle_ends = []
-        if (
-            not self._pending_entry_candle_ends
-            or quote.observed_at > self._pending_entry_candle_ends[-1]
-        ):
-            self._pending_entry_candle_ends.append(quote.observed_at)
-        if len(self._pending_entry_candle_ends) < self.config.entry_confirmation_candles:
-            return self._result(
-                TmfPaperCycleAction.HOLD,
-                direction.direction,
-                quote,
-                reasons=("ENTRY_CONFIRMATION_PENDING",),
-            )
+        if self.config.entry_confirmation_candles > 1:
+            if self._pending_entry_direction != direction.direction:
+                self._pending_entry_direction = direction.direction
+                self._pending_entry_candles = []
+            if (
+                not self._pending_entry_candles
+                or quote.observed_at > self._pending_entry_candles[-1][0]
+            ):
+                if self._pending_entry_candles:
+                    previous_price = self._pending_entry_candles[-1][1]
+                    continued = (
+                        direction.direction == "LONG" and quote.price > previous_price
+                    ) or (
+                        direction.direction == "SHORT" and quote.price < previous_price
+                    )
+                    if not continued:
+                        self._pending_entry_candles = [(quote.observed_at, quote.price)]
+                        return self._result(
+                            TmfPaperCycleAction.HOLD,
+                            direction.direction,
+                            quote,
+                            reasons=("ENTRY_PRICE_CONFIRMATION_PENDING",),
+                        )
+                self._pending_entry_candles.append((quote.observed_at, quote.price))
+            if len(self._pending_entry_candles) < self.config.entry_confirmation_candles:
+                return self._result(
+                    TmfPaperCycleAction.HOLD,
+                    direction.direction,
+                    quote,
+                    reasons=("ENTRY_CONFIRMATION_PENDING",),
+                )
 
         last_exit = next(
             (
@@ -1157,7 +1173,7 @@ class LiveTmfPaperSimulation:
 
     def _reset_entry_confirmation(self) -> None:
         self._pending_entry_direction = None
-        self._pending_entry_candle_ends = []
+        self._pending_entry_candles = []
 
     def _matching_ledger(self, quote: TmfPaperQuote) -> PaperTradingLedger:
         """Give the generic matcher enough synthetic cash; final cash uses futures margin."""

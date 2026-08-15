@@ -136,6 +136,38 @@ def test_out_of_order_older_candle_does_not_confirm_entry() -> None:
     assert result.journal.events == ()
 
 
+@pytest.mark.parametrize(
+    ("code", "first_price", "second_price", "third_price"),
+    (
+        ("AU", "22000", "21999", "22000"),
+        ("BU", "22000", "22001", "22000"),
+    ),
+)
+def test_second_candle_must_continue_in_trade_direction(
+    code: str,
+    first_price: str,
+    second_price: str,
+    third_price: str,
+) -> None:
+    session = LiveTmfPaperSimulation(config(entry_confirmation_candles=2))
+
+    session.process_evaluation(direction(code), quote(first_price), evaluated_at=NOW)
+    stalled = session.process_evaluation(
+        direction(code),
+        quote(second_price, 5),
+        evaluated_at=NOW + timedelta(minutes=5),
+    )
+    confirmed = session.process_evaluation(
+        direction(code),
+        quote(third_price, 10),
+        evaluated_at=NOW + timedelta(minutes=10),
+    )
+
+    assert stalled.action is TmfPaperCycleAction.HOLD
+    assert stalled.reason_codes == ("ENTRY_PRICE_CONFIRMATION_PENDING",)
+    assert confirmed.action is TmfPaperCycleAction.ENTRY_FILLED
+
+
 def test_entry_confirmation_resets_when_alignment_breaks_or_flips() -> None:
     session = LiveTmfPaperSimulation(config(entry_confirmation_candles=2))
 

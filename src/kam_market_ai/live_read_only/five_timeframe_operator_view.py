@@ -54,6 +54,7 @@ _PAPER_REASON_LABELS = {
     "MAX_DAILY_ENTRIES_EXCEEDED": "單日進場次數已達上限",
     "QUOTE_STALE": "行情資料過期",
     "ENTRY_CONFIRMATION_PENDING": "等待下一根 5 分 K 確認",
+    "ENTRY_PRICE_CONFIRMATION_PENDING": "短線尚未延續・重新等待確認",
     "TREND_HOLD_TAKE_PROFIT_EXTENDED": "方向持續一致・已順勢延伸停利",
 }
 _LINE_ALERT_STATUS_LABELS = {
