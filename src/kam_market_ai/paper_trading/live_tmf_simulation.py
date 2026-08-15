@@ -347,8 +347,11 @@ class TmfPaperPerformanceEvent:
             ("max_adverse_excursion", self.max_adverse_excursion),
         ):
             _decimal(value, field)
-        if not self.stop_loss_price < self.entry_price < self.take_profit_price:
-            raise ValueError("long paper protection prices are invalid.")
+        if not (
+            self.stop_loss_price < self.entry_price < self.take_profit_price
+            or self.take_profit_price < self.entry_price < self.stop_loss_price
+        ):
+            raise ValueError("paper protection prices are invalid.")
         if self.max_favorable_excursion < 0 or self.max_adverse_excursion > 0:
             raise ValueError("MFE and MAE signs are invalid.")
         if len(self.quote_hash) != 64 or len(self.proposal_hash) != 64:
@@ -401,6 +404,14 @@ class TmfPaperPerformanceEvent:
     @property
     def event_hash(self) -> str:
         return _hash(self.canonical_payload())
+
+    @property
+    def entry_side(self) -> PaperTradingSide:
+        return (
+            PaperTradingSide.BUY
+            if self.stop_loss_price < self.entry_price
+            else PaperTradingSide.SELL
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -850,17 +861,16 @@ class LiveTmfPaperSimulation:
             )
         if self.journal.open_entry is not None:
             return self._mark_or_exit(direction, quote, evaluated_at)
-        if direction.direction != "LONG" or direction.action != "PAPER_BUY":
-            reason = (
-                "PAPER_SHORT_NOT_ENABLED"
-                if direction.direction == "SHORT"
-                else "KAM_BUY_CONDITION_NOT_MET"
-            )
+        entry_side = {
+            ("LONG", "PAPER_BUY"): PaperTradingSide.BUY,
+            ("SHORT", "PAPER_SELL"): PaperTradingSide.SELL,
+        }.get((direction.direction, direction.action))
+        if entry_side is None:
             return self._result(
                 TmfPaperCycleAction.HOLD,
                 direction.direction,
                 quote,
-                reasons=(reason,),
+                reasons=("KAM_ENTRY_CONDITION_NOT_MET",),
             )
 
         last_exit = next(
@@ -887,7 +897,7 @@ class LiveTmfPaperSimulation:
             )
 
         proposal = build_paper_order_proposal(
-            self._proposal_input(direction, quote, evaluated_at)
+            self._proposal_input(direction, quote, evaluated_at, entry_side)
         ).proposal
         if proposal is None:
             return self._result(
@@ -956,8 +966,16 @@ class LiveTmfPaperSimulation:
                 reasons=matched.reason_codes or ("PAPER_FILL_NOT_COMPLETED",),
             )
         fill = matched.fills[0]
-        stop = quote.price - self.config.stop_loss_points
-        take = quote.price + self.config.take_profit_points
+        stop = quote.price + (
+            -self.config.stop_loss_points
+            if entry_side is PaperTradingSide.BUY
+            else self.config.stop_loss_points
+        )
+        take = quote.price + (
+            self.config.take_profit_points
+            if entry_side is PaperTradingSide.BUY
+            else -self.config.take_profit_points
+        )
         event = TmfPaperPerformanceEvent(
             TmfPaperPerformanceEventType.ENTRY,
             request.idempotency_key,
@@ -999,7 +1017,7 @@ class LiveTmfPaperSimulation:
             cash_entries=source.cash_entries,
             used_idempotency_keys=source.used_idempotency_keys,
             allow_negative_cash=False,
-            allow_short=False,
+            allow_short=True,
         )
 
     def _reserve_margin(
@@ -1023,7 +1041,7 @@ class LiveTmfPaperSimulation:
             cash_entries=(*self.journal.ledger.cash_entries, entry),
             used_idempotency_keys=matched_ledger.used_idempotency_keys,
             allow_negative_cash=False,
-            allow_short=False,
+            allow_short=True,
         )
 
     def _proposal_input(
@@ -1031,6 +1049,7 @@ class LiveTmfPaperSimulation:
         direction: FiveTimeframePaperDirection,
         quote: TmfPaperQuote,
         evaluated_at: datetime,
+        entry_side: PaperTradingSide,
     ) -> PaperOrderProposalInput:
         source_hash = _hash(
             {
@@ -1043,22 +1062,34 @@ class LiveTmfPaperSimulation:
             source_hash[:32],
             "kam-five-timeframe-paper-v1",
             self.config.instrument,
-            PaperOrderProposalAction.BUY,
+            (
+                PaperOrderProposalAction.BUY
+                if entry_side is PaperTradingSide.BUY
+                else PaperOrderProposalAction.SELL
+            ),
             PaperOrderProposalOrderType.MARKET,
             self.config.quantity,
             quote.price,
             None,
-            quote.price - self.config.stop_loss_points,
-            quote.price + self.config.take_profit_points,
+            quote.price + (
+                -self.config.stop_loss_points
+                if entry_side is PaperTradingSide.BUY
+                else self.config.stop_loss_points
+            ),
+            quote.price + (
+                self.config.take_profit_points
+                if entry_side is PaperTradingSide.BUY
+                else -self.config.take_profit_points
+            ),
             Decimal(1),
             PaperOrderProposalRisk(
                 PaperOrderProposalRiskStatus.ACCEPTABLE,
-                "五週期 AU 完整一致；僅建立 TMF 模擬買進並保留官方原始保證金。",
+                "五週期完整一致；僅建立 TMF 雙向模擬交易並保留官方原始保證金。",
             ),
             (
                 PaperOrderProposalReason(
                     direction.reason_code,
-                    "KAM 五週期自然出現 BUY 條件。",
+                    "KAM 五週期自然出現雙向模擬條件。",
                 ),
             ),
             evaluated_at,
@@ -1145,17 +1176,25 @@ class LiveTmfPaperSimulation:
                 proposal_hash=entry.proposal_hash,
                 reasons=("OUT_OF_ORDER_QUOTE",),
             )
+        direction_multiplier = (
+            Decimal(1) if entry.entry_side is PaperTradingSide.BUY else Decimal(-1)
+        )
         pnl = (
             (quote.price - entry.entry_price)
+            * direction_multiplier
             * entry.quantity
             * self.config.point_value
         )
         mfe = max(previous.max_favorable_excursion, pnl, Decimal(0))
         mae = min(previous.max_adverse_excursion, pnl, Decimal(0))
         exit_type: TmfPaperPerformanceEventType | None = None
-        if quote.price <= entry.stop_loss_price:
+        if entry.entry_side is PaperTradingSide.BUY and quote.price <= entry.stop_loss_price:
             exit_type = TmfPaperPerformanceEventType.STOP_LOSS_EXIT
-        elif quote.price >= entry.take_profit_price:
+        elif entry.entry_side is PaperTradingSide.BUY and quote.price >= entry.take_profit_price:
+            exit_type = TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT
+        elif entry.entry_side is PaperTradingSide.SELL and quote.price >= entry.stop_loss_price:
+            exit_type = TmfPaperPerformanceEventType.STOP_LOSS_EXIT
+        elif entry.entry_side is PaperTradingSide.SELL and quote.price <= entry.take_profit_price:
             exit_type = TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT
 
         fill_hash: str | None = None
@@ -1171,7 +1210,11 @@ class LiveTmfPaperSimulation:
                     }
                 )[:32],
                 self.config.instrument,
-                PaperTradingSide.SELL,
+                (
+                    PaperTradingSide.SELL
+                    if entry.entry_side is PaperTradingSide.BUY
+                    else PaperTradingSide.BUY
+                ),
                 entry.quantity,
                 quote.price,
                 evaluated_at,
@@ -1254,7 +1297,7 @@ class LiveTmfPaperSimulation:
             cash_entries=(*self.journal.ledger.cash_entries, entry),
             used_idempotency_keys=matched_ledger.used_idempotency_keys,
             allow_negative_cash=False,
-            allow_short=False,
+            allow_short=True,
         )
 
     def _publish(self, journal: TmfPaperSimulationJournal) -> None:
