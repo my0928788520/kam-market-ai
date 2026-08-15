@@ -78,24 +78,56 @@ def test_config_uses_current_taifex_tmf_margin_snapshot() -> None:
     assert value.margin_source == "TAIFEX_INDEX_MARGIN_2026-08-12"
 
 
-def test_default_session_holds_without_kam_buy_condition() -> None:
+def test_default_session_holds_without_kam_entry_condition() -> None:
     session = LiveTmfPaperSimulation(config())
 
     result = session.process_evaluation(direction("AF"), quote("22000"), evaluated_at=NOW)
 
     assert result.action is TmfPaperCycleAction.HOLD
-    assert result.reason_codes == ("KAM_BUY_CONDITION_NOT_MET",)
+    assert result.reason_codes == ("KAM_ENTRY_CONDITION_NOT_MET",)
     assert result.journal.events == ()
 
 
-def test_short_direction_never_opens_a_buy() -> None:
+def test_confirmed_short_direction_opens_a_paper_short() -> None:
     session = LiveTmfPaperSimulation(config())
 
     result = session.process_evaluation(direction("BU"), quote("22000"), evaluated_at=NOW)
 
-    assert result.action is TmfPaperCycleAction.HOLD
-    assert result.reason_codes == ("PAPER_SHORT_NOT_ENABLED",)
-    assert not result.journal.ledger.positions
+    assert result.action is TmfPaperCycleAction.ENTRY_FILLED
+    assert result.journal.ledger.positions[0].quantity == Decimal("-1")
+    assert result.journal.ledger.cash_balance == Decimal("964950")
+    assert result.performance_event is not None
+    assert result.performance_event.stop_loss_price == Decimal("22020")
+    assert result.performance_event.take_profit_price == Decimal("21960")
+
+
+def test_short_stop_loss_and_take_profit_use_inverse_price_direction() -> None:
+    stopped = LiveTmfPaperSimulation(config())
+    stopped.process_evaluation(direction("BU"), quote("22000"), evaluated_at=NOW)
+    stop_result = stopped.process_evaluation(
+        direction("BF"),
+        quote("22022", 1),
+        evaluated_at=NOW + timedelta(minutes=1),
+    )
+
+    profitable = LiveTmfPaperSimulation(config())
+    profitable.process_evaluation(direction("BU"), quote("22000"), evaluated_at=NOW)
+    take_result = profitable.process_evaluation(
+        direction("BF"),
+        quote("21958", 1),
+        evaluated_at=NOW + timedelta(minutes=1),
+    )
+
+    assert stop_result.action is TmfPaperCycleAction.EXIT_FILLED
+    assert stop_result.performance_event is not None
+    assert stop_result.performance_event.event_type is TmfPaperPerformanceEventType.STOP_LOSS_EXIT
+    assert stop_result.performance_event.realized_pnl == Decimal("-220")
+    assert stop_result.journal.ledger.cash_balance == Decimal("999780")
+    assert take_result.action is TmfPaperCycleAction.EXIT_FILLED
+    assert take_result.performance_event is not None
+    assert take_result.performance_event.event_type is TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT
+    assert take_result.performance_event.realized_pnl == Decimal("420")
+    assert take_result.journal.ledger.cash_balance == Decimal("1000420")
 
 
 def test_buy_waits_when_paper_session_is_not_armed() -> None:
