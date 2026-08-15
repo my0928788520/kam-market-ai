@@ -106,6 +106,36 @@ def test_entry_requires_distinct_confirming_candles_when_configured() -> None:
     assert confirmed.action is TmfPaperCycleAction.ENTRY_FILLED
 
 
+def test_same_forming_candle_price_change_does_not_confirm_entry() -> None:
+    session = LiveTmfPaperSimulation(config(entry_confirmation_candles=2))
+    first = TmfPaperQuote("TMFH6", Decimal("22000"), NOW, "a" * 64)
+    changed_same_candle = TmfPaperQuote("TMFH6", Decimal("22005"), NOW, "b" * 64)
+
+    session.process_evaluation(direction("AU"), first, evaluated_at=NOW)
+    result = session.process_evaluation(
+        direction("AU"), changed_same_candle, evaluated_at=NOW
+    )
+
+    assert result.action is TmfPaperCycleAction.HOLD
+    assert result.reason_codes == ("ENTRY_CONFIRMATION_PENDING",)
+    assert result.journal.events == ()
+
+
+def test_out_of_order_older_candle_does_not_confirm_entry() -> None:
+    session = LiveTmfPaperSimulation(config(entry_confirmation_candles=2))
+    current = TmfPaperQuote("TMFH6", Decimal("22000"), NOW, "a" * 64)
+    older = TmfPaperQuote(
+        "TMFH6", Decimal("21999"), NOW - timedelta(minutes=5), "b" * 64
+    )
+
+    session.process_evaluation(direction("AU"), current, evaluated_at=NOW)
+    result = session.process_evaluation(direction("AU"), older, evaluated_at=NOW)
+
+    assert result.action is TmfPaperCycleAction.HOLD
+    assert result.reason_codes == ("ENTRY_CONFIRMATION_PENDING",)
+    assert result.journal.events == ()
+
+
 def test_entry_confirmation_resets_when_alignment_breaks_or_flips() -> None:
     session = LiveTmfPaperSimulation(config(entry_confirmation_candles=2))
 

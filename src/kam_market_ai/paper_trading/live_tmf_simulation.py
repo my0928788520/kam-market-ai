@@ -910,7 +910,7 @@ class LiveTmfPaperSimulation:
         self.store = store
         self.journal = journal or TmfPaperSimulationJournal.empty(config)
         self._pending_entry_direction: str | None = None
-        self._pending_entry_quote_hashes: list[str] = []
+        self._pending_entry_candle_ends: list[datetime] = []
         if (
             self.journal.instrument != config.instrument
             or self.journal.point_value != config.point_value
@@ -991,10 +991,13 @@ class LiveTmfPaperSimulation:
 
         if self._pending_entry_direction != direction.direction:
             self._pending_entry_direction = direction.direction
-            self._pending_entry_quote_hashes = []
-        if quote.quote_hash not in self._pending_entry_quote_hashes:
-            self._pending_entry_quote_hashes.append(quote.quote_hash)
-        if len(self._pending_entry_quote_hashes) < self.config.entry_confirmation_candles:
+            self._pending_entry_candle_ends = []
+        if (
+            not self._pending_entry_candle_ends
+            or quote.observed_at > self._pending_entry_candle_ends[-1]
+        ):
+            self._pending_entry_candle_ends.append(quote.observed_at)
+        if len(self._pending_entry_candle_ends) < self.config.entry_confirmation_candles:
             return self._result(
                 TmfPaperCycleAction.HOLD,
                 direction.direction,
@@ -1154,7 +1157,7 @@ class LiveTmfPaperSimulation:
 
     def _reset_entry_confirmation(self) -> None:
         self._pending_entry_direction = None
-        self._pending_entry_quote_hashes = []
+        self._pending_entry_candle_ends = []
 
     def _matching_ledger(self, quote: TmfPaperQuote) -> PaperTradingLedger:
         """Give the generic matcher enough synthetic cash; final cash uses futures margin."""
