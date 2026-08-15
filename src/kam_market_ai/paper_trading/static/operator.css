@@ -79,13 +79,13 @@ html.help-page, body.help-page { height: auto; min-height: 100%; overflow-x: hid
   .control-card small { display: none; }.control-cells { align-self: start; gap: 4px; margin-top: 0; transform: translateY(-2px); }
   .control-cell { width: 21px; height: 20px; border-radius: 6px; }
   .cycle-card { padding: 8px 11px; }
-  .cycle-card-body { gap: 9px; }
+  .cycle-card-body { grid-template-columns: minmax(0, 1.3fr) minmax(210px, 1fr); gap: 5px; }
   .cycle-chart { min-height: 120px; }
   .cycle-chart svg { height: 120px; min-height: 120px; }
   .cycle-card-header h2 { font-size: 13px; }
   .cycle-code, .cycle-badge, .cycle-note { font-size: 9px; }
   .cycle-info dt { font-size: 9.5px; line-height: 1.06; }
-  .cycle-info dd { font-size: 10.5px; line-height: 1.06; }
+  .cycle-info dd { overflow: hidden; font-size: 10.5px; line-height: 1.06; overflow-wrap: normal; white-space: nowrap; text-overflow: clip; }
   .cycle-info { gap: 0; align-content: center; }
   .cycle-info div { grid-template-columns: 62px minmax(0, 1fr); gap: 4px; }
   .cycle-stage-label { font-size: 10.5px; font-weight: 850; }
