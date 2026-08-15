@@ -350,6 +350,48 @@ def test_taiwan_risk_day_keeps_overnight_session_losses_together() -> None:
     assert blocked.reason_codes == ("MAX_DAILY_LOSS_EXCEEDED",)
 
 
+def test_daily_entry_limit_blocks_overtrading_and_resets_next_risk_day() -> None:
+    session = LiveTmfPaperSimulation(
+        config(max_entries_per_risk_day=3, reentry_cooldown_minutes=0)
+    )
+    for entry_minute in (0, 2, 4):
+        entered = session.process_evaluation(
+            direction("AU"),
+            quote("22000", entry_minute),
+            evaluated_at=NOW + timedelta(minutes=entry_minute),
+        )
+        exited = session.process_evaluation(
+            direction("AF"),
+            quote("22042", entry_minute + 1),
+            evaluated_at=NOW + timedelta(minutes=entry_minute + 1),
+        )
+        assert entered.action is TmfPaperCycleAction.ENTRY_FILLED
+        assert exited.action is TmfPaperCycleAction.EXIT_FILLED
+
+    blocked = session.process_evaluation(
+        direction("BU"),
+        quote("22000", 6),
+        evaluated_at=NOW + timedelta(minutes=6),
+    )
+    next_day = session.process_evaluation(
+        direction("BU"),
+        quote("22000", 24 * 60 + 6),
+        evaluated_at=NOW + timedelta(days=1, minutes=6),
+    )
+
+    assert blocked.action is TmfPaperCycleAction.REJECTED
+    assert blocked.reason_codes == ("MAX_DAILY_ENTRIES_EXCEEDED",)
+    assert next_day.action is TmfPaperCycleAction.ENTRY_FILLED
+    assert next_day.journal.ledger.positions[0].quantity == Decimal("-1")
+
+
+def test_daily_entry_limit_rejects_invalid_configuration() -> None:
+    with pytest.raises(ValueError, match="max_entries_per_risk_day"):
+        config(max_entries_per_risk_day=0)
+    with pytest.raises(ValueError, match="max_entries_per_risk_day"):
+        config(max_entries_per_risk_day=True)
+
+
 def test_margin_warning_is_recorded_before_stop_when_margin_equity_is_too_low() -> None:
     session = LiveTmfPaperSimulation(config(stop_loss_points=Decimal(1000)))
     enter(session)
