@@ -5,6 +5,7 @@ from pathlib import Path
 from kam_market_ai.notifications.line_pending_order import (
     LinePushNotifier,
     build_paper_exit_alert,
+    build_paper_sample_milestone_alert,
     build_pending_order_alert,
 )
 
@@ -192,3 +193,73 @@ def test_corrupted_delivery_state_fails_closed(tmp_path: Path) -> None:
         assert "delivery state" in str(error)
     else:
         raise AssertionError("corrupted delivery state must fail closed")
+
+
+def performance_summary(sample_size: int) -> dict[str, object]:
+    return {
+        "sample_size": sample_size,
+        "minimum_sample_size": 30,
+        "win_rate": "60.00",
+        "expectancy": "128.00",
+        "profit_factor": "1.80",
+        "maximum_drawdown": "440",
+        "adjustment_allowed": sample_size >= 30,
+        "live_order_allowed": False,
+    }
+
+
+def test_sample_progress_alerts_are_limited_to_10_20_and_30_closed_trades() -> None:
+    observed = datetime(2026, 8, 17, 2, 0, tzinfo=UTC)
+
+    assert build_paper_sample_milestone_alert(
+        performance_summary(9), observed_at=observed
+    ) is None
+    alerts = [
+        build_paper_sample_milestone_alert(
+            performance_summary(size), observed_at=observed
+        )
+        for size in (10, 20, 30)
+    ]
+    assert all(alert is not None for alert in alerts)
+    assert alerts[0] is not None and "10 / 30" in alerts[0].text
+    assert alerts[1] is not None and "距離門檻還差 10 筆" in alerts[1].text
+    assert alerts[2] is not None and "已達可評估門檻" in alerts[2].text
+
+
+def test_sample_progress_alert_fails_closed_for_live_or_invalid_summary() -> None:
+    observed = datetime(2026, 8, 17, 2, 0, tzinfo=UTC)
+    live = performance_summary(10)
+    live["live_order_allowed"] = True
+    wrong_minimum = performance_summary(10)
+    wrong_minimum["minimum_sample_size"] = 20
+
+    assert build_paper_sample_milestone_alert(live, observed_at=observed) is None
+    assert (
+        build_paper_sample_milestone_alert(wrong_minimum, observed_at=observed)
+        is None
+    )
+
+
+def test_sample_progress_alert_is_persistently_deduplicated(tmp_path: Path) -> None:
+    state_path = tmp_path / "line_delivery.json"
+    calls = []
+    alert = build_paper_sample_milestone_alert(
+        performance_summary(10),
+        observed_at=datetime(2026, 8, 17, 2, 0, tzinfo=UTC),
+    )
+    assert alert is not None
+    first = LinePushNotifier(
+        "secret-token",
+        "U-recipient",
+        opener=lambda request, timeout: calls.append(request) or Response(),
+        state_path=state_path,
+    )
+    assert first.send_once(alert) is True
+    restarted = LinePushNotifier(
+        "secret-token",
+        "U-recipient",
+        opener=lambda request, timeout: calls.append(request) or Response(),
+        state_path=state_path,
+    )
+    assert restarted.send_once(alert) is False
+    assert len(calls) == 1

@@ -15,6 +15,7 @@ from urllib.request import Request, urlopen
 
 LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
 LINE_DELIVERY_STATE_SCHEMA = "kam-line-paper-delivery-v1"
+PAPER_SAMPLE_MILESTONES = frozenset({10, 20, 30})
 
 
 def _delivery_state_payload(sent_stages: set[tuple[str, int]]) -> dict[str, object]:
@@ -165,6 +166,41 @@ def build_paper_exit_alert(payload: Mapping[str, object]) -> LinePendingOrderAle
         )
     )
     return LinePendingOrderAlert(identity, text, observed + timedelta(minutes=5))
+
+
+def build_paper_sample_milestone_alert(
+    payload: Mapping[str, object],
+    *,
+    observed_at: datetime,
+) -> LinePendingOrderAlert | None:
+    """Build a deduplicated 10/20/30 closed-trade progress alert only."""
+    if observed_at.tzinfo is None or payload.get("live_order_allowed") is not False:
+        return None
+    sample_size = payload.get("sample_size")
+    if not isinstance(sample_size, int) or isinstance(sample_size, bool):
+        return None
+    if sample_size not in PAPER_SAMPLE_MILESTONES:
+        return None
+    minimum = payload.get("minimum_sample_size")
+    if minimum != 30:
+        return None
+    identity = sha256(
+        f"paper-performance-sample:{sample_size}:{minimum}".encode("utf-8")
+    ).hexdigest()
+    status = "已達可評估門檻" if sample_size >= minimum else f"距離門檻還差 {minimum - sample_size} 筆"
+    text = "\n".join(
+        (
+            "KAM Paper Trading 樣本進度",
+            f"已完成平倉：{sample_size} / {minimum} 筆",
+            f"勝率：{payload.get('win_rate') or '資料不足'}%",
+            f"期望值：{payload.get('expectancy') or '資料不足'}",
+            f"獲利因子：{payload.get('profit_factor') or '資料不足'}",
+            f"最大回撤：{payload.get('maximum_drawdown') or '資料不足'}",
+            f"狀態：{status}",
+            "安全：僅統計模擬交易，不會送出真實委託",
+        )
+    )
+    return LinePendingOrderAlert(identity, text, observed_at + timedelta(minutes=5))
 
 
 @dataclass(slots=True, repr=False)

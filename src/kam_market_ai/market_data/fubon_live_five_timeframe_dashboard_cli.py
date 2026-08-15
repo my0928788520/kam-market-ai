@@ -32,6 +32,7 @@ from kam_market_ai.notifications import (
     LinePushNotifier,
     build_due_tmf_rollover_alert,
     build_paper_exit_alert,
+    build_paper_sample_milestone_alert,
     build_pending_order_alert,
 )
 from kam_market_ai.paper_trading.live_tmf_simulation import (
@@ -399,6 +400,16 @@ def main(
             paper_runtime.update(safe_result)
             paper_runtime["armed"] = True
             if line_notifier is not None:
+                milestone_alert = build_paper_sample_milestone_alert(
+                    safe_result.get("performance_summary", {}),
+                    observed_at=datetime.now(UTC),
+                )
+                if milestone_alert is not None:
+                    try:
+                        if line_notifier.send_once(milestone_alert):
+                            paper_runtime["line_sample_progress_status"] = "SENT"
+                    except (OSError, RuntimeError, TimeoutError):
+                        paper_runtime["line_sample_progress_status"] = "RETRY_PENDING"
                 exit_alert = build_paper_exit_alert(safe_result)
                 entry_alert = build_pending_order_alert(safe_result)
                 if exit_alert is not None:
