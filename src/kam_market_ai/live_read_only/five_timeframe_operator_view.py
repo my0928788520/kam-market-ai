@@ -53,6 +53,7 @@ _PAPER_REASON_LABELS = {
     "MAX_DAILY_LOSS_EXCEEDED": "單日虧損已達停止交易上限",
     "MAX_DAILY_ENTRIES_EXCEEDED": "單日進場次數已達上限",
     "QUOTE_STALE": "行情資料過期",
+    "TREND_HOLD_TAKE_PROFIT_EXTENDED": "方向持續一致・已順勢延伸停利",
 }
 _LINE_ALERT_STATUS_LABELS = {
     "DISABLED": "未啟用",
@@ -61,6 +62,7 @@ _LINE_ALERT_STATUS_LABELS = {
     "EXIT_SENT": "平倉通知已傳送",
     "WAITING_OR_DUPLICATE": "等待下一階段",
     "RETRY_PENDING": "傳送失敗・等待重試",
+    "ROLLOVER_SENT": "換倉提醒已傳送",
 }
 
 

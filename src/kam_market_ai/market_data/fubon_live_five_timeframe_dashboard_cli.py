@@ -30,6 +30,7 @@ from kam_market_ai.live_read_only.five_timeframe_snapshot import (
 from kam_market_ai.models import Candle, Instrument
 from kam_market_ai.notifications import (
     LinePushNotifier,
+    build_due_tmf_rollover_alert,
     build_paper_exit_alert,
     build_pending_order_alert,
 )
@@ -47,13 +48,13 @@ from .fubon_live_chart_source import (
     FubonLiveQuoteSource,
 )
 from .fubon_live_five_timeframe_verifier import FubonLiveFiveTimeframeVerifier
-from .index_futures_product import index_futures_product, infer_index_futures_instrument
 from .fubon_neo import (
     FubonIntradayCandlesAdapter,
     ResolvedFuturesContract,
     VerifiedContractResolver,
 )
 from .fubon_tmf_contract_probe import FubonTmfContractProbe
+from .index_futures_product import index_futures_product, infer_index_futures_instrument
 from .taifex_official_history import TaifexOfficialHistorySource
 
 
@@ -378,6 +379,14 @@ def main(
         nonlocal active_line_alert, active_line_alert_is_exit
         quote_source.refresh_safely()
         chart_source.capture_latest()
+        if line_notifier is not None:
+            rollover_alert = build_due_tmf_rollover_alert(datetime.now(UTC), symbol=symbol)
+            if rollover_alert is not None:
+                try:
+                    if line_notifier.send_once(rollover_alert):
+                        paper_runtime["line_alert_status"] = "ROLLOVER_SENT"
+                except (OSError, RuntimeError, TimeoutError):
+                    paper_runtime["line_alert_status"] = "RETRY_PENDING"
         if paper_session is None or verifier.latest_candle_result is None:
             return
         try:
@@ -519,10 +528,13 @@ def main(
                 "paper_manual_approval_granted": args.paper_test_armed,
                 "line_alerts_enabled": line_notifier is not None,
                 "line_alert_mode": "paper_proposal_only" if line_notifier is not None else None,
+                "line_rollover_reminders_enabled": line_notifier is not None,
                 "line_alert_state": args.line_alert_state if line_notifier is not None else None,
                 "paper_journal": args.paper_journal if args.paper_test_armed else None,
                 "paper_stop_loss_points": 20 if args.paper_test_armed else None,
                 "paper_take_profit_points": 40 if args.paper_test_armed else None,
+                "paper_trend_hold_enabled": bool(args.paper_test_armed),
+                "paper_take_profit_extension_points": 20 if args.paper_test_armed else None,
                 "paper_point_value": int(index_futures_product(instrument).point_value) if args.paper_test_armed else None,
                 "paper_margin_model": "RESERVE_RELEASE_V1" if args.paper_test_armed else None,
                 "paper_initial_margin": int(index_futures_product(instrument).initial_margin) if args.paper_test_armed else None,

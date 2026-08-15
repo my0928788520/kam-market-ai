@@ -250,7 +250,7 @@ def test_stop_loss_quote_closes_position_and_records_realized_loss() -> None:
 
 
 def test_take_profit_quote_closes_position_and_records_realized_gain() -> None:
-    session = LiveTmfPaperSimulation(config())
+    session = LiveTmfPaperSimulation(config(trend_hold_enabled=False))
     enter(session)
 
     result = session.process_evaluation(
@@ -267,6 +267,61 @@ def test_take_profit_quote_closes_position_and_records_realized_gain() -> None:
     assert event.max_favorable_excursion == Decimal(420)
     assert result.journal.ledger.cash_balance == Decimal(1000420)
     assert result.journal.ledger.cash_entries[-1].cash_delta == Decimal(35470)
+
+
+def test_aligned_long_extends_take_profit_and_moves_stop_near_break_even() -> None:
+    session = LiveTmfPaperSimulation(config())
+    enter(session)
+
+    extended = session.process_evaluation(
+        direction("AU"), quote("22040", 1), evaluated_at=NOW + timedelta(minutes=1)
+    )
+
+    assert extended.action is TmfPaperCycleAction.POSITION_MARKED
+    assert extended.reason_codes == ("TREND_HOLD_TAKE_PROFIT_EXTENDED",)
+    assert extended.performance_event is not None
+    assert extended.performance_event.stop_loss_price == Decimal("21999")
+    assert extended.performance_event.take_profit_price == Decimal("22060")
+
+
+def test_aligned_short_extends_take_profit_downward_symmetrically() -> None:
+    session = LiveTmfPaperSimulation(config())
+    session.process_evaluation(direction("BU"), quote("22000"), evaluated_at=NOW)
+
+    extended = session.process_evaluation(
+        direction("BU"), quote("21960", 1), evaluated_at=NOW + timedelta(minutes=1)
+    )
+
+    assert extended.action is TmfPaperCycleAction.POSITION_MARKED
+    assert extended.performance_event is not None
+    assert extended.performance_event.stop_loss_price == Decimal("22001")
+    assert extended.performance_event.take_profit_price == Decimal("21940")
+
+
+def test_trend_hold_moves_target_beyond_a_gap_quote() -> None:
+    session = LiveTmfPaperSimulation(config())
+    enter(session)
+
+    extended = session.process_evaluation(
+        direction("AU"), quote("22080", 1), evaluated_at=NOW + timedelta(minutes=1)
+    )
+
+    assert extended.performance_event is not None
+    assert extended.performance_event.take_profit_price == Decimal("22100")
+
+
+def test_take_profit_exits_when_five_timeframes_are_no_longer_aligned() -> None:
+    session = LiveTmfPaperSimulation(config())
+    enter(session)
+
+    result = session.process_evaluation(
+        direction("AF"), quote("22040", 1), evaluated_at=NOW + timedelta(minutes=1)
+    )
+
+    assert result.action is TmfPaperCycleAction.EXIT_FILLED
+    assert result.performance_event is not None
+    assert result.performance_event.event_type is TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT
+    assert result.performance_event.realized_pnl == Decimal("400")
 
 
 def test_performance_summary_separates_long_short_and_requires_evidence() -> None:

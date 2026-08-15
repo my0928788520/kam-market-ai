@@ -6,10 +6,12 @@ from .line_pending_order import (
     build_paper_exit_alert,
     build_pending_order_alert,
 )
+from .tmf_rollover_reminder import build_due_tmf_rollover_alert
 
 __all__ = [
     "LinePendingOrderAlert",
     "LinePushNotifier",
+    "build_due_tmf_rollover_alert",
     "build_paper_exit_alert",
     "build_pending_order_alert",
 ]

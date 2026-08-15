@@ -177,6 +177,8 @@ class TmfPaperSimulationConfig:
     tick_size: Decimal = Decimal(1)
     stop_loss_points: Decimal = Decimal(20)
     take_profit_points: Decimal = Decimal(40)
+    trend_hold_enabled: bool = True
+    take_profit_extension_points: Decimal = Decimal(20)
     initial_cash: Decimal = Decimal(1000000)
     max_order_notional: Decimal = Decimal(1000000)
     max_daily_loss: Decimal = Decimal(10000)
@@ -203,6 +205,7 @@ class TmfPaperSimulationConfig:
             ("tick_size", self.tick_size),
             ("stop_loss_points", self.stop_loss_points),
             ("take_profit_points", self.take_profit_points),
+            ("take_profit_extension_points", self.take_profit_extension_points),
             ("initial_cash", self.initial_cash),
             ("max_order_notional", self.max_order_notional),
             ("max_daily_loss", self.max_daily_loss),
@@ -220,6 +223,7 @@ class TmfPaperSimulationConfig:
         if (
             self.stop_loss_points % self.tick_size != 0
             or self.take_profit_points % self.tick_size != 0
+            or self.take_profit_extension_points % self.tick_size != 0
         ):
             raise ValueError("Protection distances must align to the TMF tick size.")
         if isinstance(self.max_quote_age_seconds, bool) or self.max_quote_age_seconds <= 0:
@@ -1307,14 +1311,72 @@ class LiveTmfPaperSimulation:
         )
         mfe = max(previous.max_favorable_excursion, pnl, Decimal(0))
         mae = min(previous.max_adverse_excursion, pnl, Decimal(0))
+        stop_loss_price = previous.stop_loss_price
+        take_profit_price = previous.take_profit_price
+        trend_still_aligned = (
+            entry.entry_side is PaperTradingSide.BUY
+            and direction.direction == "LONG"
+            and direction.action == "PAPER_BUY"
+            and direction.eligible
+        ) or (
+            entry.entry_side is PaperTradingSide.SELL
+            and direction.direction == "SHORT"
+            and direction.action == "PAPER_SELL"
+            and direction.eligible
+        )
+        take_profit_reached = (
+            entry.entry_side is PaperTradingSide.BUY
+            and quote.price >= take_profit_price
+        ) or (
+            entry.entry_side is PaperTradingSide.SELL
+            and quote.price <= take_profit_price
+        )
+        trend_hold_extended = (
+            self.config.trend_hold_enabled
+            and trend_still_aligned
+            and take_profit_reached
+        )
+        if trend_hold_extended:
+            if entry.entry_side is PaperTradingSide.BUY:
+                extension_count = (
+                    (quote.price - take_profit_price)
+                    // self.config.take_profit_extension_points
+                ) + 1
+                take_profit_price += (
+                    self.config.take_profit_extension_points * extension_count
+                )
+                stop_loss_price = max(
+                    stop_loss_price,
+                    entry.entry_price - self.config.tick_size,
+                )
+            else:
+                extension_count = (
+                    (take_profit_price - quote.price)
+                    // self.config.take_profit_extension_points
+                ) + 1
+                take_profit_price -= (
+                    self.config.take_profit_extension_points * extension_count
+                )
+                stop_loss_price = min(
+                    stop_loss_price,
+                    entry.entry_price + self.config.tick_size,
+                )
         exit_type: TmfPaperPerformanceEventType | None = None
-        if entry.entry_side is PaperTradingSide.BUY and quote.price <= entry.stop_loss_price:
+        if entry.entry_side is PaperTradingSide.BUY and quote.price <= stop_loss_price:
             exit_type = TmfPaperPerformanceEventType.STOP_LOSS_EXIT
-        elif entry.entry_side is PaperTradingSide.BUY and quote.price >= entry.take_profit_price:
+        elif (
+            entry.entry_side is PaperTradingSide.BUY
+            and quote.price >= take_profit_price
+            and not trend_hold_extended
+        ):
             exit_type = TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT
-        elif entry.entry_side is PaperTradingSide.SELL and quote.price >= entry.stop_loss_price:
+        elif entry.entry_side is PaperTradingSide.SELL and quote.price >= stop_loss_price:
             exit_type = TmfPaperPerformanceEventType.STOP_LOSS_EXIT
-        elif entry.entry_side is PaperTradingSide.SELL and quote.price <= entry.take_profit_price:
+        elif (
+            entry.entry_side is PaperTradingSide.SELL
+            and quote.price <= take_profit_price
+            and not trend_hold_extended
+        ):
             exit_type = TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT
 
         fill_hash: str | None = None
@@ -1366,8 +1428,8 @@ class LiveTmfPaperSimulation:
             entry.quantity,
             entry.entry_price,
             quote.price,
-            entry.stop_loss_price,
-            entry.take_profit_price,
+            stop_loss_price,
+            take_profit_price,
             Decimal(0) if exit_type is not None else pnl,
             pnl if exit_type is not None else Decimal(0),
             mfe,
@@ -1381,7 +1443,9 @@ class LiveTmfPaperSimulation:
         )
         self._publish(self.journal.with_event(event, ledger))
         reasons = (
-            ("MARGIN_MAINTENANCE_WARNING",)
+            ("TREND_HOLD_TAKE_PROFIT_EXTENDED",)
+            if trend_hold_extended
+            else ("MARGIN_MAINTENANCE_WARNING",)
             if exit_type is None
             and self.journal.margin_status is TmfPaperMarginStatus.MAINTENANCE_WARNING
             else ()
