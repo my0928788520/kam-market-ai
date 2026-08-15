@@ -269,6 +269,40 @@ def test_take_profit_quote_closes_position_and_records_realized_gain() -> None:
     assert result.journal.ledger.cash_entries[-1].cash_delta == Decimal(35470)
 
 
+def test_performance_summary_separates_long_short_and_requires_evidence() -> None:
+    session = LiveTmfPaperSimulation(config(reentry_cooldown_minutes=0))
+    enter(session)
+    session.process_evaluation(
+        direction("AF"),
+        quote("22042", 1),
+        evaluated_at=NOW + timedelta(minutes=1),
+    )
+    session.process_evaluation(
+        direction("BU"),
+        quote("22041", 2),
+        evaluated_at=NOW + timedelta(minutes=2),
+    )
+    result = session.process_evaluation(
+        direction("BF"),
+        quote("22063", 3),
+        evaluated_at=NOW + timedelta(minutes=3),
+    )
+
+    summary = result.safe_payload()["performance_summary"]
+
+    assert summary["sample_size"] == 2
+    assert summary["minimum_sample_size"] == 30
+    assert summary["win_rate"] == "50.00"
+    assert summary["net_pnl"] == "200"
+    assert summary["expectancy"] == "100.00"
+    assert summary["profit_factor"] == "1.91"
+    assert summary["maximum_drawdown"] == "220"
+    assert summary["long"]["net_pnl"] == "420"
+    assert summary["short"]["net_pnl"] == "-220"
+    assert summary["adjustment_allowed"] is False
+    assert summary["live_order_allowed"] is False
+
+
 def test_exit_cooldown_prevents_immediate_reentry_and_allows_later_entry() -> None:
     session = LiveTmfPaperSimulation(config(reentry_cooldown_minutes=15))
     enter(session)

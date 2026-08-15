@@ -68,6 +68,7 @@ LEGACY_TMF_PAPER_SIMULATION_VERSION = "0.1"
 LEGACY_TMF_PAPER_JOURNAL_SCHEMA = "kam-live-tmf-paper-journal-v1"
 TAIWAN_RISK_TIMEZONE = ZoneInfo("Asia/Taipei")
 TAIWAN_RISK_DAY_BOUNDARY_HOUR = 6
+MINIMUM_PERFORMANCE_SAMPLE_SIZE = 30
 
 
 def _hash(payload: object) -> str:
@@ -534,6 +535,82 @@ class TmfPaperSimulationJournal:
             "status": self.margin_status.value,
         }
 
+    def performance_summary_payload(self) -> dict[str, object]:
+        """Summarize closed paper trades without changing any entry rule."""
+        exits = [
+            event
+            for event in self.events
+            if event.event_type
+            in {
+                TmfPaperPerformanceEventType.STOP_LOSS_EXIT,
+                TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT,
+            }
+        ]
+        outcomes = [event.realized_pnl for event in exits]
+        wins = [value for value in outcomes if value > 0]
+        losses = [value for value in outcomes if value < 0]
+        breakeven = [value for value in outcomes if value == 0]
+        net = sum(outcomes, Decimal(0))
+        gross_profit = sum(wins, Decimal(0))
+        gross_loss = abs(sum(losses, Decimal(0)))
+        cumulative = Decimal(0)
+        peak = Decimal(0)
+        maximum_drawdown = Decimal(0)
+        for value in outcomes:
+            cumulative += value
+            peak = max(peak, cumulative)
+            maximum_drawdown = max(maximum_drawdown, peak - cumulative)
+
+        def direction_summary(side: PaperTradingSide) -> dict[str, object]:
+            selected = [event.realized_pnl for event in exits if event.entry_side is side]
+            selected_wins = sum(1 for value in selected if value > 0)
+            return {
+                "sample_size": len(selected),
+                "wins": selected_wins,
+                "win_rate": (
+                    None
+                    if not selected
+                    else str(
+                        (Decimal(selected_wins) / Decimal(len(selected)) * Decimal(100)).quantize(
+                            Decimal("0.01")
+                        )
+                    )
+                ),
+                "net_pnl": str(sum(selected, Decimal(0))),
+            }
+
+        sample_size = len(outcomes)
+        return {
+            "sample_size": sample_size,
+            "minimum_sample_size": MINIMUM_PERFORMANCE_SAMPLE_SIZE,
+            "wins": len(wins),
+            "losses": len(losses),
+            "breakeven": len(breakeven),
+            "win_rate": (
+                None
+                if not outcomes
+                else str(
+                    (Decimal(len(wins)) / Decimal(sample_size) * Decimal(100)).quantize(
+                        Decimal("0.01")
+                    )
+                )
+            ),
+            "net_pnl": str(net),
+            "expectancy": None if not outcomes else str((net / Decimal(sample_size)).quantize(Decimal("0.01"))),
+            "gross_profit": str(gross_profit),
+            "gross_loss": str(gross_loss),
+            "profit_factor": (
+                None
+                if gross_loss == 0
+                else str((gross_profit / gross_loss).quantize(Decimal("0.01")))
+            ),
+            "maximum_drawdown": str(maximum_drawdown),
+            "long": direction_summary(PaperTradingSide.BUY),
+            "short": direction_summary(PaperTradingSide.SELL),
+            "adjustment_allowed": sample_size >= MINIMUM_PERFORMANCE_SAMPLE_SIZE,
+            "live_order_allowed": False,
+        }
+
     def canonical_payload(self) -> dict[str, object]:
         return {
             "version": self.version,
@@ -784,6 +861,7 @@ class TmfPaperCycleResult:
             "cash_balance": str(self.journal.ledger.cash_balance),
             "margin_requirement": self.journal.margin_requirement.canonical_payload(),
             "margin_state": self.journal.margin_state_payload(),
+            "performance_summary": self.journal.performance_summary_payload(),
             "open_positions": len(self.journal.ledger.positions),
             "performance_event": (
                 None

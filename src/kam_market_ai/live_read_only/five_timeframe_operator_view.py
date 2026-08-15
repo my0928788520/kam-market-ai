@@ -117,6 +117,8 @@ def build_five_timeframe_operator_view(
     performance = performance if isinstance(performance, Mapping) else {}
     margin_state = paper.get("margin_state")
     margin_state = margin_state if isinstance(margin_state, Mapping) else {}
+    performance_summary = paper.get("performance_summary")
+    performance_summary = performance_summary if isinstance(performance_summary, Mapping) else {}
     execution_boundary = paper.get("execution_boundary")
     execution_boundary = execution_boundary if isinstance(execution_boundary, Mapping) else {}
     real_order_requires_human = execution_boundary.get("real_order_requires_human_action") is True
@@ -186,6 +188,20 @@ def build_five_timeframe_operator_view(
             str(paper.get("line_alert_status", "DISABLED")),
             "狀態待確認",
         ),
+        "績效樣本": (
+            f"{performance_summary.get('sample_size', 0)}／"
+            f"{performance_summary.get('minimum_sample_size', 30)}"
+        ),
+        "模擬勝率": (
+            "—"
+            if performance_summary.get("win_rate") is None
+            else f"{performance_summary['win_rate']}%"
+        ),
+        "期望／獲利因子": (
+            f"{performance_summary.get('expectancy', '—') if performance_summary.get('expectancy') is not None else '—'}／"
+            f"{performance_summary.get('profit_factor', '—') if performance_summary.get('profit_factor') is not None else '—'}"
+        ),
+        "最大回撤": str(performance_summary.get("maximum_drawdown", "0")),
     }
     ledger = {
         "cash": str(paper.get("cash_balance", "—")),

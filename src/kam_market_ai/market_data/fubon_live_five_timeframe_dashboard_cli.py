@@ -354,6 +354,7 @@ def main(
                 "proposal_hash": None,
                 "fill_hashes": [],
                 "margin_state": paper_journal.margin_state_payload(),
+                "performance_summary": paper_journal.performance_summary_payload(),
                 "performance_event": (
                     paper_journal.events[-1].canonical_payload()
                     if paper_journal.events

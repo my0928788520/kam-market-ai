@@ -114,6 +114,14 @@ def test_market_dashboard_exposes_armed_auto_paper_runtime_without_live_executio
             "status": "safe",
         },
         "line_alert_status": "ARMED_WAITING_FOR_PAPER_PROPOSAL",
+        "performance_summary": {
+            "sample_size": 12,
+            "minimum_sample_size": 30,
+            "win_rate": "58.33",
+            "expectancy": "42.50",
+            "profit_factor": "1.70",
+            "maximum_drawdown": "440",
+        },
         "performance_event": {
             "entry_price": "45700",
             "current_price": "45715",
@@ -144,6 +152,30 @@ def test_market_dashboard_exposes_armed_auto_paper_runtime_without_live_executio
     assert "未實現損益</dt><dd title='150'>150" in page
     assert "保證金狀態</dt><dd title='保證金安全'>保證金安全" in page
     assert "LINE 通知</dt><dd title='已啟用・等待模擬提案'>已啟用・等待模擬提案" in page
+    assert "績效樣本</dt><dd title='12／30'>12／30" in page
+    assert "模擬勝率</dt><dd title='58.33%'>58.33%" in page
+    assert "期望／獲利因子</dt><dd title='42.50／1.70'>42.50／1.70" in page
+    assert "最大回撤</dt><dd title='440'>440" in page
     assert "真單狀態</dt><dd title='必須本人於券商端操作'>必須本人於券商端操作" in page
     assert ">HOLD<" not in page and ">stale<" not in page
     assert view.live_order_allowed is False and view.broker_connected is False
+
+
+def test_paper_performance_keeps_zero_expectancy_visible() -> None:
+    payload = {
+        "status": "READY_VERIFIED_FIVE_TIMEFRAMES",
+        "symbol": "TMFH6",
+        "market_data_only": True,
+        "trading_enabled": False,
+        "analysis_preview": {"kam_rule_decision": {"direction": "觀望", "states": {}}},
+    }
+    runtime = {
+        "performance_summary": {"expectancy": 0.0, "profit_factor": 0.0},
+        "live_order_allowed": False,
+        "broker_connected": False,
+    }
+    page = render_operator_html(
+        build_five_timeframe_operator_view(payload, runtime)
+    )
+
+    assert "期望／獲利因子</dt><dd title='0.0／0.0'>0.0／0.0" in page
