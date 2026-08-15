@@ -58,6 +58,33 @@ def test_cli_defaults_to_dry_run() -> None:
     assert probe.parse_args(["--live"]).dry_run is False
 
 
+def test_cli_live_failure_returns_nonzero(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        probe,
+        "run_probe",
+        lambda **kwargs: {"mode": "live", "status": "exception"},
+    )
+    assert probe.main(["--live", "--output", str(output(tmp_path))]) == 1
+
+
+def test_cli_live_success_returns_zero(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        probe,
+        "run_probe",
+        lambda **kwargs: {"mode": "live", "status": "completed"},
+    )
+    assert probe.main(["--live", "--output", str(output(tmp_path))]) == 0
+
+
+def test_windows_account_probe_launcher_is_read_only() -> None:
+    source = Path("tools/start_fubon_read_only_account_probe.ps1").read_text(encoding="utf-8")
+    assert "probe_fubon_position.py" in source
+    assert "--live" in source
+    assert "不會送出、修改或取消任何委託" in source
+    for forbidden in ("place_order", "cancel_order", "modify_order"):
+        assert forbidden not in source
+
+
 def test_normal_return_records_only_wrapper_summary(tmp_path) -> None:
     child = {"status": "completed", "summary": {"result_type": "builtins.CustomReturnType", "data_type": "builtins.list", "data_row_count": 1}}
     result = probe.run_probe(method="hybrid", timeout=30, output=output(tmp_path), dry_run=False,
