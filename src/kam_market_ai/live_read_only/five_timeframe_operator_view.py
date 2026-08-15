@@ -50,6 +50,7 @@ _PAPER_REASON_LABELS = {
     "MANUAL_CONFIRMATION_REQUIRED": "本次工作階段尚未授權",
     "INSUFFICIENT_INITIAL_MARGIN": "模擬保證金不足",
     "REENTRY_COOLDOWN_ACTIVE": "出場冷卻期尚未結束",
+    "MAX_DAILY_LOSS_EXCEEDED": "單日虧損已達停止交易上限",
     "QUOTE_STALE": "行情資料過期",
 }
 
