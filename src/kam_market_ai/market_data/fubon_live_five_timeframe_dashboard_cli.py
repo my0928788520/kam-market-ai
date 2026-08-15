@@ -32,6 +32,7 @@ from kam_market_ai.notifications import (
     LinePushNotifier,
     build_due_tmf_rollover_alert,
     build_paper_exit_alert,
+    build_paper_health_alert,
     build_paper_sample_milestone_alert,
     build_pending_order_alert,
 )
@@ -391,10 +392,35 @@ def main(
                     paper_runtime["line_alert_status"] = "RETRY_PENDING"
         if paper_session is None or verifier.latest_candle_result is None:
             return
+        now = datetime.now(UTC)
+        latest_quote = quote_source.latest
+        try:
+            journal_verified = (
+                paper_store.load(paper_config).journal_hash == paper_session.journal.journal_hash
+            )
+        except (OSError, TypeError, ValueError):
+            journal_verified = False
+        if line_notifier is not None:
+            health_alert = build_paper_health_alert(
+                paper_runtime,
+                observed_at=now,
+                quote_observed_at=(latest_quote.observed_at if latest_quote is not None else None),
+                journal_verified=journal_verified,
+            )
+            if health_alert is not None:
+                try:
+                    if line_notifier.send_once(health_alert):
+                        paper_runtime["line_health_status"] = "SENT"
+                except (OSError, RuntimeError, TimeoutError):
+                    paper_runtime["line_health_status"] = "RETRY_PENDING"
+        if not journal_verified:
+            paper_runtime["journal_integrity_status"] = "FAILED_CLOSED"
+            return
+        paper_runtime["journal_integrity_status"] = "VERIFIED"
         try:
             result = paper_session.process_candles(
                 verifier.latest_candle_result,
-                evaluated_at=datetime.now(UTC),
+                evaluated_at=now,
             )
             safe_result = result.safe_payload()
             paper_runtime.update(safe_result)

@@ -5,6 +5,7 @@ from pathlib import Path
 from kam_market_ai.notifications.line_pending_order import (
     LinePushNotifier,
     build_paper_exit_alert,
+    build_paper_health_alert,
     build_paper_sample_milestone_alert,
     build_pending_order_alert,
 )
@@ -263,3 +264,89 @@ def test_sample_progress_alert_is_persistently_deduplicated(tmp_path: Path) -> N
     )
     assert restarted.send_once(alert) is False
     assert len(calls) == 1
+
+
+def health_payload() -> dict[str, object]:
+    return {
+        "live_order_allowed": False,
+        "open_positions": 0,
+        "performance_summary": {"sample_size": 12},
+    }
+
+
+def test_daily_health_summary_is_persistently_deduplicated(tmp_path: Path) -> None:
+    state_path = tmp_path / "line_delivery.json"
+    observed = datetime(2026, 8, 17, 1, 0, tzinfo=UTC)
+    alert = build_paper_health_alert(
+        health_payload(),
+        observed_at=observed,
+        quote_observed_at=observed - timedelta(seconds=3),
+        journal_verified=True,
+    )
+    assert alert is not None
+    assert "每日健康摘要" in alert.text and "12 筆" in alert.text
+    calls = []
+    first = LinePushNotifier(
+        "secret-token",
+        "U-recipient",
+        opener=lambda request, timeout: calls.append(request) or Response(),
+        state_path=state_path,
+    )
+    assert first.send_once(alert) is True
+    restarted = LinePushNotifier(
+        "secret-token",
+        "U-recipient",
+        opener=lambda request, timeout: calls.append(request) or Response(),
+        state_path=state_path,
+    )
+    assert restarted.send_once(alert) is False
+    assert len(calls) == 1
+
+
+def test_stale_quote_warns_only_during_tmf_session() -> None:
+    session_time = datetime(2026, 8, 17, 1, 0, tzinfo=UTC)
+    alert = build_paper_health_alert(
+        health_payload(),
+        observed_at=session_time,
+        quote_observed_at=session_time - timedelta(seconds=61),
+        journal_verified=True,
+    )
+    assert alert is not None and "報價中斷警告" in alert.text
+
+    weekend = datetime(2026, 8, 16, 1, 0, tzinfo=UTC)
+    closed_alert = build_paper_health_alert(
+        health_payload(),
+        observed_at=weekend,
+        quote_observed_at=weekend - timedelta(hours=1),
+        journal_verified=True,
+    )
+    assert closed_alert is not None and "每日健康摘要" in closed_alert.text
+
+    monday_before_open = datetime(2026, 8, 16, 17, 0, tzinfo=UTC)
+    monday_alert = build_paper_health_alert(
+        health_payload(),
+        observed_at=monday_before_open,
+        quote_observed_at=monday_before_open - timedelta(hours=1),
+        journal_verified=True,
+    )
+    assert monday_alert is not None and "每日健康摘要" in monday_alert.text
+
+
+def test_journal_integrity_warning_fails_closed_and_rejects_live_payload() -> None:
+    observed = datetime(2026, 8, 17, 1, 0, tzinfo=UTC)
+    alert = build_paper_health_alert(
+        health_payload(),
+        observed_at=observed,
+        quote_observed_at=observed,
+        journal_verified=False,
+    )
+    assert alert is not None
+    assert "日誌完整性警告" in alert.text and "本輪模擬處理已停止" in alert.text
+    live = health_payload()
+    live["live_order_allowed"] = True
+    assert build_paper_health_alert(
+        live,
+        observed_at=observed,
+        quote_observed_at=observed,
+        journal_verified=False,
+    ) is None

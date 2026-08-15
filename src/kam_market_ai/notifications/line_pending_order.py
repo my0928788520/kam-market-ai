@@ -5,17 +5,20 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 from hashlib import sha256
 from os import replace
 from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo
 
 LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
 LINE_DELIVERY_STATE_SCHEMA = "kam-line-paper-delivery-v1"
 PAPER_SAMPLE_MILESTONES = frozenset({10, 20, 30})
+TAIPEI = ZoneInfo("Asia/Taipei")
+PAPER_QUOTE_STALE_SECONDS = 60
 
 
 def _delivery_state_payload(sent_stages: set[tuple[str, int]]) -> dict[str, object]:
@@ -198,6 +201,71 @@ def build_paper_sample_milestone_alert(
             f"最大回撤：{payload.get('maximum_drawdown') or '資料不足'}",
             f"狀態：{status}",
             "安全：僅統計模擬交易，不會送出真實委託",
+        )
+    )
+    return LinePendingOrderAlert(identity, text, observed_at + timedelta(minutes=5))
+
+
+def _tmf_session_is_open(observed_at: datetime) -> bool:
+    local = observed_at.astimezone(TAIPEI)
+    current = local.timetz().replace(tzinfo=None)
+    if local.weekday() == 5:
+        return current < time(5)
+    if local.weekday() == 6:
+        return False
+    overnight_open = local.weekday() > 0 and current < time(5)
+    return time(8, 45) <= current <= time(13, 45) or current >= time(15) or overnight_open
+
+
+def build_paper_health_alert(
+    payload: Mapping[str, object],
+    *,
+    observed_at: datetime,
+    quote_observed_at: datetime | None,
+    journal_verified: bool,
+) -> LinePendingOrderAlert | None:
+    """Build one daily health summary or one fail-closed warning per Taiwan date."""
+    if observed_at.tzinfo is None or payload.get("live_order_allowed") is not False:
+        return None
+    local_date = observed_at.astimezone(TAIPEI).date().isoformat()
+    if not journal_verified:
+        alert_kind = "journal-integrity"
+        title = "KAM Paper Trading 日誌完整性警告"
+        detail = "日誌驗證未通過，本輪模擬處理已停止"
+    else:
+        quote_age = (
+            max(0, int((observed_at - quote_observed_at).total_seconds()))
+            if quote_observed_at is not None and quote_observed_at.tzinfo is not None
+            else None
+        )
+        if _tmf_session_is_open(observed_at) and (
+            quote_age is None or quote_age > PAPER_QUOTE_STALE_SECONDS
+        ):
+            alert_kind = "quote-stale"
+            title = "KAM Paper Trading 報價中斷警告"
+            detail = (
+                "交易時段內尚未取得報價"
+                if quote_age is None
+                else f"最新報價已延遲 {quote_age} 秒"
+            )
+        else:
+            alert_kind = "daily-health"
+            title = "KAM Paper Trading 每日健康摘要"
+            detail = "系統、報價與模擬日誌檢查正常"
+    identity = sha256(f"paper-health:{alert_kind}:{local_date}".encode("utf-8")).hexdigest()
+    summary = payload.get("performance_summary")
+    sample_size = summary.get("sample_size", 0) if isinstance(summary, Mapping) else 0
+    quote_text = quote_observed_at.isoformat() if quote_observed_at is not None else "尚未取得"
+    text = "\n".join(
+        (
+            title,
+            f"日期：{local_date}",
+            f"狀態：{detail}",
+            f"最新報價時間：{quote_text}",
+            f"今日累計平倉樣本：{sample_size} 筆",
+            f"目前模擬部位：{payload.get('open_positions', 0)} 口",
+            f"日誌驗證：{'正常' if journal_verified else '失敗'}",
+            "安全：僅監控 Paper Trading，不會送出真實委託",
         )
     )
     return LinePendingOrderAlert(identity, text, observed_at + timedelta(minutes=5))
