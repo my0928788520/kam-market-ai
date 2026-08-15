@@ -49,6 +49,7 @@ _PAPER_REASON_LABELS = {
     "PAPER_TRADING_NOT_ARMED": "自動模擬尚未啟用",
     "MANUAL_CONFIRMATION_REQUIRED": "本次工作階段尚未授權",
     "INSUFFICIENT_INITIAL_MARGIN": "模擬保證金不足",
+    "REENTRY_COOLDOWN_ACTIVE": "出場冷卻期尚未結束",
     "QUOTE_STALE": "行情資料過期",
 }
 
