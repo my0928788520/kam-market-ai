@@ -109,6 +109,9 @@ def build_five_timeframe_operator_view(
     performance = performance if isinstance(performance, Mapping) else {}
     margin_state = paper.get("margin_state")
     margin_state = margin_state if isinstance(margin_state, Mapping) else {}
+    execution_boundary = paper.get("execution_boundary")
+    execution_boundary = execution_boundary if isinstance(execution_boundary, Mapping) else {}
+    real_order_requires_human = execution_boundary.get("real_order_requires_human_action") is True
     demo = {
         "source_kind": "FUBON_LIVE_FIVE_TIMEFRAME",
         "banner": (
@@ -158,6 +161,7 @@ def build_five_timeframe_operator_view(
         "模擬成交價": str(performance.get("entry_price", "—")),
         "自動停損": str(performance.get("stop_loss_price", "—")),
         "自動停利": str(performance.get("take_profit_price", "—")),
+        "真單狀態": "必須本人於券商端操作" if real_order_requires_human else "未開放",
     }
     matching = {
         "最近動作": paper_action_label,
