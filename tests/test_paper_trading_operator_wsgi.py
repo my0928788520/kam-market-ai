@@ -37,6 +37,12 @@ def test_wsgi_is_get_only_escapes_html_and_serves_static_css() -> None:
     assert b"".join(app({"REQUEST_METHOD": "POST", "PATH_INFO": "/"}, start)) == "唯讀端點，不接受此操作。".encode("utf-8")
     assert response["status"] == "405 Method Not Allowed"
     assert b"body" in b"".join(app({"REQUEST_METHOD": "GET", "PATH_INFO": "/static/operator.css"}, start))
+
+
+def test_matching_margin_status_is_visually_emphasized() -> None:
+    css = Path("src/kam_market_ai/paper_trading/static/operator.css").read_text(encoding="utf-8")
+
+    assert ".matching dl dd:last-child { font-size: 16px; font-weight: 850; }" in css
     assert "<KAM>" not in render_operator_html(_view())
 
 
