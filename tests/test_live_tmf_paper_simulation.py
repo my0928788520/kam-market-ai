@@ -172,6 +172,14 @@ def test_confirmed_natural_buy_reserves_margin_and_keeps_fill_price() -> None:
     assert event.stop_loss_price == Decimal(21980)
     assert event.take_profit_price == Decimal(22040)
     assert event.point_value == Decimal(10)
+    boundary = result.safe_payload()["execution_boundary"]
+    assert boundary == {
+        "mode": "paper_only",
+        "automatic_paper_execution": True,
+        "real_order_requires_human_action": True,
+        "broker_submission_available": False,
+        "live_order_allowed": False,
+    }
 
 
 def test_entry_fails_closed_when_initial_margin_is_not_available() -> None:
