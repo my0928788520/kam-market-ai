@@ -168,6 +168,38 @@ def test_second_candle_must_continue_in_trade_direction(
     assert confirmed.action is TmfPaperCycleAction.ENTRY_FILLED
 
 
+@pytest.mark.parametrize(
+    ("code", "first_price", "jump_price", "next_price"),
+    (
+        ("AU", "22000", "22021", "22022"),
+        ("BU", "22000", "21979", "21978"),
+    ),
+)
+def test_large_confirmation_move_resets_to_avoid_chasing(
+    code: str,
+    first_price: str,
+    jump_price: str,
+    next_price: str,
+) -> None:
+    session = LiveTmfPaperSimulation(config(entry_confirmation_candles=2))
+
+    session.process_evaluation(direction(code), quote(first_price), evaluated_at=NOW)
+    blocked = session.process_evaluation(
+        direction(code),
+        quote(jump_price, 5),
+        evaluated_at=NOW + timedelta(minutes=5),
+    )
+    confirmed = session.process_evaluation(
+        direction(code),
+        quote(next_price, 10),
+        evaluated_at=NOW + timedelta(minutes=10),
+    )
+
+    assert blocked.action is TmfPaperCycleAction.HOLD
+    assert blocked.reason_codes == ("ENTRY_CONFIRMATION_MOVE_TOO_LARGE",)
+    assert confirmed.action is TmfPaperCycleAction.ENTRY_FILLED
+
+
 def test_entry_confirmation_resets_when_alignment_breaks_or_flips() -> None:
     session = LiveTmfPaperSimulation(config(entry_confirmation_candles=2))
 
@@ -193,6 +225,10 @@ def test_entry_confirmation_config_rejects_invalid_values() -> None:
         config(entry_confirmation_candles=0)
     with pytest.raises(ValueError, match="entry_confirmation_candles"):
         config(entry_confirmation_candles=True)
+    with pytest.raises(ValueError, match="max_entry_confirmation_move_points"):
+        config(max_entry_confirmation_move_points=Decimal(0))
+    with pytest.raises(ValueError, match="Protection distances"):
+        config(max_entry_confirmation_move_points=Decimal("20.5"))
 
 
 def test_confirmed_short_direction_opens_a_paper_short() -> None:

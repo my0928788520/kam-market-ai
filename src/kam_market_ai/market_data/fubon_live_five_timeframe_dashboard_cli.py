@@ -537,6 +537,7 @@ def main(
                 "paper_trend_hold_enabled": bool(args.paper_test_armed),
                 "paper_take_profit_extension_points": 20 if args.paper_test_armed else None,
                 "paper_entry_confirmation_candles": 2 if args.paper_test_armed else None,
+                "paper_max_confirmation_move_points": 20 if args.paper_test_armed else None,
                 "paper_point_value": int(index_futures_product(instrument).point_value) if args.paper_test_armed else None,
                 "paper_margin_model": "RESERVE_RELEASE_V1" if args.paper_test_armed else None,
                 "paper_initial_margin": int(index_futures_product(instrument).initial_margin) if args.paper_test_armed else None,

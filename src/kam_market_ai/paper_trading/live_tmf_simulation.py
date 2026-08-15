@@ -186,6 +186,7 @@ class TmfPaperSimulationConfig:
     max_quote_age_seconds: int = 360
     reentry_cooldown_minutes: int = 15
     entry_confirmation_candles: int = 1
+    max_entry_confirmation_move_points: Decimal = Decimal(20)
     initial_margin: Decimal = Decimal(35050)
     maintenance_margin: Decimal = Decimal(26900)
     margin_effective_at: datetime = datetime(2026, 8, 12, 5, 45, tzinfo=UTC)
@@ -207,6 +208,10 @@ class TmfPaperSimulationConfig:
             ("stop_loss_points", self.stop_loss_points),
             ("take_profit_points", self.take_profit_points),
             ("take_profit_extension_points", self.take_profit_extension_points),
+            (
+                "max_entry_confirmation_move_points",
+                self.max_entry_confirmation_move_points,
+            ),
             ("initial_cash", self.initial_cash),
             ("max_order_notional", self.max_order_notional),
             ("max_daily_loss", self.max_daily_loss),
@@ -225,6 +230,7 @@ class TmfPaperSimulationConfig:
             self.stop_loss_points % self.tick_size != 0
             or self.take_profit_points % self.tick_size != 0
             or self.take_profit_extension_points % self.tick_size != 0
+            or self.max_entry_confirmation_move_points % self.tick_size != 0
         ):
             raise ValueError("Protection distances must align to the TMF tick size.")
         if isinstance(self.max_quote_age_seconds, bool) or self.max_quote_age_seconds <= 0:
@@ -1011,6 +1017,17 @@ class LiveTmfPaperSimulation:
                             direction.direction,
                             quote,
                             reasons=("ENTRY_PRICE_CONFIRMATION_PENDING",),
+                        )
+                    if (
+                        abs(quote.price - previous_price)
+                        > self.config.max_entry_confirmation_move_points
+                    ):
+                        self._pending_entry_candles = [(quote.observed_at, quote.price)]
+                        return self._result(
+                            TmfPaperCycleAction.HOLD,
+                            direction.direction,
+                            quote,
+                            reasons=("ENTRY_CONFIRMATION_MOVE_TOO_LARGE",),
                         )
                 self._pending_entry_candles.append((quote.observed_at, quote.price))
             if len(self._pending_entry_candles) < self.config.entry_confirmation_candles:
