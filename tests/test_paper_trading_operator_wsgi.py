@@ -42,7 +42,9 @@ def test_wsgi_is_get_only_escapes_html_and_serves_static_css() -> None:
 def test_matching_margin_status_is_visually_emphasized() -> None:
     css = Path("src/kam_market_ai/paper_trading/static/operator.css").read_text(encoding="utf-8")
 
-    assert ".matching dl dd:last-child { font-size: 16px; font-weight: 850; }" in css
+    assert ".matching h2 { font-size: 18px; }.matching dl { font-size: 13px; line-height: 1.4; }" in css
+    assert ".matching dl dd:last-child { font-size: 14px; font-weight: 800; }" in css
+    assert ".matching dl dd:last-child { font-size: 13.5px; }" in css
     assert "<KAM>" not in render_operator_html(_view())
 
 
