@@ -326,6 +326,13 @@ def main(
                 ),
                 "live_order_allowed": False,
                 "broker_connected": False,
+                "execution_boundary": {
+                    "mode": "paper_only",
+                    "automatic_paper_execution": True,
+                    "real_order_requires_human_action": True,
+                    "broker_submission_available": False,
+                    "live_order_allowed": False,
+                },
             }
         except (OSError, TypeError, ValueError):
             print(json.dumps({"success": False, "failure_stage": "PAPER_JOURNAL_ERROR"}))
