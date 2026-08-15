@@ -84,10 +84,10 @@ html.help-page, body.help-page { height: auto; min-height: 100%; overflow-x: hid
   .cycle-chart svg { height: 120px; min-height: 120px; }
   .cycle-card-header h2 { font-size: 13px; }
   .cycle-code, .cycle-badge, .cycle-note { font-size: 9px; }
-  .cycle-info dt { font-size: 11px; line-height: 1.12; }
-  .cycle-info dd { font-size: 12.5px; line-height: 1.12; }
-  .cycle-info { gap: 1px; align-content: center; }
-  .cycle-info div { grid-template-columns: 68px minmax(0, 1fr); gap: 5px; }
+  .cycle-info dt { font-size: 9.5px; line-height: 1.06; }
+  .cycle-info dd { font-size: 10.5px; line-height: 1.06; }
+  .cycle-info { gap: 0; align-content: center; }
+  .cycle-info div { grid-template-columns: 62px minmax(0, 1fr); gap: 4px; }
   .cycle-stage-label { font-size: 10.5px; font-weight: 850; }
   .timeframes { padding: 6px 10px; }
   .timeframes h2 { margin-bottom: 5px; font-size: 14px; }
