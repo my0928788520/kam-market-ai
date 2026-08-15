@@ -80,7 +80,8 @@ def test_windows_account_probe_launcher_is_read_only() -> None:
     source = Path("tools/start_fubon_read_only_account_probe.ps1").read_text(encoding="utf-8")
     assert "probe_fubon_position.py" in source
     assert "--live" in source
-    assert "不會送出、修改或取消任何委託" in source
+    assert "No order can be placed, modified, or cancelled" in source
+    assert source.isascii()
     for forbidden in ("place_order", "cancel_order", "modify_order"):
         assert forbidden not in source
 
