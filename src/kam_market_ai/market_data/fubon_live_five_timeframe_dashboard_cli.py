@@ -30,6 +30,7 @@ from kam_market_ai.live_read_only.five_timeframe_snapshot import (
 from kam_market_ai.models import Candle, Instrument
 from kam_market_ai.notifications import (
     LinePushNotifier,
+    PersistentRefreshFaultMonitor,
     build_due_tmf_rollover_alert,
     build_paper_exit_alert,
     build_paper_health_alert,
@@ -307,6 +308,7 @@ def main(
 
     paper_session: LiveTmfPaperSimulation | None = None
     line_notifier: LinePushNotifier | None = None
+    refresh_fault_monitor: PersistentRefreshFaultMonitor | None = None
     active_line_alert = None
     active_line_alert_is_exit = False
     paper_runtime: dict[str, object] = {"armed": False, "action": "DISARMED"}
@@ -320,6 +322,12 @@ def main(
                 local_env.get("KAM_LINE_CHANNEL_ACCESS_TOKEN", ""),
                 local_env.get("KAM_LINE_RECIPIENT_USER_ID", ""),
                 state_path=args.line_alert_state,
+            )
+            delivery_path = Path(args.line_alert_state)
+            refresh_fault_monitor = PersistentRefreshFaultMonitor(
+                delivery_path.with_name(
+                    f"{delivery_path.stem}_refresh_fault{delivery_path.suffix}"
+                )
             )
         except ValueError:
             print(json.dumps({"success": False, "failure_stage": "LINE_ALERT_CONFIGURATION_ERROR"}))
@@ -526,12 +534,39 @@ def main(
         print(json.dumps({"success": False, "failure_stage": "INITIAL_REFRESH_ERROR"}))
         return 1
 
+    def deliver_refresh_monitor_result(success: bool) -> None:
+        if line_notifier is None or refresh_fault_monitor is None:
+            return
+        now = datetime.now(UTC)
+        alert = (
+            refresh_fault_monitor.observe_success(observed_at=now)
+            if success
+            else refresh_fault_monitor.observe_failure(
+                consecutive_failures=refresher.health.consecutive_failures,
+                observed_at=now,
+            )
+        )
+        if alert is None:
+            return
+        is_recovery = success and refresh_fault_monitor.active_fault_id is not None
+        try:
+            line_notifier.send_once(alert)
+        except (OSError, RuntimeError, TimeoutError):
+            paper_runtime["line_refresh_status"] = "RETRY_PENDING"
+            return
+        paper_runtime["line_refresh_status"] = "RECOVERED" if is_recovery else "FAULT_SENT"
+        if is_recovery:
+            refresh_fault_monitor.acknowledge_recovery()
+
+    deliver_refresh_monitor_result(True)
+
     stop = threading.Event()
 
     def refresh_loop() -> None:
         delay = args.refresh_seconds
         while not stop.wait(delay):
             success = refresher.refresh_safely()
+            deliver_refresh_monitor_result(success)
             delay = (
                 args.refresh_seconds
                 if success

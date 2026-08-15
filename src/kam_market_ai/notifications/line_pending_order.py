@@ -19,6 +19,7 @@ LINE_DELIVERY_STATE_SCHEMA = "kam-line-paper-delivery-v1"
 PAPER_SAMPLE_MILESTONES = frozenset({10, 20, 30})
 TAIPEI = ZoneInfo("Asia/Taipei")
 PAPER_QUOTE_STALE_SECONDS = 60
+REFRESH_FAULT_STATE_SCHEMA = "kam-line-refresh-fault-v1"
 
 
 def _delivery_state_payload(sent_stages: set[tuple[str, int]]) -> dict[str, object]:
@@ -91,6 +92,116 @@ class LinePendingOrderAlert:
             raise ValueError("invalid pending-order alert")
         if self.live_order_allowed:
             raise ValueError("LINE alerts cannot enable live orders")
+
+
+@dataclass(slots=True)
+class PersistentRefreshFaultMonitor:
+    state_path: str | Path
+    failure_threshold: int = 3
+    active_fault_id: str | None = field(default=None, init=False)
+    last_success_at: datetime | None = field(default=None, init=False)
+
+    def __post_init__(self) -> None:
+        self.state_path = Path(self.state_path)
+        if self.failure_threshold < 1:
+            raise ValueError("refresh failure threshold must be positive")
+        if not self.state_path.exists():
+            return
+        payload = json.loads(self.state_path.read_text(encoding="utf-8"))
+        state_hash = payload.pop("state_hash", None) if isinstance(payload, dict) else None
+        expected = sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        if (
+            not isinstance(payload, dict)
+            or payload.get("schema") != REFRESH_FAULT_STATE_SCHEMA
+            or payload.get("live_order_allowed") is not False
+            or state_hash != expected
+        ):
+            raise ValueError("invalid refresh fault state")
+        fault_id = payload.get("active_fault_id")
+        if fault_id is not None and (not isinstance(fault_id, str) or len(fault_id) != 64):
+            raise ValueError("invalid refresh fault identity")
+        last_success = payload.get("last_success_at")
+        self.active_fault_id = fault_id
+        self.last_success_at = (
+            datetime.fromisoformat(str(last_success).replace("Z", "+00:00"))
+            if last_success
+            else None
+        )
+
+    def observe_failure(
+        self,
+        *,
+        consecutive_failures: int,
+        observed_at: datetime,
+    ) -> LinePendingOrderAlert | None:
+        if observed_at.tzinfo is None or consecutive_failures < self.failure_threshold:
+            return None
+        if self.active_fault_id is None:
+            origin = self.last_success_at.isoformat() if self.last_success_at else "startup"
+            self.active_fault_id = sha256(f"refresh-fault:{origin}".encode("utf-8")).hexdigest()
+            self._save()
+        last_success = (
+            self.last_success_at.isoformat() if self.last_success_at else "尚無成功紀錄"
+        )
+        text = "\n".join(
+            (
+                "KAM Paper Trading 資料刷新失敗警告",
+                f"連續失敗：{consecutive_failures} 次",
+                f"最後成功時間：{last_success}",
+                "狀態：等待下一輪自動重試",
+                "安全：僅監控 Paper Trading，不會送出真實委託",
+            )
+        )
+        return LinePendingOrderAlert(
+            self.active_fault_id,
+            text,
+            observed_at + timedelta(minutes=5),
+        )
+
+    def observe_success(self, *, observed_at: datetime) -> LinePendingOrderAlert | None:
+        if observed_at.tzinfo is None:
+            raise ValueError("refresh success clock must be timezone-aware")
+        previous_success = self.last_success_at
+        self.last_success_at = observed_at
+        self._save()
+        if self.active_fault_id is None:
+            return None
+        recovery_id = sha256(f"{self.active_fault_id}:recovered".encode("utf-8")).hexdigest()
+        text = "\n".join(
+            (
+                "KAM Paper Trading 資料連線已恢復",
+                "中斷前最後成功時間："
+                f"{previous_success.isoformat() if previous_success else '尚無紀錄'}",
+                f"恢復時間：{observed_at.isoformat()}",
+                "狀態：資料刷新已恢復正常",
+                "安全：僅監控 Paper Trading，不會送出真實委託",
+            )
+        )
+        return LinePendingOrderAlert(recovery_id, text, observed_at + timedelta(minutes=5))
+
+    def acknowledge_recovery(self) -> None:
+        self.active_fault_id = None
+        self._save()
+
+    def _save(self) -> None:
+        payload: dict[str, object] = {
+            "schema": REFRESH_FAULT_STATE_SCHEMA,
+            "active_fault_id": self.active_fault_id,
+            "last_success_at": self.last_success_at.isoformat() if self.last_success_at else None,
+            "live_order_allowed": False,
+        }
+        payload["state_hash"] = sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        self.state_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self.state_path.with_suffix(self.state_path.suffix + ".tmp")
+        temporary.write_text(
+            json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        replace(temporary, self.state_path)
 
 
 def build_pending_order_alert(payload: Mapping[str, object]) -> LinePendingOrderAlert | None:

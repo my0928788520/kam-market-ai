@@ -4,6 +4,7 @@ from pathlib import Path
 
 from kam_market_ai.notifications.line_pending_order import (
     LinePushNotifier,
+    PersistentRefreshFaultMonitor,
     build_paper_exit_alert,
     build_paper_health_alert,
     build_paper_sample_milestone_alert,
@@ -350,3 +351,50 @@ def test_journal_integrity_warning_fails_closed_and_rejects_live_payload() -> No
         quote_observed_at=observed,
         journal_verified=False,
     ) is None
+
+
+def test_refresh_fault_warns_at_three_failures_and_recovers_once(tmp_path: Path) -> None:
+    state_path = tmp_path / "refresh_fault.json"
+    monitor = PersistentRefreshFaultMonitor(state_path)
+    first_success = datetime(2026, 8, 17, 1, 0, tzinfo=UTC)
+    assert monitor.observe_success(observed_at=first_success) is None
+    assert monitor.observe_failure(
+        consecutive_failures=2,
+        observed_at=first_success + timedelta(seconds=6),
+    ) is None
+    warning = monitor.observe_failure(
+        consecutive_failures=3,
+        observed_at=first_success + timedelta(seconds=12),
+    )
+    assert warning is not None
+    assert "連續失敗：3 次" in warning.text
+    assert first_success.isoformat() in warning.text
+
+    restarted = PersistentRefreshFaultMonitor(state_path)
+    duplicate = restarted.observe_failure(
+        consecutive_failures=4,
+        observed_at=first_success + timedelta(seconds=24),
+    )
+    assert duplicate is not None
+    assert duplicate.proposal_hash == warning.proposal_hash
+
+    recovery = restarted.observe_success(
+        observed_at=first_success + timedelta(minutes=1)
+    )
+    assert recovery is not None and "資料連線已恢復" in recovery.text
+    restarted.acknowledge_recovery()
+    assert PersistentRefreshFaultMonitor(state_path).active_fault_id is None
+
+
+def test_corrupted_refresh_fault_state_fails_closed(tmp_path: Path) -> None:
+    state_path = tmp_path / "refresh_fault.json"
+    state_path.write_text(
+        '{"schema":"kam-line-refresh-fault-v1","state_hash":"bad"}',
+        encoding="utf-8",
+    )
+    try:
+        PersistentRefreshFaultMonitor(state_path)
+    except ValueError as error:
+        assert "refresh fault state" in str(error)
+    else:
+        raise AssertionError("corrupted refresh fault state must fail closed")
