@@ -794,6 +794,13 @@ class TmfPaperCycleResult:
             "live_order_allowed": False,
             "broker_connected": False,
             "account_credentials_allowed": False,
+            "execution_boundary": {
+                "mode": "paper_only",
+                "automatic_paper_execution": True,
+                "real_order_requires_human_action": True,
+                "broker_submission_available": False,
+                "live_order_allowed": False,
+            },
         }
         payload["audit_hash"] = _hash(payload)
         return payload
