@@ -229,6 +229,41 @@ def test_take_profit_quote_closes_position_and_records_realized_gain() -> None:
     assert result.journal.ledger.cash_entries[-1].cash_delta == Decimal(35470)
 
 
+def test_exit_cooldown_prevents_immediate_reentry_and_allows_later_entry() -> None:
+    session = LiveTmfPaperSimulation(config(reentry_cooldown_minutes=15))
+    enter(session)
+    exited = session.process_evaluation(
+        direction("AF"),
+        quote("21978", 1),
+        evaluated_at=NOW + timedelta(minutes=1),
+    )
+
+    blocked = session.process_evaluation(
+        direction("AU"),
+        quote("21979", 2),
+        evaluated_at=NOW + timedelta(minutes=2),
+    )
+    reopened = session.process_evaluation(
+        direction("AU"),
+        quote("21980", 16),
+        evaluated_at=NOW + timedelta(minutes=16),
+    )
+
+    assert exited.action is TmfPaperCycleAction.EXIT_FILLED
+    assert blocked.action is TmfPaperCycleAction.HOLD
+    assert blocked.reason_codes == ("REENTRY_COOLDOWN_ACTIVE",)
+    assert len(blocked.journal.events) == 2
+    assert reopened.action is TmfPaperCycleAction.ENTRY_FILLED
+    assert len(reopened.journal.ledger.positions) == 1
+
+
+def test_reentry_cooldown_config_rejects_invalid_values() -> None:
+    with pytest.raises(ValueError, match="reentry_cooldown_minutes"):
+        config(reentry_cooldown_minutes=-1)
+    with pytest.raises(ValueError, match="reentry_cooldown_minutes"):
+        config(reentry_cooldown_minutes=True)
+
+
 def test_margin_warning_is_recorded_before_stop_when_margin_equity_is_too_low() -> None:
     session = LiveTmfPaperSimulation(config(stop_loss_points=Decimal(1000)))
     enter(session)
