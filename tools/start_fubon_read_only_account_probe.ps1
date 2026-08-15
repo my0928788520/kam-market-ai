@@ -14,34 +14,34 @@ $probe = Join-Path $projectRoot 'tools\probe_fubon_position.py'
 $output = Join-Path $projectRoot 'debug\position\probe_result.json'
 
 if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
-    throw '找不到 .venv\Scripts\python.exe，請先安裝專案環境。'
+    throw 'Missing .venv\Scripts\python.exe. Install the project environment first.'
 }
 if (-not (Test-Path -LiteralPath $envFile -PathType Leaf)) {
-    throw '找不到本機 .env，請先設定富邦登入資料與憑證。'
+    throw 'Missing local .env. Configure Fubon credentials and certificate first.'
 }
 if (-not (Test-Path -LiteralPath $probe -PathType Leaf)) {
-    throw '找不到帳戶唯讀測試程式。'
+    throw 'Missing the read-only account probe.'
 }
 
-Write-Host '開始富邦帳戶唯讀連線測試；不會送出、修改或取消任何委託。'
+Write-Host 'Starting Fubon read-only account probe. No order can be placed, modified, or cancelled.'
 Push-Location $projectRoot
 try {
     & $python $probe --live --method $Method --timeout $TimeoutSeconds --output $output
     $probeExitCode = $LASTEXITCODE
     if (-not (Test-Path -LiteralPath $output -PathType Leaf)) {
-        throw '測試未產生安全結果檔。'
+        throw 'The probe did not create a safe result file.'
     }
 
     $result = Get-Content -LiteralPath $output -Raw -Encoding UTF8 | ConvertFrom-Json
     if ($probeExitCode -eq 0 -and $result.status -eq 'completed') {
         $rowCount = $result.summary.data_row_count
-        Write-Host "測試成功：帳戶已登入，期貨部位唯讀查詢完成；回傳筆數 $rowCount。"
-        Write-Host '安全限制仍有效：僅查詢，不具備真實下單能力。'
+        Write-Host "SUCCESS: Login and read-only futures position query completed. Row count: $rowCount."
+        Write-Host 'SAFETY: Query only. Live order capability is not available.'
         exit 0
     }
 
-    $reason = if ($result.status -eq 'timeout') { '連線逾時' } elseif ($result.exception_type) { $result.exception_type } else { '未知錯誤' }
-    Write-Error "測試失敗：$reason。結果已安全去識別化，請勿貼出 .env 或憑證內容。"
+    $reason = if ($result.status -eq 'timeout') { 'TIMEOUT' } elseif ($result.exception_type) { $result.exception_type } else { 'UNKNOWN_ERROR' }
+    Write-Error "FAILED: $reason. Output is redacted. Never share .env or certificate contents."
     exit 1
 }
 finally {
