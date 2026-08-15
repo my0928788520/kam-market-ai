@@ -168,6 +168,7 @@ class TmfPaperSimulationConfig:
     max_order_notional: Decimal = Decimal(1000000)
     max_daily_loss: Decimal = Decimal(10000)
     max_quote_age_seconds: int = 360
+    reentry_cooldown_minutes: int = 15
     initial_margin: Decimal = Decimal(35050)
     maintenance_margin: Decimal = Decimal(26900)
     margin_effective_at: datetime = datetime(2026, 8, 12, 5, 45, tzinfo=UTC)
@@ -209,6 +210,11 @@ class TmfPaperSimulationConfig:
             raise ValueError("Protection distances must align to the TMF tick size.")
         if isinstance(self.max_quote_age_seconds, bool) or self.max_quote_age_seconds <= 0:
             raise ValueError("max_quote_age_seconds must be positive.")
+        if (
+            isinstance(self.reentry_cooldown_minutes, bool)
+            or self.reentry_cooldown_minutes < 0
+        ):
+            raise ValueError("reentry_cooldown_minutes must be zero or positive.")
         if (
             self.dry_run is not True
             or self.live_order_allowed is not False
@@ -855,6 +861,29 @@ class LiveTmfPaperSimulation:
                 direction.direction,
                 quote,
                 reasons=(reason,),
+            )
+
+        last_exit = next(
+            (
+                event
+                for event in reversed(self.journal.events)
+                if event.event_type
+                in {
+                    TmfPaperPerformanceEventType.STOP_LOSS_EXIT,
+                    TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT,
+                }
+            ),
+            None,
+        )
+        if last_exit is not None and evaluated_at < (
+            last_exit.observed_at
+            + timedelta(minutes=self.config.reentry_cooldown_minutes)
+        ):
+            return self._result(
+                TmfPaperCycleAction.HOLD,
+                direction.direction,
+                quote,
+                reasons=("REENTRY_COOLDOWN_ACTIVE",),
             )
 
         proposal = build_paper_order_proposal(
