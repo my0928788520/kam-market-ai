@@ -185,6 +185,7 @@ class TmfPaperSimulationConfig:
     max_entries_per_risk_day: int = 3
     max_quote_age_seconds: int = 360
     reentry_cooldown_minutes: int = 15
+    entry_confirmation_candles: int = 1
     initial_margin: Decimal = Decimal(35050)
     maintenance_margin: Decimal = Decimal(26900)
     margin_effective_at: datetime = datetime(2026, 8, 12, 5, 45, tzinfo=UTC)
@@ -238,6 +239,11 @@ class TmfPaperSimulationConfig:
             or self.reentry_cooldown_minutes < 0
         ):
             raise ValueError("reentry_cooldown_minutes must be zero or positive.")
+        if (
+            isinstance(self.entry_confirmation_candles, bool)
+            or self.entry_confirmation_candles <= 0
+        ):
+            raise ValueError("entry_confirmation_candles must be positive.")
         if (
             self.dry_run is not True
             or self.live_order_allowed is not False
@@ -903,6 +909,8 @@ class LiveTmfPaperSimulation:
         self.config = config
         self.store = store
         self.journal = journal or TmfPaperSimulationJournal.empty(config)
+        self._pending_entry_direction: str | None = None
+        self._pending_entry_quote_hashes: list[str] = []
         if (
             self.journal.instrument != config.instrument
             or self.journal.point_value != config.point_value
@@ -973,11 +981,25 @@ class LiveTmfPaperSimulation:
             ("SHORT", "PAPER_SELL"): PaperTradingSide.SELL,
         }.get((direction.direction, direction.action))
         if entry_side is None:
+            self._reset_entry_confirmation()
             return self._result(
                 TmfPaperCycleAction.HOLD,
                 direction.direction,
                 quote,
                 reasons=("KAM_ENTRY_CONDITION_NOT_MET",),
+            )
+
+        if self._pending_entry_direction != direction.direction:
+            self._pending_entry_direction = direction.direction
+            self._pending_entry_quote_hashes = []
+        if quote.quote_hash not in self._pending_entry_quote_hashes:
+            self._pending_entry_quote_hashes.append(quote.quote_hash)
+        if len(self._pending_entry_quote_hashes) < self.config.entry_confirmation_candles:
+            return self._result(
+                TmfPaperCycleAction.HOLD,
+                direction.direction,
+                quote,
+                reasons=("ENTRY_CONFIRMATION_PENDING",),
             )
 
         last_exit = next(
@@ -1120,6 +1142,7 @@ class LiveTmfPaperSimulation:
         )
         margin_ledger = self._reserve_margin(matched.ledger, fill)
         self._publish(self.journal.with_event(event, margin_ledger))
+        self._reset_entry_confirmation()
         return self._result(
             TmfPaperCycleAction.ENTRY_FILLED,
             direction.direction,
@@ -1128,6 +1151,10 @@ class LiveTmfPaperSimulation:
             fills=(fill.fill_hash,),
             event=event,
         )
+
+    def _reset_entry_confirmation(self) -> None:
+        self._pending_entry_direction = None
+        self._pending_entry_quote_hashes = []
 
     def _matching_ledger(self, quote: TmfPaperQuote) -> PaperTradingLedger:
         """Give the generic matcher enough synthetic cash; final cash uses futures margin."""

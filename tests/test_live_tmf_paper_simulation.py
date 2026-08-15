@@ -88,6 +88,51 @@ def test_default_session_holds_without_kam_entry_condition() -> None:
     assert result.journal.events == ()
 
 
+def test_entry_requires_distinct_confirming_candles_when_configured() -> None:
+    session = LiveTmfPaperSimulation(config(entry_confirmation_candles=2))
+
+    first = session.process_evaluation(direction("AU"), quote("22000"), evaluated_at=NOW)
+    duplicate = session.process_evaluation(direction("AU"), quote("22000"), evaluated_at=NOW)
+    confirmed = session.process_evaluation(
+        direction("AU"),
+        quote("22001", 5),
+        evaluated_at=NOW + timedelta(minutes=5),
+    )
+
+    assert first.action is TmfPaperCycleAction.HOLD
+    assert first.reason_codes == ("ENTRY_CONFIRMATION_PENDING",)
+    assert duplicate.action is TmfPaperCycleAction.HOLD
+    assert duplicate.reason_codes == ("ENTRY_CONFIRMATION_PENDING",)
+    assert confirmed.action is TmfPaperCycleAction.ENTRY_FILLED
+
+
+def test_entry_confirmation_resets_when_alignment_breaks_or_flips() -> None:
+    session = LiveTmfPaperSimulation(config(entry_confirmation_candles=2))
+
+    session.process_evaluation(direction("AU"), quote("22000"), evaluated_at=NOW)
+    broken = session.process_evaluation(
+        direction("AF"), quote("22001", 5), evaluated_at=NOW + timedelta(minutes=5)
+    )
+    restarted = session.process_evaluation(
+        direction("AU"), quote("22002", 10), evaluated_at=NOW + timedelta(minutes=10)
+    )
+    flipped = session.process_evaluation(
+        direction("BU"), quote("22001", 15), evaluated_at=NOW + timedelta(minutes=15)
+    )
+
+    assert broken.reason_codes == ("KAM_ENTRY_CONDITION_NOT_MET",)
+    assert restarted.reason_codes == ("ENTRY_CONFIRMATION_PENDING",)
+    assert flipped.reason_codes == ("ENTRY_CONFIRMATION_PENDING",)
+    assert session.journal.events == ()
+
+
+def test_entry_confirmation_config_rejects_invalid_values() -> None:
+    with pytest.raises(ValueError, match="entry_confirmation_candles"):
+        config(entry_confirmation_candles=0)
+    with pytest.raises(ValueError, match="entry_confirmation_candles"):
+        config(entry_confirmation_candles=True)
+
+
 def test_confirmed_short_direction_opens_a_paper_short() -> None:
     session = LiveTmfPaperSimulation(config())
 
