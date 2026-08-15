@@ -28,7 +28,11 @@ from kam_market_ai.live_read_only.five_timeframe_snapshot import (
     write_five_timeframe_snapshot,
 )
 from kam_market_ai.models import Candle, Instrument
-from kam_market_ai.notifications import LinePushNotifier, build_pending_order_alert
+from kam_market_ai.notifications import (
+    LinePushNotifier,
+    build_paper_exit_alert,
+    build_pending_order_alert,
+)
 from kam_market_ai.paper_trading.live_tmf_simulation import (
     LiveTmfPaperSimulation,
     TmfPaperJournalStore,
@@ -296,6 +300,7 @@ def main(
     paper_session: LiveTmfPaperSimulation | None = None
     line_notifier: LinePushNotifier | None = None
     active_line_alert = None
+    active_line_alert_is_exit = False
     paper_runtime: dict[str, object] = {"armed": False, "action": "DISARMED"}
     if args.line_alerts:
         if not args.paper_test_armed:
@@ -363,7 +368,7 @@ def main(
             return 2
 
     def capture_verified_refresh() -> None:
-        nonlocal active_line_alert
+        nonlocal active_line_alert, active_line_alert_is_exit
         quote_source.refresh_safely()
         chart_source.capture_latest()
         if paper_session is None or verifier.latest_candle_result is None:
@@ -373,16 +378,33 @@ def main(
                 verifier.latest_candle_result,
                 evaluated_at=datetime.now(UTC),
             )
-            paper_runtime.update(result.safe_payload())
+            safe_result = result.safe_payload()
+            paper_runtime.update(safe_result)
             paper_runtime["armed"] = True
             if line_notifier is not None:
-                alert = build_pending_order_alert(result.safe_payload())
-                if alert is not None:
-                    active_line_alert = alert
+                exit_alert = build_paper_exit_alert(safe_result)
+                entry_alert = build_pending_order_alert(safe_result)
+                if exit_alert is not None:
+                    active_line_alert = exit_alert
+                    active_line_alert_is_exit = True
+                elif entry_alert is not None:
+                    active_line_alert = entry_alert
+                    active_line_alert_is_exit = False
                 if active_line_alert is not None:
                     try:
-                        sent = line_notifier.send_due(active_line_alert, datetime.now(UTC))
-                        paper_runtime["line_alert_status"] = "SENT" if sent else "WAITING_OR_DUPLICATE"
+                        if active_line_alert_is_exit:
+                            sent = line_notifier.send_once(active_line_alert)
+                            paper_runtime["line_alert_status"] = (
+                                "EXIT_SENT" if sent else "WAITING_OR_DUPLICATE"
+                            )
+                            if sent:
+                                active_line_alert = None
+                                active_line_alert_is_exit = False
+                        else:
+                            sent = line_notifier.send_due(active_line_alert, datetime.now(UTC))
+                            paper_runtime["line_alert_status"] = (
+                                "SENT" if sent else "WAITING_OR_DUPLICATE"
+                            )
                     except (OSError, RuntimeError, TimeoutError):
                         paper_runtime["line_alert_status"] = "RETRY_PENDING"
         except (OSError, TypeError, ValueError):

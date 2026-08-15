@@ -6,6 +6,8 @@ import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from decimal import Decimal
+from hashlib import sha256
 from typing import Any
 from urllib.request import Request, urlopen
 
@@ -57,6 +59,51 @@ def build_pending_order_alert(payload: Mapping[str, object]) -> LinePendingOrder
         )
     )
     return LinePendingOrderAlert(proposal_hash, text, expires)
+
+
+def build_paper_exit_alert(payload: Mapping[str, object]) -> LinePendingOrderAlert | None:
+    """Build one close alert and cancel the meaning of any pending entry reminder."""
+    if payload.get("action") != "exit_filled" or payload.get("live_order_allowed") is not False:
+        return None
+    event = payload.get("performance_event")
+    boundary = payload.get("execution_boundary")
+    if not isinstance(event, Mapping) or not isinstance(boundary, Mapping):
+        return None
+    if boundary.get("broker_submission_available") is not False:
+        return None
+    event_type = str(event.get("event_type", ""))
+    labels = {
+        "stop_loss_exit": "停損平倉",
+        "take_profit_exit": "停利平倉",
+    }
+    if event_type not in labels:
+        return None
+    proposal_hash = event.get("proposal_hash")
+    fill_hash = event.get("fill_hash")
+    if not isinstance(proposal_hash, str) or len(proposal_hash) != 64 or not fill_hash:
+        return None
+    observed = datetime.fromisoformat(str(event["observed_at"]).replace("Z", "+00:00"))
+    identity = sha256(f"{proposal_hash}:{event_type}:{fill_hash}".encode("utf-8")).hexdigest()
+    side = (
+        "偏多"
+        if Decimal(str(event.get("stop_loss_price"))) < Decimal(str(event.get("entry_price")))
+        else "偏空"
+    )
+    text = "\n".join(
+        (
+            f"KAM 模擬{labels[event_type]}",
+            f"原方向：{side}",
+            f"商品：{event['instrument']}",
+            f"口數：{event['quantity']} 口",
+            f"進場價：{event['entry_price']}",
+            f"平倉價：{event['current_price']}",
+            f"已實現損益：{event['realized_pnl']}",
+            f"平倉時間：{observed.isoformat()}",
+            "狀態：模擬部位已平倉，舊提醒已停止",
+            "安全：本通知不會送出真實委託",
+        )
+    )
+    return LinePendingOrderAlert(identity, text, observed + timedelta(minutes=5))
 
 
 @dataclass(slots=True, repr=False)

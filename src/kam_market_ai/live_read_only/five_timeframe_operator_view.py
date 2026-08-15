@@ -58,6 +58,7 @@ _LINE_ALERT_STATUS_LABELS = {
     "DISABLED": "未啟用",
     "ARMED_WAITING_FOR_PAPER_PROPOSAL": "已啟用・等待模擬提案",
     "SENT": "已傳送",
+    "EXIT_SENT": "平倉通知已傳送",
     "WAITING_OR_DUPLICATE": "等待下一階段",
     "RETRY_PENDING": "傳送失敗・等待重試",
 }

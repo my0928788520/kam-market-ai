@@ -3,6 +3,7 @@ from json import loads
 
 from kam_market_ai.notifications.line_pending_order import (
     LinePushNotifier,
+    build_paper_exit_alert,
     build_pending_order_alert,
 )
 
@@ -106,3 +107,45 @@ def test_wake_up_near_expiry_sends_only_one_latest_reminder() -> None:
     assert notifier.send_due(alert, alert.expires_at - timedelta(minutes=1)) is True
     assert notifier.send_due(alert, alert.expires_at - timedelta(seconds=30)) is False
     assert len(calls) == 1
+
+
+def test_stop_loss_exit_builds_one_paper_close_alert() -> None:
+    value = payload()
+    value["action"] = "exit_filled"
+    value["performance_event"].update(
+        {
+            "event_type": "stop_loss_exit",
+            "current_price": "21978",
+            "realized_pnl": "-220",
+            "fill_hash": "f" * 64,
+            "proposal_hash": "a" * 64,
+        }
+    )
+
+    alert = build_paper_exit_alert(value)
+
+    assert alert is not None
+    assert "模擬停損平倉" in alert.text
+    assert "已實現損益：-220" in alert.text
+    assert "舊提醒已停止" in alert.text
+    assert alert.live_order_allowed is False
+
+
+def test_take_profit_exit_is_deduplicated_separately_from_entry() -> None:
+    value = payload()
+    value["action"] = "exit_filled"
+    value["performance_event"].update(
+        {
+            "event_type": "take_profit_exit",
+            "current_price": "22042",
+            "realized_pnl": "420",
+            "fill_hash": "e" * 64,
+            "proposal_hash": "a" * 64,
+        }
+    )
+    entry_alert = build_pending_order_alert(payload())
+    exit_alert = build_paper_exit_alert(value)
+
+    assert entry_alert is not None and exit_alert is not None
+    assert entry_alert.proposal_hash != exit_alert.proposal_hash
+    assert "模擬停利平倉" in exit_alert.text
