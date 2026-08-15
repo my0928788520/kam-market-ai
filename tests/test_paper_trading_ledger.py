@@ -56,6 +56,22 @@ def test_insufficient_position_is_atomic_and_shorting_is_rejected_by_default() -
     assert initial.positions == ()
 
 
+def test_short_sell_and_buy_to_cover_keep_ledger_consistent() -> None:
+    initial = PaperTradingLedger(Decimal("1000"), allow_short=True)
+    shorted = apply_paper_fill(initial, _fill(PaperTradingSide.SELL, price="100")).ledger
+
+    assert shorted.positions[0].quantity == Decimal("-1")
+    assert shorted.positions[0].average_price == Decimal("100")
+    assert shorted.cash_balance == Decimal("1099")
+
+    covered = apply_paper_fill(
+        shorted,
+        _fill(PaperTradingSide.BUY, price="90", fees="2"),
+    ).ledger
+    assert covered.positions == ()
+    assert covered.cash_balance == Decimal("1007")
+
+
 def test_ledger_is_immutable_and_never_exposes_live_capabilities() -> None:
     ledger = PaperTradingLedger(
         Decimal("1000"),
