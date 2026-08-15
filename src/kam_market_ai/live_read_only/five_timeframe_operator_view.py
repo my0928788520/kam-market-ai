@@ -52,6 +52,7 @@ _PAPER_REASON_LABELS = {
     "REENTRY_COOLDOWN_ACTIVE": "出場冷卻期尚未結束",
     "MAX_DAILY_LOSS_EXCEEDED": "單日虧損已達停止交易上限",
     "MAX_DAILY_ENTRIES_EXCEEDED": "單日進場次數已達上限",
+    "CONSECUTIVE_STOP_LOSS_LIMIT_REACHED": "連續兩次停損・本交易日停止進場",
     "QUOTE_STALE": "行情資料過期",
     "ENTRY_CONFIRMATION_PENDING": "等待下一根 5 分 K 確認",
     "ENTRY_PRICE_CONFIRMATION_PENDING": "短線尚未延續・重新等待確認",

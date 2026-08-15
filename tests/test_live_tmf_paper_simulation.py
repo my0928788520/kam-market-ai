@@ -632,6 +632,97 @@ def test_daily_entry_limit_rejects_invalid_configuration() -> None:
         config(max_entries_per_risk_day=True)
 
 
+def test_two_consecutive_stop_losses_block_same_risk_day() -> None:
+    session = LiveTmfPaperSimulation(
+        config(
+            max_consecutive_stop_losses_per_risk_day=2,
+            max_entries_per_risk_day=3,
+            reentry_cooldown_minutes=0,
+        )
+    )
+    for entry_minute in (0, 2):
+        entered = session.process_evaluation(
+            direction("AU"),
+            quote("22000", entry_minute),
+            evaluated_at=NOW + timedelta(minutes=entry_minute),
+        )
+        stopped = session.process_evaluation(
+            direction("AF"),
+            quote("21978", entry_minute + 1),
+            evaluated_at=NOW + timedelta(minutes=entry_minute + 1),
+        )
+        assert entered.action is TmfPaperCycleAction.ENTRY_FILLED
+        assert stopped.performance_event is not None
+        assert (
+            stopped.performance_event.event_type
+            is TmfPaperPerformanceEventType.STOP_LOSS_EXIT
+        )
+
+    blocked = session.process_evaluation(
+        direction("AU"),
+        quote("22000", 4),
+        evaluated_at=NOW + timedelta(minutes=4),
+    )
+
+    assert blocked.action is TmfPaperCycleAction.REJECTED
+    assert blocked.reason_codes == ("CONSECUTIVE_STOP_LOSS_LIMIT_REACHED",)
+    assert len(blocked.journal.events) == 4
+
+
+def test_take_profit_breaks_stop_loss_streak_and_next_risk_day_resets() -> None:
+    session = LiveTmfPaperSimulation(
+        config(
+            max_consecutive_stop_losses_per_risk_day=2,
+            max_entries_per_risk_day=5,
+            reentry_cooldown_minutes=0,
+        )
+    )
+    for entry_minute, exit_price in ((0, "21978"), (2, "22042"), (4, "21978")):
+        session.process_evaluation(
+            direction("AU"),
+            quote("22000", entry_minute),
+            evaluated_at=NOW + timedelta(minutes=entry_minute),
+        )
+        session.process_evaluation(
+            direction("AF"),
+            quote(exit_price, entry_minute + 1),
+            evaluated_at=NOW + timedelta(minutes=entry_minute + 1),
+        )
+
+    same_day = session.process_evaluation(
+        direction("AU"),
+        quote("22000", 6),
+        evaluated_at=NOW + timedelta(minutes=6),
+    )
+    assert same_day.action is TmfPaperCycleAction.ENTRY_FILLED
+
+    session.process_evaluation(
+        direction("AF"),
+        quote("21978", 7),
+        evaluated_at=NOW + timedelta(minutes=7),
+    )
+    blocked = session.process_evaluation(
+        direction("AU"),
+        quote("22000", 8),
+        evaluated_at=NOW + timedelta(minutes=8),
+    )
+    next_day = session.process_evaluation(
+        direction("AU"),
+        quote("22000", 24 * 60 + 8),
+        evaluated_at=NOW + timedelta(days=1, minutes=8),
+    )
+
+    assert blocked.reason_codes == ("CONSECUTIVE_STOP_LOSS_LIMIT_REACHED",)
+    assert next_day.action is TmfPaperCycleAction.ENTRY_FILLED
+
+
+def test_consecutive_stop_loss_limit_rejects_invalid_configuration() -> None:
+    with pytest.raises(ValueError, match="max_consecutive_stop_losses_per_risk_day"):
+        config(max_consecutive_stop_losses_per_risk_day=0)
+    with pytest.raises(ValueError, match="max_consecutive_stop_losses_per_risk_day"):
+        config(max_consecutive_stop_losses_per_risk_day=True)
+
+
 def test_margin_warning_is_recorded_before_stop_when_margin_equity_is_too_low() -> None:
     session = LiveTmfPaperSimulation(config(stop_loss_points=Decimal(1000)))
     enter(session)

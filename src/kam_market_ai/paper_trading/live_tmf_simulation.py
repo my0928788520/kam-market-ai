@@ -183,6 +183,7 @@ class TmfPaperSimulationConfig:
     max_order_notional: Decimal = Decimal(1000000)
     max_daily_loss: Decimal = Decimal(10000)
     max_entries_per_risk_day: int = 3
+    max_consecutive_stop_losses_per_risk_day: int = 2
     max_quote_age_seconds: int = 360
     reentry_cooldown_minutes: int = 15
     entry_confirmation_candles: int = 1
@@ -240,6 +241,13 @@ class TmfPaperSimulationConfig:
             or self.max_entries_per_risk_day <= 0
         ):
             raise ValueError("max_entries_per_risk_day must be positive.")
+        if (
+            isinstance(self.max_consecutive_stop_losses_per_risk_day, bool)
+            or self.max_consecutive_stop_losses_per_risk_day <= 0
+        ):
+            raise ValueError(
+                "max_consecutive_stop_losses_per_risk_day must be positive."
+            )
         if (
             isinstance(self.reentry_cooldown_minutes, bool)
             or self.reentry_cooldown_minutes < 0
@@ -1074,6 +1082,27 @@ class LiveTmfPaperSimulation:
                 direction.direction,
                 quote,
                 reasons=("MAX_DAILY_ENTRIES_EXCEEDED",),
+            )
+
+        consecutive_stop_losses = 0
+        for event in reversed(self.journal.events):
+            if _taiwan_risk_day(event.observed_at) != current_risk_day:
+                continue
+            if event.event_type is TmfPaperPerformanceEventType.STOP_LOSS_EXIT:
+                consecutive_stop_losses += 1
+                continue
+            if event.event_type is TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT:
+                break
+        if (
+            consecutive_stop_losses
+            >= self.config.max_consecutive_stop_losses_per_risk_day
+        ):
+            self._reset_entry_confirmation()
+            return self._result(
+                TmfPaperCycleAction.REJECTED,
+                direction.direction,
+                quote,
+                reasons=("CONSECUTIVE_STOP_LOSS_LIMIT_REACHED",),
             )
 
         proposal = build_paper_order_proposal(
