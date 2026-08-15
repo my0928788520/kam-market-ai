@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from json import loads
+from pathlib import Path
 
 from kam_market_ai.notifications.line_pending_order import (
     LinePushNotifier,
@@ -149,3 +150,45 @@ def test_take_profit_exit_is_deduplicated_separately_from_entry() -> None:
     assert entry_alert is not None and exit_alert is not None
     assert entry_alert.proposal_hash != exit_alert.proposal_hash
     assert "模擬停利平倉" in exit_alert.text
+
+
+def test_delivery_deduplication_survives_process_restart(tmp_path: Path) -> None:
+    state_path = tmp_path / "line_delivery.json"
+    calls = []
+    alert = build_pending_order_alert(payload())
+    assert alert is not None
+    first = LinePushNotifier(
+        "secret-token",
+        "U-recipient",
+        opener=lambda request, timeout: calls.append(request) or Response(),
+        state_path=state_path,
+    )
+    assert first.send_once(alert) is True
+
+    restarted = LinePushNotifier(
+        "secret-token",
+        "U-recipient",
+        opener=lambda request, timeout: calls.append(request) or Response(),
+        state_path=state_path,
+    )
+
+    assert restarted.send_once(alert) is False
+    assert len(calls) == 1
+    saved = state_path.read_text(encoding="utf-8")
+    assert "secret-token" not in saved and "U-recipient" not in saved
+    assert '"live_order_allowed":false' in saved
+
+
+def test_corrupted_delivery_state_fails_closed(tmp_path: Path) -> None:
+    state_path = tmp_path / "line_delivery.json"
+    state_path.write_text(
+        '{"schema":"kam-line-paper-delivery-v1","sent_stages":[],"state_hash":"bad"}',
+        encoding="utf-8",
+    )
+
+    try:
+        LinePushNotifier("secret-token", "U-recipient", state_path=state_path)
+    except ValueError as error:
+        assert "delivery state" in str(error)
+    else:
+        raise AssertionError("corrupted delivery state must fail closed")

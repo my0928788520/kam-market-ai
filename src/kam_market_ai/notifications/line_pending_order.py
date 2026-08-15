@@ -8,10 +8,71 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal
 from hashlib import sha256
+from os import replace
+from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
 
 LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
+LINE_DELIVERY_STATE_SCHEMA = "kam-line-paper-delivery-v1"
+
+
+def _delivery_state_payload(sent_stages: set[tuple[str, int]]) -> dict[str, object]:
+    entries = [
+        {"alert_hash": alert_hash, "stage": stage}
+        for alert_hash, stage in sorted(sent_stages)
+    ]
+    canonical = {
+        "schema": LINE_DELIVERY_STATE_SCHEMA,
+        "sent_stages": entries,
+        "live_order_allowed": False,
+    }
+    canonical["state_hash"] = sha256(
+        json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return canonical
+
+
+def _load_delivery_state(path: Path) -> set[tuple[str, int]]:
+    if not path.exists():
+        return set()
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or payload.get("schema") != LINE_DELIVERY_STATE_SCHEMA:
+        raise ValueError("invalid LINE delivery state")
+    state_hash = payload.pop("state_hash", None)
+    expected = sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    if state_hash != expected or payload.get("live_order_allowed") is not False:
+        raise ValueError("invalid LINE delivery state hash")
+    entries = payload.get("sent_stages")
+    if not isinstance(entries, list):
+        raise ValueError("invalid LINE delivery entries")
+    sent: set[tuple[str, int]] = set()
+    for item in entries:
+        if not isinstance(item, dict):
+            raise ValueError("invalid LINE delivery entry")
+        alert_hash = item.get("alert_hash")
+        stage = item.get("stage")
+        if not isinstance(alert_hash, str) or len(alert_hash) != 64 or stage not in {0, 1, 2}:
+            raise ValueError("invalid LINE delivery identity")
+        sent.add((alert_hash, stage))
+    return sent
+
+
+def _save_delivery_state(path: Path, sent_stages: set[tuple[str, int]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(
+            _delivery_state_payload(sent_stages),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+    )
+    replace(temporary, path)
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +173,7 @@ class LinePushNotifier:
     recipient_user_id: str
     timeout_seconds: float = 5
     opener: Callable[..., Any] = urlopen
+    state_path: str | Path | None = None
     _sent_stages: set[tuple[str, int]] = field(default_factory=set, init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -119,13 +181,19 @@ class LinePushNotifier:
             raise ValueError("LINE alert configuration is incomplete")
         if self.timeout_seconds <= 0:
             raise ValueError("LINE alert timeout must be positive")
+        if self.state_path is not None:
+            self.state_path = Path(self.state_path)
+            self._sent_stages.update(_load_delivery_state(self.state_path))
 
     def send_once(self, alert: LinePendingOrderAlert) -> bool:
         if not isinstance(alert, LinePendingOrderAlert):
             raise TypeError("LinePendingOrderAlert is required")
         if (alert.proposal_hash, 0) in self._sent_stages:
             return False
-        return self._send(alert, alert.text, stage=0)
+        self._send(alert, alert.text)
+        self._sent_stages.add((alert.proposal_hash, 0))
+        self._persist()
+        return True
 
     def send_due(self, alert: LinePendingOrderAlert, now: datetime) -> bool:
         """Send immediate, three-minute, and expiry warnings without a backlog burst."""
@@ -140,12 +208,12 @@ class LinePushNotifier:
         if key in self._sent_stages:
             return False
         prefix = {0: "", 1: "KAM 再次提醒\n", 2: "KAM 委託建議即將失效\n"}[stage]
-        sent = self._send(alert, prefix + alert.text, stage=stage)
-        if sent:
-            self._sent_stages.update((alert.proposal_hash, item) for item in range(stage + 1))
-        return sent
+        self._send(alert, prefix + alert.text)
+        self._sent_stages.update((alert.proposal_hash, item) for item in range(stage + 1))
+        self._persist()
+        return True
 
-    def _send(self, alert: LinePendingOrderAlert, text: str, *, stage: int) -> bool:
+    def _send(self, alert: LinePendingOrderAlert, text: str) -> None:
         body = json.dumps(
             {"to": self.recipient_user_id, "messages": [{"type": "text", "text": text}]},
             ensure_ascii=False,
@@ -164,5 +232,7 @@ class LinePushNotifier:
             status = int(getattr(response, "status", 0))
             if status < 200 or status >= 300:
                 raise RuntimeError("LINE_PUSH_REJECTED")
-        self._sent_stages.add((alert.proposal_hash, stage))
-        return True
+
+    def _persist(self) -> None:
+        if isinstance(self.state_path, Path):
+            _save_delivery_state(self.state_path, self._sent_stages)

@@ -86,7 +86,10 @@ if ($LineAlerts) {
     if (-not $PaperTestArmed) {
         throw 'LineAlerts requires PaperTestArmed.'
     }
-    $arguments += '--line-alerts'
+    $arguments += @(
+        '--line-alerts',
+        '--line-alert-state', (Join-Path $projectRoot "debug\notifications\${productSlug}_line_delivery.json")
+    )
 }
 
 Push-Location $projectRoot

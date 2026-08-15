@@ -191,6 +191,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="將新的 Paper Trading 進場提案推播至 LINE；不送出真實委託",
     )
+    parser.add_argument(
+        "--line-alert-state",
+        default="debug/notifications/tmf_line_delivery.json",
+        help="不含密鑰的 LINE 傳送去重與重試狀態",
+    )
     parser.add_argument("--open-browser", action="store_true")
     return parser
 
@@ -311,6 +316,7 @@ def main(
             line_notifier = LinePushNotifier(
                 local_env.get("KAM_LINE_CHANNEL_ACCESS_TOKEN", ""),
                 local_env.get("KAM_LINE_RECIPIENT_USER_ID", ""),
+                state_path=args.line_alert_state,
             )
         except ValueError:
             print(json.dumps({"success": False, "failure_stage": "LINE_ALERT_CONFIGURATION_ERROR"}))
@@ -512,6 +518,7 @@ def main(
                 "paper_manual_approval_granted": args.paper_test_armed,
                 "line_alerts_enabled": line_notifier is not None,
                 "line_alert_mode": "paper_proposal_only" if line_notifier is not None else None,
+                "line_alert_state": args.line_alert_state if line_notifier is not None else None,
                 "paper_journal": args.paper_journal if args.paper_test_armed else None,
                 "paper_stop_loss_points": 20 if args.paper_test_armed else None,
                 "paper_take_profit_points": 40 if args.paper_test_armed else None,
