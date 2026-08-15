@@ -579,8 +579,8 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
         banner_start = html.index("<div class='banner'>")
         banner_end = html.index("</div>", banner_start) + len("</div>")
         html = html[:banner_start] + f"<div class='banner market-status-line' title='OFFLINE_DEMO'>離線示範行情｜{_market_status_line(snapshot)}</div>" + html[banner_end:]
-    html = html.replace("<h2>模擬委託建議</h2>", "<h2>模擬委託建議</h2><p>決策呈現已切換；模擬委託流程尚未接入此商品 snapshot。</p>", 1)
-    html = html.replace("<h2>模擬撮合結果</h2>", "<h2>模擬撮合結果</h2><p>決策呈現已切換；模擬委託流程尚未接入此商品 snapshot。</p>", 1)
+    html = html.replace("<h2>模擬委託建議</h2>", "<h2>模擬委託建議</h2><p>決策呈現已切換；模擬委託流程尚未接入此商品資料快照。</p>", 1)
+    html = html.replace("<h2>模擬撮合結果</h2>", "<h2>模擬撮合結果</h2><p>決策呈現已切換；模擬委託流程尚未接入此商品資料快照。</p>", 1)
     return html.replace("</main></body>", _account_drawer_html() + "</main></body>", 1)
 
 
