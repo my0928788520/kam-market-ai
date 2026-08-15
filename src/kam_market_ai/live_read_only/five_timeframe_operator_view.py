@@ -51,6 +51,7 @@ _PAPER_REASON_LABELS = {
     "INSUFFICIENT_INITIAL_MARGIN": "模擬保證金不足",
     "REENTRY_COOLDOWN_ACTIVE": "出場冷卻期尚未結束",
     "MAX_DAILY_LOSS_EXCEEDED": "單日虧損已達停止交易上限",
+    "MAX_DAILY_ENTRIES_EXCEEDED": "單日進場次數已達上限",
     "QUOTE_STALE": "行情資料過期",
 }
 
