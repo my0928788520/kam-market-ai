@@ -179,6 +179,7 @@ class TmfPaperSimulationConfig:
     initial_cash: Decimal = Decimal(1000000)
     max_order_notional: Decimal = Decimal(1000000)
     max_daily_loss: Decimal = Decimal(10000)
+    max_entries_per_risk_day: int = 3
     max_quote_age_seconds: int = 360
     reentry_cooldown_minutes: int = 15
     initial_margin: Decimal = Decimal(35050)
@@ -222,6 +223,11 @@ class TmfPaperSimulationConfig:
             raise ValueError("Protection distances must align to the TMF tick size.")
         if isinstance(self.max_quote_age_seconds, bool) or self.max_quote_age_seconds <= 0:
             raise ValueError("max_quote_age_seconds must be positive.")
+        if (
+            isinstance(self.max_entries_per_risk_day, bool)
+            or self.max_entries_per_risk_day <= 0
+        ):
+            raise ValueError("max_entries_per_risk_day must be positive.")
         if (
             isinstance(self.reentry_cooldown_minutes, bool)
             or self.reentry_cooldown_minutes < 0
@@ -906,6 +912,21 @@ class LiveTmfPaperSimulation:
                 direction.direction,
                 quote,
                 reasons=("REENTRY_COOLDOWN_ACTIVE",),
+            )
+
+        current_risk_day = _taiwan_risk_day(evaluated_at)
+        entries_today = sum(
+            1
+            for event in self.journal.events
+            if event.event_type is TmfPaperPerformanceEventType.ENTRY
+            and _taiwan_risk_day(event.observed_at) == current_risk_day
+        )
+        if entries_today >= self.config.max_entries_per_risk_day:
+            return self._result(
+                TmfPaperCycleAction.REJECTED,
+                direction.direction,
+                quote,
+                reasons=("MAX_DAILY_ENTRIES_EXCEEDED",),
             )
 
         proposal = build_paper_order_proposal(
