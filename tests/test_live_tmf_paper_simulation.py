@@ -296,6 +296,60 @@ def test_reentry_cooldown_config_rejects_invalid_values() -> None:
         config(reentry_cooldown_minutes=True)
 
 
+def test_daily_loss_limit_blocks_same_risk_day_and_resets_next_risk_day() -> None:
+    session = LiveTmfPaperSimulation(
+        config(max_daily_loss=Decimal("200"), reentry_cooldown_minutes=15)
+    )
+    enter(session)
+    stopped = session.process_evaluation(
+        direction("AF"),
+        quote("21978", 1),
+        evaluated_at=NOW + timedelta(minutes=1),
+    )
+
+    blocked = session.process_evaluation(
+        direction("AU"),
+        quote("21980", 16),
+        evaluated_at=NOW + timedelta(minutes=16),
+    )
+    next_day = session.process_evaluation(
+        direction("AU"),
+        quote("21981", 24 * 60 + 16),
+        evaluated_at=NOW + timedelta(days=1, minutes=16),
+    )
+
+    assert stopped.performance_event is not None
+    assert stopped.performance_event.realized_pnl == Decimal("-220")
+    assert blocked.action is TmfPaperCycleAction.REJECTED
+    assert blocked.reason_codes == ("MAX_DAILY_LOSS_EXCEEDED",)
+    assert next_day.action is TmfPaperCycleAction.ENTRY_FILLED
+
+
+def test_taiwan_risk_day_keeps_overnight_session_losses_together() -> None:
+    session = LiveTmfPaperSimulation(
+        config(max_daily_loss=Decimal("200"), reentry_cooldown_minutes=0)
+    )
+    night_start = datetime(2026, 8, 14, 19, 0, tzinfo=UTC)
+    night_quote = TmfPaperQuote("TMFH6", Decimal("22000"), night_start, "a" * 64)
+    session.process_evaluation(direction("AU"), night_quote, evaluated_at=night_start)
+    exit_time = night_start + timedelta(minutes=1)
+    session.process_evaluation(
+        direction("AF"),
+        TmfPaperQuote("TMFH6", Decimal("21978"), exit_time, "b" * 64),
+        evaluated_at=exit_time,
+    )
+
+    before_boundary = night_start + timedelta(hours=2)
+    blocked = session.process_evaluation(
+        direction("AU"),
+        TmfPaperQuote("TMFH6", Decimal("21980"), before_boundary, "c" * 64),
+        evaluated_at=before_boundary,
+    )
+
+    assert blocked.action is TmfPaperCycleAction.REJECTED
+    assert blocked.reason_codes == ("MAX_DAILY_LOSS_EXCEEDED",)
+
+
 def test_margin_warning_is_recorded_before_stop_when_margin_equity_is_too_low() -> None:
     session = LiveTmfPaperSimulation(config(stop_loss_points=Decimal(1000)))
     enter(session)
