@@ -80,22 +80,34 @@ def apply_paper_fill(ledger: PaperTradingLedger, fill: PaperTradingFill) -> Pape
     """Apply exactly one fill atomically or raise without changing the source ledger."""
     positions = {item.instrument: item for item in ledger.positions}
     notional = fill.quantity * fill.price
+    old = positions.get(fill.instrument)
     if fill.side is PaperTradingSide.BUY:
         debit = notional + fill.fees
         if not ledger.allow_negative_cash and ledger.cash_balance < debit: raise ValueError("INSUFFICIENT_CASH")
         balance = ledger.cash_balance - debit
-        old = positions.get(fill.instrument)
-        quantity = fill.quantity + (old.quantity if old else Decimal("0"))
-        average = fill.price if old is None else ((old.quantity * old.average_price) + notional) / quantity
-        positions[fill.instrument] = PaperTradingPosition(fill.instrument, quantity, average, old.realized_pnl if old else Decimal("0"), fill.filled_at)
+        if old is not None and old.quantity < 0:
+            if fill.quantity > abs(old.quantity): raise ValueError("POSITION_REVERSAL_NOT_ALLOWED")
+            quantity = old.quantity + fill.quantity
+            realized = old.realized_pnl + ((old.average_price - fill.price) * fill.quantity) - fill.fees
+            if quantity == 0: positions.pop(fill.instrument, None)
+            else: positions[fill.instrument] = PaperTradingPosition(fill.instrument, quantity, old.average_price, realized, fill.filled_at)
+        else:
+            quantity = fill.quantity + (old.quantity if old else Decimal("0"))
+            average = fill.price if old is None else ((old.quantity * old.average_price) + notional) / quantity
+            positions[fill.instrument] = PaperTradingPosition(fill.instrument, quantity, average, old.realized_pnl if old else Decimal("0"), fill.filled_at)
         delta = -debit
     else:
-        old = positions.get(fill.instrument)
-        if old is None or (not ledger.allow_short and old.quantity < fill.quantity): raise ValueError("INSUFFICIENT_POSITION")
+        if old is None and not ledger.allow_short: raise ValueError("INSUFFICIENT_POSITION")
+        if old is not None and old.quantity > 0 and fill.quantity > old.quantity: raise ValueError("POSITION_REVERSAL_NOT_ALLOWED")
         quantity = (old.quantity if old else Decimal("0")) - fill.quantity
         balance = ledger.cash_balance + notional - fill.fees
         if quantity == 0: positions.pop(fill.instrument, None)
-        else: positions[fill.instrument] = PaperTradingPosition(fill.instrument, quantity, old.average_price, old.realized_pnl + ((fill.price - old.average_price) * fill.quantity) - fill.fees, fill.filled_at)
+        elif quantity < 0:
+            previous_short = abs(old.quantity) if old is not None and old.quantity < 0 else Decimal("0")
+            average = fill.price if previous_short == 0 else ((previous_short * old.average_price) + notional) / abs(quantity)
+            positions[fill.instrument] = PaperTradingPosition(fill.instrument, quantity, average, old.realized_pnl if old else Decimal("0"), fill.filled_at)
+        else:
+            positions[fill.instrument] = PaperTradingPosition(fill.instrument, quantity, old.average_price, old.realized_pnl + ((fill.price - old.average_price) * fill.quantity) - fill.fees, fill.filled_at)
         delta = notional - fill.fees
     entry = PaperTradingCashLedgerEntry(fill.fill_id, fill.fill_id, delta, fill.fees, balance)
     updated = PaperTradingLedger(balance, tuple(sorted(positions.values(), key=lambda item: item.instrument)), (*ledger.cash_entries, entry), ledger.used_idempotency_keys, ledger.allow_negative_cash, ledger.allow_short)
