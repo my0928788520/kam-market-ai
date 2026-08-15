@@ -259,7 +259,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return worker(args.method, args.progress)
     payload = run_probe(method=args.method, timeout=args.timeout, output=Path(args.output), dry_run=args.dry_run)
     print(json.dumps({"status": payload.get("status", payload.get("mode")), "output": str(args.output)}, ensure_ascii=False))
-    return 0
+    # A live probe is useful as a Monday preflight only when its exit status can
+    # be trusted by the launcher.  Dry-run remains successful by definition.
+    return 0 if args.dry_run or payload.get("status") == "completed" else 1
 
 
 if __name__ == "__main__":
