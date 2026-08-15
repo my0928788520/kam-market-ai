@@ -16,6 +16,7 @@ from json import dumps, loads
 from os import replace
 from pathlib import Path
 from typing import Any, cast
+from zoneinfo import ZoneInfo
 
 from kam_market_ai.live_read_only.five_timeframe_analysis_preview import (
     build_verified_five_timeframe_analysis_preview,
@@ -65,6 +66,8 @@ LIVE_TMF_PAPER_SIMULATION_VERSION = "0.2"
 LIVE_TMF_PAPER_JOURNAL_SCHEMA = "kam-live-tmf-paper-journal-v2"
 LEGACY_TMF_PAPER_SIMULATION_VERSION = "0.1"
 LEGACY_TMF_PAPER_JOURNAL_SCHEMA = "kam-live-tmf-paper-journal-v1"
+TAIWAN_RISK_TIMEZONE = ZoneInfo("Asia/Taipei")
+TAIWAN_RISK_DAY_BOUNDARY_HOUR = 6
 
 
 def _hash(payload: object) -> str:
@@ -98,6 +101,15 @@ def _decimal(value: Decimal, field: str, *, positive: bool = False) -> str:
     if positive and value <= 0:
         raise ValueError(f"{field} must be positive.")
     return str(value)
+
+
+def _taiwan_risk_day(value: datetime) -> str:
+    """Group day and after-hours activity into one Taiwan futures risk day."""
+    _utc(value, "risk_day_timestamp")
+    shifted = value.astimezone(TAIWAN_RISK_TIMEZONE) - timedelta(
+        hours=TAIWAN_RISK_DAY_BOUNDARY_HOUR
+    )
+    return shifted.date().isoformat()
 
 
 class TmfPaperCycleAction(StrEnum):
@@ -1098,6 +1110,7 @@ class LiveTmfPaperSimulation:
         )
 
     def _safety(self, evaluated_at: datetime) -> PaperTradingSafetyState:
+        current_risk_day = _taiwan_risk_day(evaluated_at)
         realized = sum(
             (
                 event.realized_pnl
@@ -1107,6 +1120,7 @@ class LiveTmfPaperSimulation:
                     TmfPaperPerformanceEventType.STOP_LOSS_EXIT,
                     TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT,
                 }
+                and _taiwan_risk_day(event.observed_at) == current_risk_day
             ),
             Decimal(0),
         )
