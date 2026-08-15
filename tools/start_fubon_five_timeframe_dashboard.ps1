@@ -11,7 +11,9 @@ param(
     [ValidateRange(1, 65535)]
     [int]$Port = 8765,
 
-    [switch]$PaperTestArmed
+    [switch]$PaperTestArmed,
+
+    [switch]$LineAlerts
 )
 
 $ErrorActionPreference = 'Stop'
@@ -78,6 +80,13 @@ if ($PaperTestArmed) {
         '--paper-test-armed',
         '--paper-journal', (Join-Path $projectRoot "debug\paper_trading\${productSlug}_live_journal.json")
     )
+}
+
+if ($LineAlerts) {
+    if (-not $PaperTestArmed) {
+        throw 'LineAlerts requires PaperTestArmed.'
+    }
+    $arguments += '--line-alerts'
 }
 
 Push-Location $projectRoot
