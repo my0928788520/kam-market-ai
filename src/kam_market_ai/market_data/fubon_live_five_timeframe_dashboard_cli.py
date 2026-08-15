@@ -18,7 +18,7 @@ from kam_market_ai.authorization.bootstrap import (
     AuthorizationFailure,
     AuthorizationSettings,
 )
-from kam_market_ai.config import Settings, UnsafeConfigurationError
+from kam_market_ai.config import Settings, UnsafeConfigurationError, load_dotenv_values
 from kam_market_ai.dashboard.app import DashboardApp
 from kam_market_ai.live_read_only.five_timeframe_operator_view import (
     build_five_timeframe_operator_view,
@@ -28,6 +28,7 @@ from kam_market_ai.live_read_only.five_timeframe_snapshot import (
     write_five_timeframe_snapshot,
 )
 from kam_market_ai.models import Candle, Instrument
+from kam_market_ai.notifications import LinePushNotifier, build_pending_order_alert
 from kam_market_ai.paper_trading.live_tmf_simulation import (
     LiveTmfPaperSimulation,
     TmfPaperJournalStore,
@@ -181,6 +182,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--paper-journal",
         default="debug/paper_trading/tmf_live_journal.json",
     )
+    parser.add_argument(
+        "--line-alerts",
+        action="store_true",
+        help="將新的 Paper Trading 進場提案推播至 LINE；不送出真實委託",
+    )
     parser.add_argument("--open-browser", action="store_true")
     return parser
 
@@ -288,7 +294,22 @@ def main(
     )
 
     paper_session: LiveTmfPaperSimulation | None = None
+    line_notifier: LinePushNotifier | None = None
+    active_line_alert = None
     paper_runtime: dict[str, object] = {"armed": False, "action": "DISARMED"}
+    if args.line_alerts:
+        if not args.paper_test_armed:
+            print(json.dumps({"success": False, "failure_stage": "LINE_ALERTS_REQUIRE_PAPER_MODE"}))
+            return 2
+        local_env = load_dotenv_values(args.env)
+        try:
+            line_notifier = LinePushNotifier(
+                local_env.get("KAM_LINE_CHANNEL_ACCESS_TOKEN", ""),
+                local_env.get("KAM_LINE_RECIPIENT_USER_ID", ""),
+            )
+        except ValueError:
+            print(json.dumps({"success": False, "failure_stage": "LINE_ALERT_CONFIGURATION_ERROR"}))
+            return 2
     if args.paper_test_armed:
         try:
             product = index_futures_product(instrument)
@@ -339,6 +360,7 @@ def main(
             return 2
 
     def capture_verified_refresh() -> None:
+        nonlocal active_line_alert
         quote_source.refresh_safely()
         chart_source.capture_latest()
         if paper_session is None or verifier.latest_candle_result is None:
@@ -350,6 +372,16 @@ def main(
             )
             paper_runtime.update(result.safe_payload())
             paper_runtime["armed"] = True
+            if line_notifier is not None:
+                alert = build_pending_order_alert(result.safe_payload())
+                if alert is not None:
+                    active_line_alert = alert
+                if active_line_alert is not None:
+                    try:
+                        sent = line_notifier.send_due(active_line_alert, datetime.now(UTC))
+                        paper_runtime["line_alert_status"] = "SENT" if sent else "WAITING_OR_DUPLICATE"
+                    except (OSError, RuntimeError, TimeoutError):
+                        paper_runtime["line_alert_status"] = "RETRY_PENDING"
         except (OSError, TypeError, ValueError):
             # A paper-journal failure must never replace the last verified market snapshot.
             return
