@@ -113,6 +113,7 @@ def test_market_dashboard_exposes_armed_auto_paper_runtime_without_live_executio
             "unrealized_pnl": "150",
             "status": "safe",
         },
+        "line_alert_status": "ARMED_WAITING_FOR_PAPER_PROPOSAL",
         "performance_event": {
             "entry_price": "45700",
             "current_price": "45715",
@@ -142,6 +143,7 @@ def test_market_dashboard_exposes_armed_auto_paper_runtime_without_live_executio
     assert "自動停利</dt><dd title='45740'>45740" in page
     assert "未實現損益</dt><dd title='150'>150" in page
     assert "保證金狀態</dt><dd title='保證金安全'>保證金安全" in page
+    assert "LINE 通知</dt><dd title='已啟用・等待模擬提案'>已啟用・等待模擬提案" in page
     assert "真單狀態</dt><dd title='必須本人於券商端操作'>必須本人於券商端操作" in page
     assert ">HOLD<" not in page and ">stale<" not in page
     assert view.live_order_allowed is False and view.broker_connected is False

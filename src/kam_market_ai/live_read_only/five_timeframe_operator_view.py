@@ -54,6 +54,13 @@ _PAPER_REASON_LABELS = {
     "MAX_DAILY_ENTRIES_EXCEEDED": "單日進場次數已達上限",
     "QUOTE_STALE": "行情資料過期",
 }
+_LINE_ALERT_STATUS_LABELS = {
+    "DISABLED": "未啟用",
+    "ARMED_WAITING_FOR_PAPER_PROPOSAL": "已啟用・等待模擬提案",
+    "SENT": "已傳送",
+    "WAITING_OR_DUPLICATE": "等待下一階段",
+    "RETRY_PENDING": "傳送失敗・等待重試",
+}
 
 
 def build_five_timeframe_operator_view(
@@ -173,6 +180,10 @@ def build_five_timeframe_operator_view(
         "保證金狀態": _MARGIN_STATUS_LABELS.get(
             str(margin_state.get("status", "no_position")),
             "資料待確認",
+        ),
+        "LINE 通知": _LINE_ALERT_STATUS_LABELS.get(
+            str(paper.get("line_alert_status", "DISABLED")),
+            "狀態待確認",
         ),
     }
     ledger = {

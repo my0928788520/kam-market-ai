@@ -332,6 +332,9 @@ def main(
             paper_runtime = {
                 "armed": True,
                 "action": "WAITING_FOR_KAM",
+                "line_alert_status": (
+                    "ARMED_WAITING_FOR_PAPER_PROPOSAL" if line_notifier is not None else "DISABLED"
+                ),
                 "direction": "HOLD",
                 "reason_codes": ["KAM_CONDITION_NOT_MET"],
                 "cash_balance": str(paper_journal.ledger.cash_balance),
@@ -485,6 +488,8 @@ def main(
                 "taifex_history_cache": args.taifex_history_cache,
                 "paper_simulation_enabled": args.paper_test_armed,
                 "paper_manual_approval_granted": args.paper_test_armed,
+                "line_alerts_enabled": line_notifier is not None,
+                "line_alert_mode": "paper_proposal_only" if line_notifier is not None else None,
                 "paper_journal": args.paper_journal if args.paper_test_armed else None,
                 "paper_stop_loss_points": 20 if args.paper_test_armed else None,
                 "paper_take_profit_points": 40 if args.paper_test_armed else None,
