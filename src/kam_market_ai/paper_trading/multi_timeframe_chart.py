@@ -559,11 +559,16 @@ def render_multi_timeframe_chart_html(
     *,
     instrument: str = "TMF",
     timeframe: str = "60m",
+    view_session: str | None = None,
 ) -> str:
     valid = instrument in {"TX", "MTX", "TMF"} and timeframe in SUPPORTED_CHART_TIMEFRAMES
+    session_valid = view_session in {None, "regular", "afterhours"}
+    session_reader = getattr(source, "read_series_for_session", None)
     series = (
-        source.read_series(instrument, timeframe)
-        if valid
+        session_reader(instrument, timeframe, view_session)
+        if valid and view_session is not None and callable(session_reader)
+        else source.read_series(instrument, timeframe)
+        if valid and session_valid
         else ChartSeries(instrument, timeframe, (), "invalid-selection", None)
     )
     ma_values = _ma20(series.candles)
@@ -591,12 +596,12 @@ def render_multi_timeframe_chart_html(
         series.trading_session, "時段未確認"
     )
     session_class = series.trading_session or "unknown"
-    session_controls = f"""<form class='chart-session-switcher' method='post' action='/session-switch' aria-label='切換交易時段'>
-        <button type='submit' name='session' value='regular' class='chart-session-choice {'active' if series.trading_session == 'regular' else ''}'>日盤</button>
-        <button type='submit' name='session' value='afterhours' class='chart-session-choice {'active' if series.trading_session == 'afterhours' else ''}'>夜盤</button>
-      </form>"""
+    session_controls = f"""<nav class='chart-session-switcher' aria-label='切換 K 線檢視時段'>
+        <a href='/charts?instrument={escape(instrument)}&timeframe={escape(timeframe)}&view_session=regular' class='chart-session-choice {'active' if series.trading_session == 'regular' else ''}'>日盤</a>
+        <a href='/charts?instrument={escape(instrument)}&timeframe={escape(timeframe)}&view_session=afterhours' class='chart-session-choice {'active' if series.trading_session == 'afterhours' else ''}'>夜盤</a>
+      </nav>"""
     return f"""<!doctype html><html class='chart-page' lang='zh-Hant-TW'><head><meta charset='utf-8'><title>KAM 多週期 K 線</title><link rel='stylesheet' href='/static/operator.css'><script src='/static/chart-refresh.js' defer></script></head><body class='chart-page'><main class='chart-main'>
-      <header><div><h1>多週期 K 線</h1><small>15 分・60 分・日・週｜唯讀市場結構檢視</small></div><a class='account-chip' href='/'>返回市場儀表板</a>{session_controls}<strong class='chart-session-badge chart-session-{escape(session_class)}' aria-label='目前交易時段'>目前：{escape(session_text)}</strong><span id='chart-live-status' class='chart-live-status' role='status' aria-live='polite'>每 3 秒更新・禁止真實下單</span></header>
+      <header><div><h1>多週期 K 線</h1><small>15 分・60 分・日・週｜唯讀市場結構檢視</small></div><a class='account-chip' href='/'>返回市場儀表板</a>{session_controls}<strong class='chart-session-badge chart-session-{escape(session_class)}' aria-label='目前 K 線檢視時段'>檢視：{escape(session_text)}</strong><span id='chart-live-status' class='chart-live-status' role='status' aria-live='polite'>每 3 秒更新・禁止真實下單</span></header>
       <nav class='chart-toolbar' aria-label='圖表商品與週期'>{instrument_tabs}<span class='chart-toolbar-divider'></span>{timeframe_tabs}</nav>
       <div id='chart-summary' class='chart-summary'>{escape(status)}</div><section id='chart-panel' class='chart-panel'>{_price_board(series, ma_values)}{_chart_svg(series, ma_values)}<div class='chart-tooltip' role='status' aria-live='polite' hidden></div></section>
       <aside class='chart-overlays' aria-label='圖表顯示項目'><span class='enabled'>K 線</span><span class='enabled'>20MA</span>{trend_overlay}{range_overlay}<span class='enabled'>成交量</span></aside>
