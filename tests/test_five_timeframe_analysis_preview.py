@@ -125,6 +125,8 @@ def test_preview_runs_all_five_timeframes_and_remains_fail_closed() -> None:
         "next_step",
         "next_step_state",
         "next_step_priority",
+        "trend_warning_codes",
+        "daily_ma60_position",
         "observation_only",
     }
     assert payload["decision_diagnostics"]["observation_only"] is True
@@ -159,6 +161,9 @@ def test_preview_exposes_bounded_ma20_display_metrics_without_raw_candles() -> N
     assert daily["ma20"] == 110.5
     assert daily["price_vs_ma20"] == "above"
     assert daily["ma20_direction"] == "rising"
+    assert daily["ma60"] is None
+    assert daily["price_vs_ma60"] == "insufficient"
+    assert daily["ma60_direction"] == "insufficient"
     assert daily["range_resistance"] == 122
     assert daily["range_support"] == 99
     assert daily["range_window_bars"] == 20
@@ -169,3 +174,40 @@ def test_preview_exposes_bounded_ma20_display_metrics_without_raw_candles() -> N
     assert intraday["range_window_bars"] == 20
     assert intraday["range_excludes_latest"] is True
     assert payload["raw_candles_retained"] is False
+
+
+def test_preview_exposes_daily_ma60_direction_filter_metrics() -> None:
+    base = complete_result_with_ma_history()
+    series = dict(base.series)
+    duration = timedelta(days=1)
+    first = NOW - duration * 62
+    series[FiveTimeframe.DAY] = tuple(
+        Candle(
+            Instrument.TMF,
+            first + duration * index,
+            first + duration * (index + 1),
+            99 + index,
+            102 + index,
+            98 + index,
+            100 + index,
+            10 + index,
+        )
+        for index in range(61)
+    )
+    result = CompleteFiveTimeframeCandleResult(
+        instrument=Instrument.TMF,
+        session=None,
+        series=MappingProxyType(series),
+        endpoint_call_count=3,
+    )
+
+    payload = build_verified_five_timeframe_analysis_preview(
+        result, evaluated_at=NOW
+    ).safe_payload()
+    daily = payload["timeframes"]["1d"]
+
+    assert daily["ma60"] == 130.5
+    assert daily["price_vs_ma60"] == "above"
+    assert daily["ma60_direction"] == "rising"
+    assert payload["decision_diagnostics"]["daily_ma60_position"] == "above"
+    assert isinstance(payload["timeframes"]["15m"]["trend_warning_codes"], list)
