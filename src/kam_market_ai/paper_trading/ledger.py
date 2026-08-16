@@ -81,6 +81,11 @@ def apply_paper_fill(ledger: PaperTradingLedger, fill: PaperTradingFill) -> Pape
     positions = {item.instrument: item for item in ledger.positions}
     notional = fill.quantity * fill.price
     old = positions.get(fill.instrument)
+    if fill.instrument.startswith("TMF"):
+        current_quantity = old.quantity if old is not None else Decimal("0")
+        signed_quantity = fill.quantity if fill.side is PaperTradingSide.BUY else -fill.quantity
+        if fill.quantity > Decimal("1") or abs(current_quantity + signed_quantity) > Decimal("1"):
+            raise ValueError("ONE_MICRO_TAIWAN_CONTRACT_LIMIT")
     if fill.side is PaperTradingSide.BUY:
         debit = notional + fill.fees
         if not ledger.allow_negative_cash and ledger.cash_balance < debit: raise ValueError("INSUFFICIENT_CASH")
