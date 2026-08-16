@@ -225,7 +225,7 @@ def _matching_rows(values: dict[str, str]) -> str:
     status = {key: value for key, value in values.items() if key not in _PERFORMANCE_KEYS}
     performance = {key: values.get(key, "—") for key in _PERFORMANCE_KEYS}
     metrics = "".join(
-        f"<span><small>{escape(key)}</small><strong>{escape(str(value))}</strong></span>"
+        f"<span><small>{escape('進度' if key == '績效樣本' else key)}</small><strong>{escape(str(value))}</strong></span>"
         for key, value in performance.items()
     )
     return f"<dl class='matching-status'>{_rows(status)}</dl><div class='performance-sample'><b>績效樣本</b>{metrics}</div>"
