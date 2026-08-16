@@ -61,6 +61,9 @@ _PAPER_REASON_LABELS = {
     "DAILY_MA60_NOT_BULLISH": "日線尚未站上60MA・不建立多單",
     "DAILY_MA60_NOT_BEARISH": "日線尚未跌破60MA・不建立空單",
     "M15_TREND_WEAKENING_WARNING": "15分趨勢線警示・注意可能轉弱",
+    "M15_MA20_LONG_TRIGGER_NOT_CONFIRMED": "15分尚未站上20MA且20MA未上彎・等待多單確認",
+    "M15_MA20_SHORT_TRIGGER_NOT_CONFIRMED": "15分尚未跌破20MA且20MA未下彎・等待空單確認",
+    "FIVE_TIMEFRAME_NOT_FULLY_ALIGNED": "五週期方向尚未一致・維持觀望",
 }
 _LINE_ALERT_STATUS_LABELS = {
     "DISABLED": "未啟用",
@@ -91,6 +94,12 @@ def build_five_timeframe_operator_view(
     decision = decision if isinstance(decision, Mapping) else {}
     diagnostics = preview.get("decision_diagnostics")
     diagnostics = diagnostics if isinstance(diagnostics, Mapping) else {}
+    paper_test_direction = decision.get("paper_test_direction")
+    paper_test_direction = (
+        paper_test_direction if isinstance(paper_test_direction, Mapping) else {}
+    )
+    decision_reason_code = str(paper_test_direction.get("reason_code", ""))
+    decision_blocker = _PAPER_REASON_LABELS.get(decision_reason_code, "")
     trend_warnings = diagnostics.get("trend_warning_codes", ())
     trend_warnings = trend_warnings if isinstance(trend_warnings, (list, tuple)) else ()
     weakening_message = (
@@ -124,7 +133,11 @@ def build_five_timeframe_operator_view(
     unconfirmed_score = max(0, 100 - bull_score - bear_score)
 
     status = str(payload.get("status", "資料不足"))
-    next_step = weakening_message or str(decision.get("primary_next_action", summary.get("next_step", "等待資料完整")))
+    next_step = (
+        weakening_message
+        or decision_blocker
+        or str(decision.get("primary_next_action", summary.get("next_step", "等待資料完整")))
+    )
     paper = paper_runtime if isinstance(paper_runtime, Mapping) else {}
     paper_armed = paper.get("armed") is True
     paper_action = str(paper.get("action", "WAITING_FOR_KAM" if paper_armed else "DISARMED"))
@@ -164,7 +177,11 @@ def build_five_timeframe_operator_view(
             if isinstance(analysis.get(key), Mapping)
         },
         "direction": direction,
-        "direction_reason": weakening_message or str(summary.get("headline", "依五週期規則持續觀察")),
+        "direction_reason": (
+            weakening_message
+            or decision_blocker
+            or str(summary.get("headline", "依五週期規則持續觀察"))
+        ),
         "bull_score": str(bull_score),
         "bear_score": str(bear_score),
         "unconfirmed_score": str(unconfirmed_score),
