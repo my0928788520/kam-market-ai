@@ -44,7 +44,8 @@ def test_matching_margin_status_is_visually_emphasized() -> None:
 
     assert ".matching h2 { font-size: 18px; }.matching dl { font-size: 13px; line-height: 1.4; }" in css
     assert ".matching dl dd:last-child { font-size: 14px; font-weight: 800; }" in css
-    assert ".matching dl dd:last-child { font-size: 13.5px; }" in css
+    assert ".matching dl dd:last-child { font-size: 10.5px; }" in css
+    assert ".matching dl { gap: 2px 10px; align-content: start; padding-block: 0; font-size: 10.5px; line-height: 1.2; }" in css
     assert "<KAM>" not in render_operator_html(_view())
 
 
