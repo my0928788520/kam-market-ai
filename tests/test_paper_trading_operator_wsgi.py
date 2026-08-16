@@ -467,9 +467,11 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert ".matching dl { grid-template-columns: repeat(2" in css
     assert ".banner-message { min-width: 0; overflow: hidden; text-overflow: ellipsis; }" in css
     assert ".line-alert-chip { display: flex; flex: 0 0 auto;" in css
-    assert "margin-left: auto" in css and "border: 1px solid #62e7af" in css
-    assert ".line-alert-chip strong { color: #ffffff; font-size: 12px; font-weight: 850;" in css
+    assert "margin-left: auto" in css and "border: 1px solid #b58a45" in css
+    assert ".line-alert-chip strong { color: #fff7df; font-size: 12px; font-weight: 850;" in css
     assert ".proposal .live-order-status-value" in css and "white-space: normal" in css
+    assert ".proposal .live-order-status-value { padding-bottom: 2px; font-size: 11.5px; line-height: 1.3; }" in css
+    assert ".proposal { padding-bottom: 5px; }" in css
     assert "justify-content: center" in css and "border-radius: 7px" in css
     bull_rule = css.split(".control-cell.bull", 1)[1].split(".control-cell.bear", 1)[0]
     bear_rule = css.split(".control-cell.bear", 1)[1]
