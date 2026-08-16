@@ -432,8 +432,8 @@ def render_account_html(source: AccountReadOnlySource = DEMO_ACCOUNT_SOURCE, thr
     requirements = {item.product_code: item for item in margin_source.read_requirements()}
     calculated = calculate_required_margins(snapshot.positions, margin_source)
     initial, maintenance = calculated or (None, None)
-    embed_query = "&amp;embedded=1" if embedded else ""
-    tabs = "".join(f"<a class='account-tab {'active' if key == selected_view else ''}' href='/account?view={key}{embed_query}'>{label}</a>" for key, label in _ACCOUNT_TABS)
+    account_path = "/account/embed" if embedded else "/account"
+    tabs = "".join(f"<a class='account-tab {'active' if key == selected_view else ''}' href='{account_path}?view={key}'>{label}</a>" for key, label in _ACCOUNT_TABS)
     grid = lambda values: "<div class='account-grid'>" + "".join(_account_metric(label, value) for label, value in values) + "</div>"
     if selected_view not in {key for key, _ in _ACCOUNT_TABS}:
         content = "<section class='account-content account-invalid'><h2>檢視項目無效</h2><p>請選擇有效的帳戶檢視。</p></section>"
@@ -446,16 +446,16 @@ def render_account_html(source: AccountReadOnlySource = DEMO_ACCOUNT_SOURCE, thr
         values = (("帳戶權益", snapshot.funds.equity), ("全部持倉所需原始保證金", initial), ("全部持倉所需維持保證金", maintenance), ("可動用保證金", snapshot.funds.available_margin), ("資金使用率", assessment.usage_ratio), ("距離警戒水位", assessment.distance_to_caution), ("距離危險水位", assessment.distance_to_danger), ("警示原因", assessment.reason), ("保證金資料來源", source_name), ("生效日期", effective), ("新鮮度", snapshot.freshness.value))
         if detail:
             items = "".join(f"<li title='{escape(item.source)}'>{escape(item.product_code)}：原始 {_money(item.initial_margin)}／維持 {_money(item.maintenance_margin)} · {escape(str(item.effective_at))} · {escape(_ACCOUNT_DISPLAY_TEXT.get(item.source, item.source))} · {escape(_ACCOUNT_DISPLAY_TEXT.get(item.freshness.value, item.freshness.value))}</li>" for item in sorted(requirements.values(), key=lambda item: item.product_code))
-            extra = f"<aside class='account-detail-panel'><h3>保證金詳細資料</h3><ul>{items}</ul><a href='/account?view=water-level{embed_query}'>收起詳細資料</a></aside>"
+            extra = f"<aside class='account-detail-panel'><h3>保證金詳細資料</h3><ul>{items}</ul><a href='{account_path}?view=water-level'>收起詳細資料</a></aside>"
         else:
-            extra = f"<a class='account-detail-link' href='/account?view=water-level&amp;detail=1{embed_query}'>顯示詳細資料</a>"
+            extra = f"<a class='account-detail-link' href='{account_path}?view=water-level&amp;detail=1'>顯示詳細資料</a>"
         content = f"<section class='account-content account-water-view'><h2>資金水位</h2><div class='water-level safety-{assessment.level.value.lower()}'><strong>{safety}</strong><span>{escape(assessment.reason)}</span></div>" + grid(values) + extra + "</section>"
     elif selected_view == "position" and selected_instrument not in {"TX", "MTX", "TMF"}:
         content = "<section class='account-content account-invalid'><h2>商品代碼無效</h2><p>請使用 TX、MTX 或 TMF。</p></section>"
     elif selected_view == "position":
         position = next((item for item in snapshot.positions if item.product_code == selected_instrument), None)
         requirement = requirements.get(selected_instrument)
-        switcher = "".join(f"<a class='instrument-tab {'active' if code == selected_instrument else ''}' href='/account?view=position&amp;instrument={code}{embed_query}'>{label}</a>" for code, label in (("TX", "大台 TX"), ("MTX", "小台 MTX"), ("TMF", "微台 TMF")))
+        switcher = "".join(f"<a class='instrument-tab {'active' if code == selected_instrument else ''}' href='{account_path}?view=position&amp;instrument={code}'>{label}</a>" for code, label in (("TX", "大台 TX"), ("MTX", "小台 MTX"), ("TMF", "微台 TMF")))
         values = (("商品名稱", position.label if position else "資料不足"), ("契約代碼", selected_instrument), ("部位方向", position.side if position and position.side else "無部位"), ("口數", position.quantity if position else None), ("均價", position.average_price if position else None), ("現價", position.market_price if position else None), ("未實現損益", position.unrealized_pnl if position else None), ("使用保證金", snapshot.funds.used_margin), ("原始保證金", requirement.initial_margin if requirement else None), ("維持保證金", requirement.maintenance_margin if requirement else None), ("最後更新", snapshot.updated_at))
         content = "<section class='account-content account-position-view'><h2>商品部位</h2><nav class='instrument-tabs'>" + switcher + "</nav>" + grid(values) + "</section>"
     else:
@@ -538,7 +538,7 @@ def _market_status_line(snapshot: MarketSnapshot) -> str:
 
 
 def _account_drawer_html() -> str:
-    return """<div class='account-drawer-backdrop' data-account-drawer-close hidden></div><aside id='account-drawer' class='account-drawer' role='dialog' aria-modal='true' aria-labelledby='account-drawer-title' aria-hidden='true'><header class='account-drawer-header'><div><h2 id='account-drawer-title'>期貨帳戶｜資金安全</h2><p>示範帳戶・唯讀模式・禁止真實交易</p></div><button type='button' class='account-drawer-close' data-account-drawer-close aria-label='關閉帳戶抽屜'>關閉</button></header><nav class='account-drawer-tabs' aria-label='帳戶檢視'><a href='/account?view=overview&amp;embedded=1' target='account-drawer-frame'>帳戶總覽</a><a href='/account?view=water-level&amp;embedded=1' target='account-drawer-frame'>資金水位</a><a href='/account?view=position&amp;instrument=TMF&amp;embedded=1' target='account-drawer-frame'>商品部位</a><a href='/account?view=settings&amp;embedded=1' target='account-drawer-frame'>設定</a></nav><iframe class='account-drawer-frame' name='account-drawer-frame' title='KAM 帳戶中心唯讀內容' src='/account?view=overview&amp;embedded=1'></iframe><footer class='account-drawer-footer'><span>帳戶未連線</span><span>券商未連線</span><span>交易功能停用</span><span>禁止真實下單</span><span>緊急停止未啟動</span><a href='/account'>開啟完整帳戶中心</a></footer></aside><script>(function(){const trigger=document.getElementById('account-drawer-trigger'),drawer=document.getElementById('account-drawer'),backdrop=document.querySelector('.account-drawer-backdrop'),close=()=>{drawer.classList.remove('is-open');drawer.setAttribute('aria-hidden','true');backdrop.hidden=true;trigger.setAttribute('aria-expanded','false');trigger.focus()},open=()=>{drawer.classList.add('is-open');drawer.setAttribute('aria-hidden','false');backdrop.hidden=false;trigger.setAttribute('aria-expanded','true');drawer.querySelector('.account-drawer-close').focus()};trigger.addEventListener('click',()=>drawer.classList.contains('is-open')?close():open());document.querySelectorAll('[data-account-drawer-close]').forEach(item=>item.addEventListener('click',close));document.addEventListener('keydown',event=>{if(event.key==='Escape'&&drawer.classList.contains('is-open'))close()})})();</script>"""
+    return """<div class='account-drawer-backdrop' data-account-drawer-close hidden></div><aside id='account-drawer' class='account-drawer' role='dialog' aria-modal='true' aria-labelledby='account-drawer-title' aria-hidden='true'><header class='account-drawer-header'><div><h2 id='account-drawer-title'>期貨帳戶｜資金安全</h2><p>示範帳戶・唯讀模式・禁止真實交易</p></div><button type='button' class='account-drawer-close' data-account-drawer-close aria-label='關閉帳戶抽屜'>關閉</button></header><nav class='account-drawer-tabs' aria-label='帳戶檢視'><a href='/account/embed?view=overview' target='account-drawer-frame'>帳戶總覽</a><a href='/account/embed?view=water-level' target='account-drawer-frame'>資金水位</a><a href='/account/embed?view=position&amp;instrument=TMF' target='account-drawer-frame'>商品部位</a><a href='/account/embed?view=settings' target='account-drawer-frame'>設定</a></nav><iframe class='account-drawer-frame' name='account-drawer-frame' title='KAM 帳戶中心唯讀內容' src='/account/embed?view=overview'></iframe><footer class='account-drawer-footer'><span>帳戶未連線</span><span>券商未連線</span><span>交易功能停用</span><span>禁止真實下單</span><span>緊急停止未啟動</span><a href='/account'>開啟完整帳戶中心</a></footer></aside><script>(function(){const trigger=document.getElementById('account-drawer-trigger'),drawer=document.getElementById('account-drawer'),backdrop=document.querySelector('.account-drawer-backdrop'),close=()=>{drawer.classList.remove('is-open');drawer.setAttribute('aria-hidden','true');backdrop.hidden=true;trigger.setAttribute('aria-expanded','false');trigger.focus()},open=()=>{drawer.classList.add('is-open');drawer.setAttribute('aria-hidden','false');backdrop.hidden=false;trigger.setAttribute('aria-expanded','true');drawer.querySelector('.account-drawer-close').focus()};trigger.addEventListener('click',()=>drawer.classList.contains('is-open')?close():open());document.querySelectorAll('[data-account-drawer-close]').forEach(item=>item.addEventListener('click',close));document.addEventListener('keydown',event=>{if(event.key==='Escape'&&drawer.classList.contains('is-open'))close()})})();</script>"""
 
 
 def render_help_html() -> str:
@@ -706,12 +706,12 @@ def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], a
             model = EmbedPagePresenter().build_model(snapshot, decision, runtime_status, public_embed_config, selected, public_embed_config.enable_account_drawer)
             body = EmbedPagePresenter().render(model).encode()
             start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"), *headers]); return [body]
-        if path == "/account":
+        if path in {"/account", "/account/embed"}:
             query = parse_qs(str(environ.get("QUERY_STRING", "")), keep_blank_values=True)
             selected_view = query.get("view", ["overview"])[0]
             selected_instrument = query.get("instrument", ["TMF"])[0]
             detail = query.get("detail", [""])[0] == "1"
-            embedded = query.get("embedded", [""])[0] == "1"
+            embedded = path == "/account/embed"
             body = render_account_html(account_source, account_thresholds, margin_source, selected_view=selected_view, selected_instrument=selected_instrument, detail=detail, embedded=embedded).encode()
             start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"), ("Content-Length", str(len(body)))])
             return [body]
