@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta
@@ -90,6 +91,19 @@ class LinePendingOrderAlert:
     def __post_init__(self) -> None:
         if len(self.proposal_hash) != 64 or not self.text or self.expires_at.tzinfo is None:
             raise ValueError("invalid pending-order alert")
+        malformed_patterns = (
+            "\ufffd",
+            "ï¿½",
+            "DateTimeOffset::",
+        )
+        unresolved_variable = re.search(r"(?m)(?:^|[：:：\s])\$\{?[A-Za-z_]\w*\}?", self.text)
+        question_mark_identifier = re.search(r"(?m)^\?[A-Za-z_{(]", self.text)
+        if (
+            any(pattern in self.text for pattern in malformed_patterns)
+            or unresolved_variable
+            or question_mark_identifier
+        ):
+            raise ValueError("LINE_ALERT_TEXT_ENCODING_OR_TEMPLATE_INVALID")
         if self.live_order_allowed:
             raise ValueError("LINE alerts cannot enable live orders")
 
@@ -439,7 +453,7 @@ class LinePushNotifier:
             data=body,
             headers={
                 "Authorization": f"Bearer {self.channel_access_token}",
-                "Content-Type": "application/json",
+                "Content-Type": "application/json; charset=utf-8",
             },
             method="POST",
         )
