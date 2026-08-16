@@ -39,7 +39,26 @@ def direction(code: str):
         MappedKamTimeframeState(timeframe, code, code[0], code[1], ())
         for timeframe in ("1w", "1d", "60m", "15m", "5m")
     )
-    return decide_five_timeframe_paper_direction(states)
+    if code == "AU":
+        return decide_five_timeframe_paper_direction(
+            states,
+            daily_ma60_position="above",
+            m15_ma20_position="above",
+            m15_ma20_direction="rising",
+        )
+    if code == "BU":
+        return decide_five_timeframe_paper_direction(
+            states,
+            daily_ma60_position="below",
+            m15_ma20_position="below",
+            m15_ma20_direction="falling",
+        )
+    return decide_five_timeframe_paper_direction(
+        states,
+        daily_ma60_position="insufficient",
+        m15_ma20_position="insufficient",
+        m15_ma20_direction="insufficient",
+    )
 
 
 def quote(price: str, minute: int = 0) -> TmfPaperQuote:
