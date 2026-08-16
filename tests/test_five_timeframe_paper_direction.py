@@ -105,6 +105,8 @@ def test_m15_weakening_warning_blocks_fresh_long(warning: str) -> None:
         states("AU"),
         daily_ma60_position="above",
         trend_warning_codes=(warning,),
+        m15_ma20_position="above",
+        m15_ma20_direction="rising",
     )
 
     assert result.direction == "HOLD"
