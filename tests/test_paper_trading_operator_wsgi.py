@@ -324,6 +324,13 @@ def test_terminal_account_drawer_is_closed_by_default_and_reuses_get_only_accoun
     assert "position: fixed" in css and "width: clamp(520px, 42vw, 720px)" in css
     assert "transform: translateX(102%)" in css and "transition: transform 190ms ease" in css
     assert "calc(100vw - 24px)" in css
+    assert "grid-template-rows: 68px 38px minmax(0, 1fr) auto" in css
+    assert ".account-drawer-footer { display: grid; grid-template-columns: repeat(5, max-content);" in css
+    assert ".account-drawer-footer a { grid-column: 1 / -1; justify-self: end; margin-left: 0;" in css
+    assert ".account-main { height: 100vh; grid-template-rows: 48px 32px 34px minmax(0, 1fr) auto;" in css
+    assert ".account-content { min-height: 0; overflow-x: hidden; overflow-y: auto;" in css
+    assert ".account-status-footer { grid-row: 5; display: flex; flex-wrap: wrap;" in css
+    assert ".account-status-footer span { flex: 0 0 auto; white-space: nowrap; }" in css
 
 
 def test_dashboard_renders_real_control_cells_and_coloured_cycle_structure() -> None:
