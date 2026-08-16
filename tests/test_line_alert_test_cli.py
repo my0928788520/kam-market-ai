@@ -1,4 +1,9 @@
+from datetime import UTC, datetime
 from pathlib import Path
+
+import pytest
+
+from kam_market_ai.notifications.line_pending_order import LinePendingOrderAlert
 
 from kam_market_ai.notifications.line_alert_test_cli import main, send_line_configuration_test
 
@@ -58,3 +63,25 @@ def test_cli_requires_explicit_send_test_flag(capsys) -> None:
     output = capsys.readouterr().out
     assert "EXPLICIT_TEST_CONFIRMATION_REQUIRED" in output
     assert '"live_order_allowed": false' in output
+
+
+@pytest.mark.parametrize(
+    "malformed",
+    [
+        "KAM \ufffd\ufffd\ufffd",
+        "KAM ï¿½ test",
+        "商品：$Symbol",
+        "?Symbol",
+        "{DateTimeOffset::Now.ToString('o')}",
+    ],
+)
+def test_line_alert_rejects_mojibake_and_unexpanded_templates(malformed: str) -> None:
+    with pytest.raises(
+        ValueError,
+        match="LINE_ALERT_TEXT_ENCODING_OR_TEMPLATE_INVALID",
+    ):
+        LinePendingOrderAlert(
+            "a" * 64,
+            malformed,
+            datetime(2026, 8, 17, tzinfo=UTC),
+        )
