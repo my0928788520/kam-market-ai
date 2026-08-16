@@ -87,3 +87,43 @@ def test_ledger_is_immutable_and_never_exposes_live_capabilities() -> None:
     assert payload["broker_connected"] is False
     assert payload["account_credentials_allowed"] is False
     assert ledger.ledger_hash == ledger.ledger_hash
+
+
+def test_tmf_ledger_rejects_more_than_one_net_contract() -> None:
+    ledger = PaperTradingLedger(Decimal("1000000"), allow_short=True)
+    oversized = PaperTradingFill(
+        "tmf-fill-2",
+        "tmf-order-2",
+        "TMFH6",
+        PaperTradingSide.BUY,
+        Decimal("2"),
+        Decimal("45000"),
+        Decimal("0"),
+        NOW,
+    )
+    with pytest.raises(ValueError, match="ONE_MICRO_TAIWAN_CONTRACT_LIMIT"):
+        apply_paper_fill(ledger, oversized)
+
+    first = PaperTradingFill(
+        "tmf-fill-1",
+        "tmf-order-1",
+        "TMFH6",
+        PaperTradingSide.BUY,
+        Decimal("1"),
+        Decimal("45000"),
+        Decimal("0"),
+        NOW,
+    )
+    opened = apply_paper_fill(ledger, first).ledger
+    add = PaperTradingFill(
+        "tmf-fill-add",
+        "tmf-order-add",
+        "TMFH6",
+        PaperTradingSide.BUY,
+        Decimal("1"),
+        Decimal("45001"),
+        Decimal("0"),
+        NOW,
+    )
+    with pytest.raises(ValueError, match="ONE_MICRO_TAIWAN_CONTRACT_LIMIT"):
+        apply_paper_fill(opened, add)
