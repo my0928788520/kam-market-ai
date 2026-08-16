@@ -446,7 +446,8 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert ".control-cells-unscored" in css
     assert ".control-cell.unconfirmed" in css
     assert "@media (max-height: 650px) and (min-width: 1001px)" in css
-    assert "grid-template-rows: 68px 142px 96px minmax(98px, 1fr)" in css
+    assert "grid-template-rows: 68px 142px 70px minmax(0, 1fr)" in css
+    assert ".trend-health-card strong, .position-card strong { font-size: 24px; line-height: 1.05; }" in css
     assert ".proposal { grid-column: 1; grid-row: 4; }" in css
     assert ".matching { grid-column: 2 / 4; grid-row: 4; }" in css
     assert ".proposal dl { grid-template-columns: max-content minmax(0, 1fr); }" in css
