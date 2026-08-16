@@ -303,6 +303,20 @@ def _timeframe_card(name: object, state: object, details: Mapping[str, object] |
         ma_text = f"（{_display_price(ma20)}）" if ma20 is not None else ""
     except (TypeError, ValueError):
         ma_text = ""
+    ma60_line = ""
+    if str(name) == "日線":
+        ma60 = details.get("ma60")
+        ma60_relation = {
+            "above": "60MA上方・偏多",
+            "below": "60MA下方・偏空",
+            "equal": "貼近60MA・等待",
+            "insufficient": "60MA尚未形成",
+        }.get(str(details.get("price_vs_ma60", "insufficient")), "60MA資料不足")
+        try:
+            ma60_text = f"（{_display_price(ma60)}）" if ma60 is not None else ""
+        except (TypeError, ValueError):
+            ma60_text = ""
+        ma60_line = f"<small class='timeframe-ma60'>{escape(ma60_relation + ma60_text)}</small>"
     resistance = _display_price(details.get("range_resistance"))
     support = _display_price(details.get("range_support"))
     try:
@@ -314,7 +328,7 @@ def _timeframe_card(name: object, state: object, details: Mapping[str, object] |
     return (
         "<article class='timeframe-card'>"
         f"<b>{escape(str(name))}</b>{status_code}<span>{escape(interpretation)}</span>"
-        f"<small>{escape(relation + ma_text)}</small><small>20MA 方向：{escape(direction)}</small>"
+        f"<small>{escape(relation + ma_text)}</small><small>20MA 方向：{escape(direction)}</small>{ma60_line}"
         f"<small class='timeframe-resistance'>{range_label}壓力：{escape(resistance)}</small>"
         f"<small class='timeframe-support'>{range_label}支撐：{escape(support)}</small></article>"
     )
