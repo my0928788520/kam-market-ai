@@ -16,7 +16,12 @@ def states(code: str) -> tuple[MappedKamTimeframeState, ...]:
 
 
 def test_all_confirmed_bullish_states_select_paper_long() -> None:
-    result = decide_five_timeframe_paper_direction(states("AU"))
+    result = decide_five_timeframe_paper_direction(
+        states("AU"),
+        daily_ma60_position="above",
+        m15_ma20_position="above",
+        m15_ma20_direction="rising",
+    )
 
     assert result.direction == "LONG"
     assert result.action == "PAPER_BUY"
@@ -26,12 +31,29 @@ def test_all_confirmed_bullish_states_select_paper_long() -> None:
 
 
 def test_all_confirmed_bearish_states_select_paper_short() -> None:
-    result = decide_five_timeframe_paper_direction(states("BU"))
+    result = decide_five_timeframe_paper_direction(
+        states("BU"),
+        daily_ma60_position="below",
+        m15_ma20_position="below",
+        m15_ma20_direction="falling",
+    )
 
     assert result.direction == "SHORT"
     assert result.action == "PAPER_SELL"
     assert result.eligible is True
     assert result.live_order_allowed is False
+
+
+def test_missing_ma_filters_fail_closed_even_when_five_timeframes_align() -> None:
+    long_result = decide_five_timeframe_paper_direction(states("AU"))
+    short_result = decide_five_timeframe_paper_direction(states("BU"))
+
+    assert long_result.direction == "HOLD"
+    assert long_result.reason_code == "DAILY_MA60_NOT_BULLISH"
+    assert short_result.direction == "HOLD"
+    assert short_result.reason_code == "DAILY_MA60_NOT_BEARISH"
+    assert long_result.live_order_allowed is False
+    assert short_result.live_order_allowed is False
 
 
 @pytest.mark.parametrize("code", ["AF", "AD", "NU", "NF", "ND", "BF", "BD"])
