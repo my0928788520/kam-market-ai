@@ -127,7 +127,8 @@ class TmfPaperPerformanceEventType(StrEnum):
     ENTRY = "entry"
     MARK = "mark"
     STOP_LOSS_EXIT = "stop_loss_exit"
-    TAKE_PROFIT_EXIT = "take_profit_exit"\n    M15_MA20_RULE_EXIT = "m15_ma20_rule_exit"
+    TAKE_PROFIT_EXIT = "take_profit_exit"
+    M15_MA20_RULE_EXIT = "m15_ma20_rule_exit"
 
 
 class TmfPaperMarginStatus(StrEnum):
