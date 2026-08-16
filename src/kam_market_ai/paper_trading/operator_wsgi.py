@@ -725,6 +725,7 @@ def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], a
                 chart_data_source,
                 instrument=query.get("instrument", [default_market_product])[0],
                 timeframe=query.get("timeframe", ["60m"])[0],
+                view_session=query.get("view_session", [None])[0],
             ).encode()
             start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"), ("Content-Length", str(len(body))), *headers])
             return [body]
