@@ -58,6 +58,9 @@ _PAPER_REASON_LABELS = {
     "ENTRY_PRICE_CONFIRMATION_PENDING": "短線尚未延續・重新等待確認",
     "ENTRY_CONFIRMATION_MOVE_TOO_LARGE": "短線跳動過大・避免追價",
     "TREND_HOLD_TAKE_PROFIT_EXTENDED": "方向持續一致・已順勢延伸停利",
+    "DAILY_MA60_NOT_BULLISH": "日線尚未站上60MA・不建立多單",
+    "DAILY_MA60_NOT_BEARISH": "日線尚未跌破60MA・不建立空單",
+    "M15_TREND_WEAKENING_WARNING": "15分趨勢線警示・注意可能轉弱",
 }
 _LINE_ALERT_STATUS_LABELS = {
     "DISABLED": "未啟用",
@@ -86,6 +89,17 @@ def build_five_timeframe_operator_view(
     summary = summary if isinstance(summary, Mapping) else {}
     decision = preview.get("kam_rule_decision")
     decision = decision if isinstance(decision, Mapping) else {}
+    diagnostics = preview.get("decision_diagnostics")
+    diagnostics = diagnostics if isinstance(diagnostics, Mapping) else {}
+    trend_warnings = diagnostics.get("trend_warning_codes", ())
+    trend_warnings = trend_warnings if isinstance(trend_warnings, (list, tuple)) else ()
+    weakening_message = (
+        "15分上升趨勢線跌破・注意可能轉弱"
+        if "M15_ASCENDING_TRENDLINE_BROKEN_WEAKENING" in trend_warnings
+        else "15分波浪反彈碰下降趨勢線・注意可能轉弱"
+        if "M15_DESCENDING_TRENDLINE_RESISTANCE_WEAKENING" in trend_warnings
+        else ""
+    )
     states = decision.get("states")
     states = states if isinstance(states, Mapping) else {}
     analysis = preview.get("timeframes")
@@ -110,7 +124,7 @@ def build_five_timeframe_operator_view(
     unconfirmed_score = max(0, 100 - bull_score - bear_score)
 
     status = str(payload.get("status", "資料不足"))
-    next_step = str(decision.get("primary_next_action", summary.get("next_step", "等待資料完整")))
+    next_step = weakening_message or str(decision.get("primary_next_action", summary.get("next_step", "等待資料完整")))
     paper = paper_runtime if isinstance(paper_runtime, Mapping) else {}
     paper_armed = paper.get("armed") is True
     paper_action = str(paper.get("action", "WAITING_FOR_KAM" if paper_armed else "DISARMED"))
@@ -150,7 +164,7 @@ def build_five_timeframe_operator_view(
             if isinstance(analysis.get(key), Mapping)
         },
         "direction": direction,
-        "direction_reason": str(summary.get("headline", "依五週期規則持續觀察")),
+        "direction_reason": weakening_message or str(summary.get("headline", "依五週期規則持續觀察")),
         "bull_score": str(bull_score),
         "bear_score": str(bear_score),
         "unconfirmed_score": str(unconfirmed_score),
