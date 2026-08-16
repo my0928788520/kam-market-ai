@@ -46,7 +46,12 @@ def test_matching_margin_status_is_visually_emphasized() -> None:
     assert ".matching dl dd:last-child { font-size: 14px; font-weight: 800; }" in css
     assert ".matching dl dd:last-child { font-size: 10.5px; }" in css
     assert ".matching dl { gap: 2px 10px; align-content: start; padding-block: 0; font-size: 10.5px; line-height: 1.2; }" in css
-    assert "<KAM>" not in render_operator_html(_view())
+    assert ".performance-sample" in css
+    assert ".matching:has(.performance-sample):has(> .footer-metrics)" in css
+    html = render_operator_html(_view())
+    assert "<KAM>" not in html
+    assert "class='matching-status'" in html
+    assert "class='performance-sample'" in html
 
 
 def test_local_session_switch_post_is_explicit_and_redirects_to_charts() -> None:
