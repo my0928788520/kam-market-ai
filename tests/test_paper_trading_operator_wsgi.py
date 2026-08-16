@@ -313,7 +313,7 @@ def test_terminal_account_drawer_is_closed_by_default_and_reuses_get_only_accoun
     assert "id='account-drawer-trigger'" in html
     assert "aria-expanded='false'" in html and "aria-controls='account-drawer'" in html
     assert "id='account-drawer'" in html and "role='dialog'" in html and "aria-modal='true'" in html
-    assert "src='/account?view=overview'" in html
+    assert "src='/account?view=overview&amp;embedded=1'" in html
     for tab in ("帳戶總覽", "資金水位", "商品部位", "設定"):
         assert tab in html
     assert "開啟完整帳戶中心" in html and "href='/account'" in html
@@ -331,6 +331,19 @@ def test_terminal_account_drawer_is_closed_by_default_and_reuses_get_only_accoun
     assert ".account-content { min-height: 0; overflow-x: hidden; overflow-y: auto;" in css
     assert ".account-status-footer { grid-row: 5; display: flex; flex-wrap: wrap;" in css
     assert ".account-status-footer span { flex: 0 0 auto; white-space: nowrap; }" in css
+    assert ".account-embedded .account-main { grid-template-rows: minmax(0, 1fr);" in css
+    assert ".account-embedded .account-main > header" in css
+
+
+def test_embedded_account_center_hides_duplicate_chrome_and_preserves_navigation() -> None:
+    embedded = render_account_html(selected_view="position", selected_instrument="TMF", embedded=True)
+    full = render_account_html(selected_view="position", selected_instrument="TMF")
+
+    assert "<body class='account-embedded'>" in embedded
+    assert "href='/account?view=position&amp;instrument=TX&amp;embedded=1'" in embedded
+    assert "class='account-content account-position-view'" in embedded
+    assert "<body class='account-embedded'>" not in full
+    assert "href='/account?view=position&amp;instrument=TX&amp;embedded=1'" not in full
 
 
 def test_dashboard_renders_real_control_cells_and_coloured_cycle_structure() -> None:
