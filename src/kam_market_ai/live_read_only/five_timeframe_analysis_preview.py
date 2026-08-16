@@ -24,7 +24,10 @@ from kam_market_ai.analysis.timing_engine import (
     evaluate_all_timings,
 )
 from kam_market_ai.analysis.trend_engine import (
+    RelationToTrendline,
     TrendEngineConfig,
+    TrendState,
+    TrendlineType,
     evaluate_all_trendlines,
 )
 from kam_market_ai.decision.decision_confidence import (
@@ -124,6 +127,54 @@ def _ma20_display_metrics(candles: tuple[Candle, ...]) -> dict[str, object]:
         "price_vs_ma20": position,
         "ma20_direction": direction,
     }
+
+
+def _daily_ma60_display_metrics(candles: tuple[Candle, ...]) -> dict[str, object]:
+    """Expose the closed daily MA60 relation used only as a direction filter."""
+    closes = tuple(float(item.close) for item in candles)
+    if len(closes) < 60:
+        return {
+            "ma60": None,
+            "price_vs_ma60": "insufficient",
+            "ma60_direction": "insufficient",
+        }
+    ma60 = sum(closes[-60:]) / 60
+    latest = closes[-1]
+    relation = "above" if latest > ma60 else "below" if latest < ma60 else "equal"
+    direction = "insufficient"
+    if len(closes) >= 61:
+        previous = sum(closes[-61:-1]) / 60
+        direction = "rising" if ma60 > previous else "falling" if ma60 < previous else "flat"
+    return {
+        "ma60": ma60,
+        "price_vs_ma60": relation,
+        "ma60_direction": direction,
+    }
+
+
+def _m15_trend_warning_codes(result: object) -> tuple[str, ...]:
+    """Translate existing trend-engine states into observation-only weakening warnings."""
+    warnings: list[str] = []
+    trend_state = getattr(result, "trend_state", None)
+    line_type = getattr(result, "active_trendline_type", None)
+    relation = getattr(result, "relation_to_trendline", None)
+    if (
+        trend_state is TrendState.ASCENDING_BROKEN
+        or (
+            line_type is TrendlineType.ASCENDING
+            and relation is RelationToTrendline.BREAKDOWN_DOWN
+        )
+    ):
+        warnings.append("M15_ASCENDING_TRENDLINE_BROKEN_WEAKENING")
+    if (
+        line_type is TrendlineType.DESCENDING
+        and (
+            trend_state is TrendState.DESCENDING_RESISTED
+            or relation in {RelationToTrendline.TOUCHING, RelationToTrendline.REJECTION}
+        )
+    ):
+        warnings.append("M15_DESCENDING_TRENDLINE_RESISTANCE_WEAKENING")
+    return tuple(warnings)
 
 
 def _range_reference_metrics(
@@ -255,6 +306,7 @@ def build_verified_five_timeframe_analysis_preview(
         NextStepEngineConfig.provisional(),
     )
 
+    trend_warning_codes = _m15_trend_warning_codes(trend[PositionTimeframe.M15])
     analysis: dict[str, dict[str, object]] = {}
     for source_timeframe, engine in _ENGINE_TIMEFRAMES.items():
         frame = contract.timeframes[engine]
@@ -267,6 +319,16 @@ def build_verified_five_timeframe_analysis_preview(
             "timing": frame.timing.normalized_state.value,
             "error_codes": list(frame.error_codes),
             **_ma20_display_metrics(series[source_timeframe]),
+            **(
+                _daily_ma60_display_metrics(series[source_timeframe])
+                if source_timeframe is FiveTimeframe.DAY
+                else {}
+            ),
+            **(
+                {"trend_warning_codes": list(trend_warning_codes)}
+                if source_timeframe is FiveTimeframe.M15
+                else {}
+            ),
             **_range_reference_metrics(
                 series[source_timeframe],
                 exclude_latest=source_timeframe in _FORMING_CAPABLE_TIMEFRAMES,
@@ -279,7 +341,11 @@ def build_verified_five_timeframe_analysis_preview(
     if contract.overall_status.value != "ready":
         blockers.append("ANALYSIS_INPUT_NOT_READY")
     mapped_states, kam_decision = evaluate_five_timeframe_kam_rules(analysis)
-    paper_direction = decide_five_timeframe_paper_direction(mapped_states)
+    paper_direction = decide_five_timeframe_paper_direction(
+        mapped_states,
+        daily_ma60_position=str(analysis["1d"].get("price_vs_ma60", "insufficient")),
+        trend_warning_codes=trend_warning_codes,
+    )
     blockers.extend(kam_decision.blockers)
     diagnostics: dict[str, object] = {
         "direction": confidence.overall_direction.value,
@@ -292,6 +358,8 @@ def build_verified_five_timeframe_analysis_preview(
         "next_step": next_step.next_step.value,
         "next_step_state": next_step.operational_state.value,
         "next_step_priority": next_step.priority.value,
+        "trend_warning_codes": list(trend_warning_codes),
+        "daily_ma60_position": analysis["1d"].get("price_vs_ma60", "insufficient"),
         "observation_only": True,
     }
     summary: dict[str, object] = {
@@ -309,7 +377,11 @@ def build_verified_five_timeframe_analysis_preview(
         "action": "HOLD",
         "decision_status": "BLOCKED",
         "message": (
-            "日線與週線仍在形成，僅顯示觀察結果。"
+            "15分上升趨勢線跌破，注意可能轉弱。"
+            if "M15_ASCENDING_TRENDLINE_BROKEN_WEAKENING" in trend_warning_codes
+            else "15分波浪反彈碰到下降趨勢線，注意可能轉弱。"
+            if "M15_DESCENDING_TRENDLINE_RESISTANCE_WEAKENING" in trend_warning_codes
+            else "日線與週線仍在形成，僅顯示觀察結果。"
             if provisional
             else "資料尚未完整，維持觀察。"
             if contract.overall_status.value != "ready"
