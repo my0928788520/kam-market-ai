@@ -345,6 +345,8 @@ def build_verified_five_timeframe_analysis_preview(
         mapped_states,
         daily_ma60_position=str(analysis["1d"].get("price_vs_ma60", "insufficient")),
         trend_warning_codes=trend_warning_codes,
+        m15_ma20_position=str(analysis["15m"].get("price_vs_ma20", "insufficient")),
+        m15_ma20_direction=str(analysis["15m"].get("ma20_direction", "insufficient")),
     )
     blockers.extend(kam_decision.blockers)
     diagnostics: dict[str, object] = {
@@ -360,6 +362,10 @@ def build_verified_five_timeframe_analysis_preview(
         "next_step_priority": next_step.priority.value,
         "trend_warning_codes": list(trend_warning_codes),
         "daily_ma60_position": analysis["1d"].get("price_vs_ma60", "insufficient"),
+        "m15_ma20_position": analysis["15m"].get("price_vs_ma20", "insufficient"),
+        "m15_ma20_direction": analysis["15m"].get("ma20_direction", "insufficient"),
+        "max_contracts": 1,
+        "scale_in_allowed": False,
         "observation_only": True,
     }
     summary: dict[str, object] = {
