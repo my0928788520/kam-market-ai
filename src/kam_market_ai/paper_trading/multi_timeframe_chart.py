@@ -572,12 +572,15 @@ def render_multi_timeframe_chart_html(
         else ChartSeries(instrument, timeframe, (), "invalid-selection", None)
     )
     ma_values = _ma20(series.candles)
+    session_query = (
+        f"&view_session={escape(view_session)}" if view_session in {"regular", "afterhours"} else ""
+    )
     timeframe_tabs = "".join(
-        f"<a class='chart-tab {'active' if item == timeframe else ''}' href='/charts?instrument={escape(instrument)}&timeframe={item}'>{TIMEFRAME_LABELS[item]}</a>"
+        f"<a class='chart-tab {'active' if item == timeframe else ''}' href='/charts?instrument={escape(instrument)}&timeframe={item}{session_query}'>{TIMEFRAME_LABELS[item]}</a>"
         for item in SUPPORTED_CHART_TIMEFRAMES
     )
     instrument_tabs = "".join(
-        f"<a class='chart-tab {'active' if item == instrument else ''}' href='/charts?instrument={item}&timeframe={escape(timeframe)}'>{item}</a>"
+        f"<a class='chart-tab {'active' if item == instrument else ''}' href='/charts?instrument={item}&timeframe={escape(timeframe)}{session_query}'>{item}</a>"
         for item in ("TX", "MTX", "TMF")
     )
     updated = series.updated_at.isoformat() if series.updated_at is not None else "—"
