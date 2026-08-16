@@ -442,17 +442,23 @@ class FubonLiveChartSource:
             for item in result.series[selected]
         )
 
-    def _load_history(self, path: Path | None, timeframe: str) -> tuple[ChartCandle, ...]:
+    def _load_history(
+        self,
+        path: Path | None,
+        timeframe: str,
+        *,
+        session: str | None = None,
+    ) -> tuple[ChartCandle, ...]:
         if path is None or not path.is_file():
             return ()
+        expected_session = session or ("afterhours" if self._after_hours else "regular")
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
             if (
                 payload.get("schema") != "kam-normalized-chart-history-v1"
                 or payload.get("instrument") != self._instrument.value
                 or payload.get("timeframe") != timeframe
-                or payload.get("session")
-                != ("afterhours" if self._after_hours else "regular")
+                or payload.get("session") != expected_session
             ):
                 return ()
             return tuple(
@@ -643,6 +649,78 @@ class FubonLiveChartSource:
                     -self._history_limit :
                 ]
                 self._write_history(path, label, bounded)
+
+    def read_series_for_session(
+        self,
+        instrument: str,
+        timeframe: str,
+        trading_session: str,
+    ) -> ChartSeries:
+        """Read saved candles without changing the live execution session."""
+        if trading_session not in {"regular", "afterhours"}:
+            return ChartSeries(
+                instrument, timeframe, (), "invalid-session-selection", None
+            )
+        active_session = "afterhours" if self._after_hours else "regular"
+        if trading_session == active_session:
+            return self.read_series(instrument, timeframe)
+        mapping = {
+            "15m": FiveTimeframe.M15,
+            "60m": FiveTimeframe.M60,
+            "1d": FiveTimeframe.DAY,
+            "1w": FiveTimeframe.WEEK,
+        }
+        selected = mapping.get(timeframe)
+        if instrument != self._instrument.value or selected is None:
+            return ChartSeries(
+                instrument,
+                timeframe,
+                (),
+                "invalid-selection",
+                None,
+                trading_session=trading_session,
+            )
+        if selected in {FiveTimeframe.M15, FiveTimeframe.M60}:
+            with self._lock:
+                path = self._history_paths_by_session[trading_session].get(selected)
+                history = self._load_history(
+                    path,
+                    timeframe,
+                    session=trading_session,
+                )
+            if history:
+                return ChartSeries(
+                    instrument,
+                    timeframe,
+                    history,
+                    "fubon-live:saved-session-history",
+                    max(item.opened_at for item in history),
+                    trading_session=trading_session,
+                )
+            return ChartSeries(
+                instrument,
+                timeframe,
+                (),
+                "fubon-live:saved-session-not-yet-available",
+                None,
+                trading_session=trading_session,
+            )
+        self._refresh_closed_higher_timeframes()
+        closed_days = self._closed_higher_candles(
+            self._result_provider(), FiveTimeframe.DAY
+        )
+        closed_weeks = self._closed_higher_candles(
+            self._result_provider(), FiveTimeframe.WEEK
+        )
+        candles = closed_days if selected is FiveTimeframe.DAY else closed_weeks
+        return ChartSeries(
+            instrument,
+            timeframe,
+            candles[-self._history_limit :],
+            "taifex-official-closed:saved-session-view",
+            max((item.opened_at for item in candles), default=None),
+            trading_session=trading_session,
+        )
 
     def read_series(self, instrument: str, timeframe: str) -> ChartSeries:
         mapping = {
