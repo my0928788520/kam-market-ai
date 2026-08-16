@@ -213,3 +213,36 @@ def test_operator_prioritizes_m15_trendline_weakening_warning() -> None:
     page = render_operator_html(view)
 
     assert "15分上升趨勢線跌破・注意可能轉弱" in page
+
+
+
+def test_operator_explains_exact_ma_and_alignment_blockers_in_chinese() -> None:
+    payload = {
+        "status": "READY_VERIFIED_FIVE_TIMEFRAMES",
+        "symbol": "TMFH6",
+        "market_data_only": True,
+        "trading_enabled": False,
+        "analysis_preview": {
+            "three_second_summary": {"headline": "五週期分析已更新"},
+            "kam_rule_decision": {
+                "direction": "HOLD",
+                "primary_next_action": "等待",
+                "states": {},
+                "paper_test_direction": {
+                    "direction": "HOLD",
+                    "reason_code": "M15_MA20_LONG_TRIGGER_NOT_CONFIRMED",
+                    "eligible": False,
+                },
+            },
+        },
+    }
+
+    view = build_five_timeframe_operator_view(payload)
+    page = render_operator_html(view)
+
+    message = "15分尚未站上20MA且20MA未上彎・等待多單確認"
+    assert view.demo is not None
+    assert view.demo["direction_reason"] == message
+    assert view.demo["next_step"] == message
+    assert page.count(message) == 2
+    assert view.live_order_allowed is False
