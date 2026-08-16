@@ -61,3 +61,39 @@ def test_safety_has_no_network_or_sdk_dependency_and_no_sensitive_fields():
     assert not {"requests", "urllib", "socket", "websocket", "fubon"}.intersection(imported)
     fields = set(PaperTradingOrderRequest.__dataclass_fields__)
     assert not {"password", "token", "api_key", "secret"}.intersection(fields)
+
+
+def test_tmf_is_permanently_limited_to_one_net_contract() -> None:
+    tmf_limits = PaperTradingRiskLimits(
+        Decimal("10"),
+        Decimal("1000000"),
+        Decimal("100"),
+        1,
+        ("TMFH6",),
+        (NOW.weekday(),),
+        time(1),
+        time(5),
+    )
+    empty = PaperTradingAccountSnapshot((), Decimal("0"), NOW)
+    tmf_state = state(account_snapshot=empty, risk_limits=tmf_limits)
+
+    two_contracts = request(instrument="TMFH6", quantity=Decimal("2"))
+    result = safety.evaluate_paper_trading_order(two_contracts, tmf_state)
+    assert "ONE_MICRO_TAIWAN_CONTRACT_LIMIT" in result.reason_codes
+
+    existing_long = PaperTradingAccountSnapshot(
+        (PaperTradingPosition("TMFH6", Decimal("1"), Decimal("100"), Decimal("0"), NOW),),
+        Decimal("0"),
+        NOW,
+    )
+    add_long = safety.evaluate_paper_trading_order(
+        request(instrument="TMFH6"),
+        state(account_snapshot=existing_long, risk_limits=tmf_limits),
+    )
+    assert "ONE_MICRO_TAIWAN_CONTRACT_LIMIT" in add_long.reason_codes
+
+    close_long = safety.evaluate_paper_trading_order(
+        request(instrument="TMFH6", side=PaperTradingSide.SELL),
+        state(account_snapshot=existing_long, risk_limits=tmf_limits),
+    )
+    assert close_long.state.value == "accepted"
