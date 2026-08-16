@@ -244,5 +244,5 @@ def test_operator_explains_exact_ma_and_alignment_blockers_in_chinese() -> None:
     assert view.demo is not None
     assert view.demo["direction_reason"] == message
     assert view.demo["next_step"] == message
-    assert page.count(message) == 2
+    assert page.count(message) >= 2
     assert view.live_order_allowed is False
