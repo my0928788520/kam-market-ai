@@ -127,9 +127,15 @@ def test_preview_runs_all_five_timeframes_and_remains_fail_closed() -> None:
         "next_step_priority",
         "trend_warning_codes",
         "daily_ma60_position",
+        "m15_ma20_position",
+        "m15_ma20_direction",
+        "max_contracts",
+        "scale_in_allowed",
         "observation_only",
     }
     assert payload["decision_diagnostics"]["observation_only"] is True
+    assert payload["decision_diagnostics"]["max_contracts"] == 1
+    assert payload["decision_diagnostics"]["scale_in_allowed"] is False
     assert payload["three_second_summary"]["action"] == "HOLD"
     assert payload["three_second_summary"]["decision_status"] == "BLOCKED"
     assert payload["three_second_summary"]["direction"] in {"偏多", "偏空", "觀望"}
@@ -211,3 +217,5 @@ def test_preview_exposes_daily_ma60_direction_filter_metrics() -> None:
     assert daily["ma60_direction"] == "rising"
     assert payload["decision_diagnostics"]["daily_ma60_position"] == "above"
     assert isinstance(payload["timeframes"]["15m"]["trend_warning_codes"], list)
+    assert payload["decision_diagnostics"]["m15_ma20_position"] == "above"
+    assert payload["decision_diagnostics"]["m15_ma20_direction"] == "rising"
