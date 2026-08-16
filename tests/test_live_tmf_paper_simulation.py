@@ -921,3 +921,48 @@ def test_candle_entrypoint_uses_natural_kam_result_without_forcing_buy() -> None
     assert result.action is TmfPaperCycleAction.HOLD
     assert result.direction == "HOLD"
     assert result.journal.events == ()
+
+
+
+@pytest.mark.parametrize(
+    ("entry_code", "invalid_position", "invalid_slope", "exit_price"),
+    (
+        ("AU", "below", "falling", "22005"),
+        ("BU", "above", "rising", "21995"),
+    ),
+)
+def test_m15_ma20_invalidation_exits_open_paper_position_without_reversal(
+    entry_code: str,
+    invalid_position: str,
+    invalid_slope: str,
+    exit_price: str,
+) -> None:
+    session = LiveTmfPaperSimulation(config())
+    session.process_evaluation(direction(entry_code), quote("22000"), evaluated_at=NOW)
+    invalidated = decide_five_timeframe_paper_direction(
+        tuple(
+            MappedKamTimeframeState(timeframe, entry_code, entry_code[0], entry_code[1], ())
+            for timeframe in ("1w", "1d", "60m", "15m", "5m")
+        ),
+        daily_ma60_position="above" if entry_code == "AU" else "below",
+        m15_ma20_position=invalid_position,
+        m15_ma20_direction=invalid_slope,
+    )
+
+    result = session.process_evaluation(
+        invalidated,
+        quote(exit_price, 1),
+        evaluated_at=NOW + timedelta(minutes=1),
+    )
+
+    assert invalidated.direction == "HOLD"
+    assert result.action is TmfPaperCycleAction.EXIT_FILLED
+    assert result.performance_event is not None
+    assert (
+        result.performance_event.event_type
+        is TmfPaperPerformanceEventType.M15_MA20_RULE_EXIT
+    )
+    assert result.reason_codes == ("M15_MA20_RULE_EXIT",)
+    assert result.journal.open_entry is None
+    assert result.journal.ledger.positions == ()
+    assert result.direction == "HOLD"
