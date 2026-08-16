@@ -51,6 +51,10 @@ def test_matching_margin_status_is_visually_emphasized() -> None:
     assert "minmax(150px, 1.4fr)" in css
     assert ".performance-sample span" in css and "white-space: nowrap" in css
     assert ".matching:has(.performance-sample):has(> .footer-metrics)" in css
+    assert "\\n.matching" not in css
+    assert "border: 1px solid #b58a45" in css
+    assert "grid-template-rows: auto auto minmax(52px, 1fr)" in css
+    assert "grid-auto-rows: min-content" in css
     html = render_operator_html(_view())
     assert "<KAM>" not in html
     assert "class='matching-status'" in html
