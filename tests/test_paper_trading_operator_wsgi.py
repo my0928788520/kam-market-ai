@@ -52,6 +52,7 @@ def test_matching_margin_status_is_visually_emphasized() -> None:
     assert "<KAM>" not in html
     assert "class='matching-status'" in html
     assert "class='performance-sample'" in html
+    assert "<small>進度</small>" in html
 
 
 def test_local_session_switch_post_is_explicit_and_redirects_to_charts() -> None:
