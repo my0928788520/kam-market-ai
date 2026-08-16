@@ -82,7 +82,7 @@ def decide_five_timeframe_paper_direction(
     }.intersection(trend_warning_codes)
 
     if codes == ("AU",) * 5:
-        if daily_ma60_position not in {None, "above"}:
+        if daily_ma60_position != "above":
             return FiveTimeframePaperDirection(
                 "HOLD", "NO_PAPER_ORDER", "DAILY_MA60_NOT_BULLISH",
                 codes, False, daily_ma60_position=daily_ma60_position,
@@ -90,7 +90,7 @@ def decide_five_timeframe_paper_direction(
                 m15_ma20_position=m15_ma20_position,
                 m15_ma20_direction=m15_ma20_direction,
             )
-        if m15_ma20_position not in {None, "above"} or m15_ma20_direction not in {None, "rising"}:
+        if m15_ma20_position != "above" or m15_ma20_direction != "rising":
             return FiveTimeframePaperDirection(
                 "HOLD", "NO_PAPER_ORDER", "M15_MA20_LONG_TRIGGER_NOT_CONFIRMED",
                 codes, False, daily_ma60_position=daily_ma60_position,
@@ -115,7 +115,7 @@ def decide_five_timeframe_paper_direction(
         )
 
     if codes == ("BU",) * 5:
-        if daily_ma60_position not in {None, "below"}:
+        if daily_ma60_position != "below":
             return FiveTimeframePaperDirection(
                 "HOLD", "NO_PAPER_ORDER", "DAILY_MA60_NOT_BEARISH",
                 codes, False, daily_ma60_position=daily_ma60_position,
@@ -123,7 +123,7 @@ def decide_five_timeframe_paper_direction(
                 m15_ma20_position=m15_ma20_position,
                 m15_ma20_direction=m15_ma20_direction,
             )
-        if m15_ma20_position not in {None, "below"} or m15_ma20_direction not in {None, "falling"}:
+        if m15_ma20_position != "below" or m15_ma20_direction != "falling":
             return FiveTimeframePaperDirection(
                 "HOLD", "NO_PAPER_ORDER", "M15_MA20_SHORT_TRIGGER_NOT_CONFIRMED",
                 codes, False, daily_ma60_position=daily_ma60_position,
