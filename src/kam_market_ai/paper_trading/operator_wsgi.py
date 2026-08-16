@@ -215,7 +215,21 @@ def _cycle(view: PaperTradingOperatorView) -> str:
     </section>"""
 
 def _rows(values: dict[str, str]) -> str:
-    return "".join(f"<dt>{escape(key.replace('_', ' '))}</dt><dd title='{escape(str(value))}'>{escape(str(value)[:10]) if key.endswith('hash') else escape(str(value))}</dd>" for key, value in values.items())
+    row_classes = {
+        "LINE 通知": "line-alert",
+        "真單狀態": "live-order-status",
+    }
+    return "".join(
+        (
+            f"<dt class='{row_classes[key]}-label'>{escape(key.replace('_', ' '))}</dt>"
+            f"<dd class='{row_classes[key]}-value' title='{escape(str(value))}'>"
+            f"{escape(str(value)[:10]) if key.endswith('hash') else escape(str(value))}</dd>"
+            if key in row_classes
+            else f"<dt>{escape(key.replace('_', ' '))}</dt><dd title='{escape(str(value))}'>"
+            f"{escape(str(value)[:10]) if key.endswith('hash') else escape(str(value))}</dd>"
+        )
+        for key, value in values.items()
+    )
 
 
 _PERFORMANCE_KEYS = ("績效樣本", "模擬勝率", "期望／獲利因子", "最大回撤")

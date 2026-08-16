@@ -455,6 +455,8 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert ".matching { grid-column: 2 / 4; grid-row: 4; }" in css
     assert ".proposal dl { grid-template-columns: max-content minmax(0, 1fr); }" in css
     assert ".matching dl { grid-template-columns: repeat(2" in css
+    assert ".matching-status .line-alert-label, .matching-status .line-alert-value { font-size: 14px;" in css
+    assert ".proposal .live-order-status-value" in css and "white-space: normal" in css
     assert "justify-content: center" in css and "border-radius: 7px" in css
     bull_rule = css.split(".control-cell.bull", 1)[1].split(".control-cell.bear", 1)[0]
     bear_rule = css.split(".control-cell.bear", 1)[1]
