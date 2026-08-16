@@ -127,7 +127,7 @@ class TmfPaperPerformanceEventType(StrEnum):
     ENTRY = "entry"
     MARK = "mark"
     STOP_LOSS_EXIT = "stop_loss_exit"
-    TAKE_PROFIT_EXIT = "take_profit_exit"
+    TAKE_PROFIT_EXIT = "take_profit_exit"\n    M15_MA20_RULE_EXIT = "m15_ma20_rule_exit"
 
 
 class TmfPaperMarginStatus(StrEnum):
@@ -489,6 +489,7 @@ class TmfPaperSimulationJournal:
             elif event.event_type in {
                 TmfPaperPerformanceEventType.STOP_LOSS_EXIT,
                 TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT,
+                TmfPaperPerformanceEventType.M15_MA20_RULE_EXIT,
             }:
                 if open_trade != event.trade_id:
                     raise ValueError("journal exit does not match an open paper trade.")
@@ -568,6 +569,7 @@ class TmfPaperSimulationJournal:
             in {
                 TmfPaperPerformanceEventType.STOP_LOSS_EXIT,
                 TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT,
+                TmfPaperPerformanceEventType.M15_MA20_RULE_EXIT,
             }
         ]
         outcomes = [event.realized_pnl for event in exits]
@@ -660,6 +662,7 @@ class TmfPaperSimulationJournal:
             elif event.event_type in {
                 TmfPaperPerformanceEventType.STOP_LOSS_EXIT,
                 TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT,
+                TmfPaperPerformanceEventType.M15_MA20_RULE_EXIT,
             }:
                 entry = None
         return entry
@@ -1454,8 +1457,17 @@ class LiveTmfPaperSimulation:
                     entry.entry_price + self.config.tick_size,
                 )
         exit_type: TmfPaperPerformanceEventType | None = None
+        ma20_exit = (
+            entry.entry_side is PaperTradingSide.BUY
+            and direction.m15_ma20_position == "below"
+        ) or (
+            entry.entry_side is PaperTradingSide.SELL
+            and direction.m15_ma20_position == "above"
+        )
         if entry.entry_side is PaperTradingSide.BUY and quote.price <= stop_loss_price:
             exit_type = TmfPaperPerformanceEventType.STOP_LOSS_EXIT
+        elif ma20_exit:
+            exit_type = TmfPaperPerformanceEventType.M15_MA20_RULE_EXIT
         elif (
             entry.entry_side is PaperTradingSide.BUY
             and quote.price >= take_profit_price
@@ -1535,7 +1547,9 @@ class LiveTmfPaperSimulation:
         )
         self._publish(self.journal.with_event(event, ledger))
         reasons = (
-            ("TREND_HOLD_TAKE_PROFIT_EXTENDED",)
+            ("M15_MA20_RULE_EXIT",)
+            if exit_type is TmfPaperPerformanceEventType.M15_MA20_RULE_EXIT
+            else ("TREND_HOLD_TAKE_PROFIT_EXTENDED",)
             if trend_hold_extended
             else ("MARGIN_MAINTENANCE_WARNING",)
             if exit_type is None
