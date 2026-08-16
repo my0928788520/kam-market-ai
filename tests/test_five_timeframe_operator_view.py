@@ -26,6 +26,9 @@ def test_live_five_timeframe_uses_established_kam_operator_ui() -> None:
                     "ma20": 45700,
                     "price_vs_ma20": "above",
                     "ma20_direction": "rising",
+                    "ma60": 43800,
+                    "price_vs_ma60": "above",
+                    "ma60_direction": "rising",
                     "range_resistance": 46500,
                     "range_support": 43000,
                     "range_window_bars": 20,
@@ -77,6 +80,7 @@ def test_live_five_timeframe_uses_established_kam_operator_ui() -> None:
     assert "在20MA上方（45,700）" in page
     assert "價格相對 20MA" not in page
     assert "20MA 方向：上彎" in page
+    assert "60MA上方・偏多（43,800）" in page
     assert "20棒壓力：46,500" in page
     assert "20棒支撐：43,000" in page
     assert "偏多觀察・結構待確認" in page
@@ -181,3 +185,30 @@ def test_paper_performance_keeps_zero_expectancy_visible() -> None:
     )
 
     assert "期望／獲利因子</dt><dd title='0.0／0.0'>0.0／0.0" in page
+
+
+def test_operator_prioritizes_m15_trendline_weakening_warning() -> None:
+    payload = {
+        "status": "READY_VERIFIED_FIVE_TIMEFRAMES",
+        "symbol": "TMFH6",
+        "market_data_only": True,
+        "trading_enabled": False,
+        "analysis_preview": {
+            "three_second_summary": {"headline": "五週期分析已更新"},
+            "decision_diagnostics": {
+                "trend_warning_codes": [
+                    "M15_ASCENDING_TRENDLINE_BROKEN_WEAKENING"
+                ]
+            },
+            "kam_rule_decision": {
+                "direction": "LONG",
+                "primary_next_action": "等待",
+                "states": {},
+            },
+        },
+    }
+
+    view = build_five_timeframe_operator_view(payload)
+    page = render_operator_html(view)
+
+    assert "15分上升趨勢線跌破・注意可能轉弱" in page
