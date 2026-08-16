@@ -60,7 +60,7 @@ _PAPER_REASON_LABELS = {
     "TREND_HOLD_TAKE_PROFIT_EXTENDED": "方向持續一致・已順勢延伸停利",
     "DAILY_MA60_NOT_BULLISH": "日線尚未站上60MA・不建立多單",
     "DAILY_MA60_NOT_BEARISH": "日線尚未跌破60MA・不建立空單",
-    "M15_TREND_WEAKENING_WARNING": "15分趨勢線警示・注意可能轉弱",
+    "M15_TREND_WEAKENING_WARNING": "15分趨勢線警示・注意可能轉弱",\n    "M15_MA20_RULE_EXIT": "15分20MA條件失效・模擬部位已平倉",
     "M15_MA20_LONG_TRIGGER_NOT_CONFIRMED": "15分尚未站上20MA且20MA未上彎・等待多單確認",
     "M15_MA20_SHORT_TRIGGER_NOT_CONFIRMED": "15分尚未跌破20MA且20MA未下彎・等待空單確認",
     "FIVE_TIMEFRAME_NOT_FULLY_ALIGNED": "五週期方向尚未一致・維持觀望",
