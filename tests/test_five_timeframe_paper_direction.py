@@ -88,3 +88,60 @@ def test_m15_weakening_warning_blocks_fresh_long(warning: str) -> None:
     assert result.direction == "HOLD"
     assert result.reason_code == "M15_TREND_WEAKENING_WARNING"
     assert result.safe_payload()["trend_warning_codes"] == [warning]
+
+
+@pytest.mark.parametrize(
+    ("code", "position", "slope", "expected_direction"),
+    [
+        ("AU", "above", "rising", "LONG"),
+        ("BU", "below", "falling", "SHORT"),
+    ],
+)
+def test_m15_ma20_confirms_direction_and_keeps_one_contract_cap(
+    code: str,
+    position: str,
+    slope: str,
+    expected_direction: str,
+) -> None:
+    result = decide_five_timeframe_paper_direction(
+        states(code),
+        daily_ma60_position="above" if code == "AU" else "below",
+        m15_ma20_position=position,
+        m15_ma20_direction=slope,
+    )
+
+    assert result.direction == expected_direction
+    assert result.eligible is True
+    assert result.max_contracts == 1
+    assert result.safe_payload()["max_contracts"] == 1
+    assert result.safe_payload()["scale_in_allowed"] is False
+    assert result.safe_payload()["averaging_down_allowed"] is False
+
+
+@pytest.mark.parametrize(
+    ("code", "position", "slope", "reason"),
+    [
+        ("AU", "below", "rising", "M15_MA20_LONG_TRIGGER_NOT_CONFIRMED"),
+        ("AU", "above", "falling", "M15_MA20_LONG_TRIGGER_NOT_CONFIRMED"),
+        ("BU", "above", "falling", "M15_MA20_SHORT_TRIGGER_NOT_CONFIRMED"),
+        ("BU", "below", "rising", "M15_MA20_SHORT_TRIGGER_NOT_CONFIRMED"),
+        ("AU", "insufficient", "insufficient", "M15_MA20_LONG_TRIGGER_NOT_CONFIRMED"),
+    ],
+)
+def test_m15_ma20_mismatch_or_missing_data_holds(
+    code: str,
+    position: str,
+    slope: str,
+    reason: str,
+) -> None:
+    result = decide_five_timeframe_paper_direction(
+        states(code),
+        daily_ma60_position="above" if code == "AU" else "below",
+        m15_ma20_position=position,
+        m15_ma20_direction=slope,
+    )
+
+    assert result.direction == "HOLD"
+    assert result.eligible is False
+    assert result.reason_code == reason
+    assert result.live_order_allowed is False
