@@ -30,6 +30,14 @@ def evaluate_paper_trading_order(request: PaperTradingOrderRequest, state: Paper
     account = state.account_snapshot; limits = state.risk_limits
     if request.instrument not in limits.allowed_instruments: codes.append("INSTRUMENT_NOT_ALLOWED")
     if request.quantity > limits.max_order_quantity: codes.append("MAX_ORDER_QUANTITY_EXCEEDED")
+    if request.instrument.startswith("TMF"):
+        current = next(
+            (position.quantity for position in account.positions if position.instrument == request.instrument),
+            0,
+        )
+        signed_quantity = request.quantity if request.side.value == "buy" else -request.quantity
+        if request.quantity > 1 or abs(current + signed_quantity) > 1:
+            codes.append("ONE_MICRO_TAIWAN_CONTRACT_LIMIT")
     if request.quantity * request.price > limits.max_notional: codes.append("MAX_NOTIONAL_EXCEEDED")
     if account.daily_realized_pnl <= -limits.max_daily_loss: codes.append("MAX_DAILY_LOSS_EXCEEDED")
     existing = {position.instrument for position in account.positions}
