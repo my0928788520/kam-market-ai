@@ -135,9 +135,9 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
 .chart-session-regular { border-color: #c99a3e; color: #ffe09a; background: #3b2a0f; box-shadow: 0 0 14px #eeb94c22; }
 .chart-session-afterhours { border-color: #6f79d8; color: #cbd0ff; background: #20264e; box-shadow: 0 0 14px #8791ff2b; }
 .chart-session-unknown { border-color: #586273; color: #aab3c1; background: #202630; }
-.chart-session-switcher { display: inline-flex; gap: 4px; padding: 3px; border: 1px solid #344158; border-radius: 999px; background: #0d1420; }
-.chart-session-switcher form { margin: 0; }
-.chart-session-choice { border: 0; border-radius: 999px; padding: 5px 12px; color: #9da9bb; background: transparent; cursor: pointer; font-weight: 700; }
+.chart-session-switcher { position: relative; z-index: 5; display: inline-flex; flex: 0 0 auto; gap: 4px; padding: 3px; border: 1px solid #344158; border-radius: 999px; background: #0d1420; pointer-events: auto; }
+.chart-session-switcher form { display: inline-flex; margin: 0; pointer-events: auto; }
+.chart-session-choice { position: relative; z-index: 6; border: 0; border-radius: 999px; padding: 5px 12px; color: #9da9bb; background: transparent; cursor: pointer; font-weight: 700; pointer-events: auto; touch-action: manipulation; appearance: none; }
 .chart-session-choice:hover { color: #fff; background: #263247; }
 .chart-session-choice.active { color: #101722; background: #f0c467; box-shadow: 0 0 12px #f0c46744; }
 .chart-live-status[data-state='refreshing'] { color: #f2ce86; }
