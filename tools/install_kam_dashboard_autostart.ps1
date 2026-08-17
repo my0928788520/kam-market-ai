@@ -1,6 +1,6 @@
 param(
     [ValidatePattern('^[A-Za-z0-9]+$')]
-    [string]$Symbol = 'TMFH6',
+    [string]$Symbol,
 
     [ValidateSet('regular', 'afterhours')]
     [string]$Session = 'afterhours',
@@ -22,12 +22,14 @@ $arguments = @(
     '-NoProfile',
     '-ExecutionPolicy Bypass',
     ('-File "{0}"' -f $watchdog),
-    "-Symbol $Symbol",
     "-Session $Session",
     "-Port $Port",
     '-PaperTestArmed',
     '-LineAlerts'
 ) -join ' '
+if ($Symbol) {
+    $arguments += " -Symbol $Symbol"
+}
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $currentUser
 $principal = New-ScheduledTaskPrincipal `
