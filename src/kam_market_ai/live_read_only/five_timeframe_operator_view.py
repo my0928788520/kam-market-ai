@@ -64,6 +64,8 @@ _PAPER_REASON_LABELS = {
     "M15_MA20_RULE_EXIT": "15分20MA條件失效・模擬部位已平倉",
     "M15_MA20_LONG_TRIGGER_NOT_CONFIRMED": "15分尚未站上20MA且20MA未上彎・等待多單確認",
     "M15_MA20_SHORT_TRIGGER_NOT_CONFIRMED": "15分尚未跌破20MA且20MA未下彎・等待空單確認",
+    "M60_MA20_SUPPORT_BULLISH_BIAS": "60分20MA支撐未破・行情偏多・不建立空單",
+    "M60_MA20_SUPPORT_BROKEN": "60分K收破20MA支撐・多方轉弱・不建立多單",
     "FIVE_TIMEFRAME_NOT_FULLY_ALIGNED": "五週期方向尚未一致・維持觀望",
 }
 _LINE_ALERT_STATUS_LABELS = {
@@ -117,8 +119,21 @@ def build_five_timeframe_operator_view(
     five_minute = analysis.get("5m")
     five_minute = five_minute if isinstance(five_minute, Mapping) else {}
 
+    m60_bias = str(diagnostics.get("m60_market_bias", "insufficient"))
+    m60_support = str(diagnostics.get("m60_ma20_support", "insufficient"))
+    m60_bias_message = (
+        "60分20MA支撐未破・行情偏多看待"
+        if m60_bias == "bullish"
+        else "60分K收破20MA支撐・多方轉弱"
+        if m60_bias == "bearish"
+        else ""
+    )
     raw_direction = str(decision.get("direction", summary.get("direction", "觀望")))
     direction = _DIRECTION_LABELS.get(raw_direction.upper(), raw_direction)
+    if direction == "觀望" and m60_bias == "bullish":
+        direction = "偏多"
+    elif direction == "觀望" and m60_bias == "bearish":
+        direction = "偏空"
     state_codes = []
     timeframes = []
     for key, label in _FRAME_LABELS:
@@ -132,11 +147,24 @@ def build_five_timeframe_operator_view(
     bull_score = bull * 20
     bear_score = bear * 20
     unconfirmed_score = max(0, 100 - bull_score - bear_score)
+    if m60_bias == "bullish":
+        bull_score = min(100, bull_score + 20)
+        if unconfirmed_score >= 20:
+            unconfirmed_score -= 20
+        else:
+            bear_score = max(0, bear_score - 20)
+    elif m60_bias == "bearish":
+        bear_score = min(100, bear_score + 20)
+        if unconfirmed_score >= 20:
+            unconfirmed_score -= 20
+        else:
+            bull_score = max(0, bull_score - 20)
 
     status = str(payload.get("status", "資料不足"))
     next_step = (
         weakening_message
         or decision_blocker
+        or m60_bias_message
         or str(decision.get("primary_next_action", summary.get("next_step", "等待資料完整")))
     )
     paper = paper_runtime if isinstance(paper_runtime, Mapping) else {}
@@ -181,6 +209,7 @@ def build_five_timeframe_operator_view(
         "direction_reason": (
             weakening_message
             or decision_blocker
+            or m60_bias_message
             or str(summary.get("headline", "依五週期規則持續觀察"))
         ),
         "bull_score": str(bull_score),
