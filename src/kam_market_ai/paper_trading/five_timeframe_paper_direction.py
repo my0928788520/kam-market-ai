@@ -62,7 +62,9 @@ def decide_five_timeframe_paper_direction(
     """Select long, short, or hold without constructing or sending an order.
 
     Daily MA60 is a direction filter.  Closed M15 MA20 position and slope are
-    entry triggers.  Trendline warnings block fresh long entries but never
+    entry triggers.  Closed M60 MA20 support adds a directional bias: intact
+    support blocks fresh shorts, while a confirmed close below blocks fresh
+    longs.  Trendline warnings block fresh long entries but never
     create an opposite order by themselves.  Quantity is permanently capped at
     one Micro Taiwan Index Futures contract with no scale-in or averaging down.
     """
@@ -92,6 +94,16 @@ def decide_five_timeframe_paper_direction(
     }.intersection(trend_warning_codes)
 
     if codes == ("AU",) * 5:
+        if m60_market_bias == "bearish":
+            return FiveTimeframePaperDirection(
+                "HOLD", "NO_PAPER_ORDER", "M60_MA20_SUPPORT_BROKEN",
+                codes, False, daily_ma60_position=daily_ma60_position,
+                trend_warning_codes=trend_warning_codes,
+                m15_ma20_position=m15_ma20_position,
+                m15_ma20_direction=m15_ma20_direction,
+                m60_ma20_support=m60_ma20_support,
+                m60_market_bias=m60_market_bias,
+            )
         if daily_ma60_position != "above":
             return FiveTimeframePaperDirection(
                 "HOLD", "NO_PAPER_ORDER", "DAILY_MA60_NOT_BULLISH",
