@@ -202,3 +202,20 @@ def test_broken_m60_ma20_support_blocks_fresh_long() -> None:
     assert result.direction == "HOLD"
     assert result.reason_code == "M60_MA20_SUPPORT_BROKEN"
     assert result.live_order_allowed is False
+
+
+def test_unaligned_states_preserve_m60_support_diagnostics() -> None:
+    result = decide_five_timeframe_paper_direction(
+        states("ND"),
+        daily_ma60_position="above",
+        m15_ma20_position="below",
+        m15_ma20_direction="rising",
+        m60_ma20_support="held",
+        m60_market_bias="bullish",
+    )
+
+    assert result.direction == "HOLD"
+    assert result.reason_code == "FIVE_TIMEFRAME_NOT_FULLY_ALIGNED"
+    assert result.safe_payload()["m60_ma20_support"] == "held"
+    assert result.safe_payload()["m60_market_bias"] == "bullish"
+    assert result.live_order_allowed is False
