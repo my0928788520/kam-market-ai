@@ -599,9 +599,19 @@ def render_multi_timeframe_chart_html(
         series.trading_session, "時段未確認"
     )
     session_class = series.trading_session or "unknown"
-    session_controls = f"""<nav class='chart-session-switcher' aria-label='切換 K 線檢視時段'>
-        <a href='/charts?instrument={escape(instrument)}&timeframe={escape(timeframe)}&view_session=regular' class='chart-session-choice {'active' if series.trading_session == 'regular' else ''}'>日盤</a>
-        <a href='/charts?instrument={escape(instrument)}&timeframe={escape(timeframe)}&view_session=afterhours' class='chart-session-choice {'active' if series.trading_session == 'afterhours' else ''}'>夜盤</a>
+    session_controls = f"""<nav class='chart-session-switcher' aria-label='切換 K 線資料時段'>
+        <form method='post' action='/session-switch'>
+          <input type='hidden' name='session' value='regular'>
+          <input type='hidden' name='instrument' value='{escape(instrument)}'>
+          <input type='hidden' name='timeframe' value='{escape(timeframe)}'>
+          <button type='submit' class='chart-session-choice {'active' if series.trading_session == 'regular' else ''}'>日盤</button>
+        </form>
+        <form method='post' action='/session-switch'>
+          <input type='hidden' name='session' value='afterhours'>
+          <input type='hidden' name='instrument' value='{escape(instrument)}'>
+          <input type='hidden' name='timeframe' value='{escape(timeframe)}'>
+          <button type='submit' class='chart-session-choice {'active' if series.trading_session == 'afterhours' else ''}'>夜盤</button>
+        </form>
       </nav>"""
     return f"""<!doctype html><html class='chart-page' lang='zh-Hant-TW'><head><meta charset='utf-8'><title>KAM 多週期 K 線</title><link rel='stylesheet' href='/static/operator.css'><script src='/static/chart-refresh.js' defer></script></head><body class='chart-page'><main class='chart-main'>
       <header><div><h1>多週期 K 線</h1><small>15 分・60 分・日・週｜唯讀市場結構檢視</small></div><a class='account-chip' href='/'>返回市場儀表板</a>{session_controls}<strong class='chart-session-badge chart-session-{escape(session_class)}' aria-label='目前 K 線檢視時段'>檢視：{escape(session_text)}</strong><span id='chart-live-status' class='chart-live-status' role='status' aria-live='polite'>每 3 秒更新・禁止真實下單</span></header>
