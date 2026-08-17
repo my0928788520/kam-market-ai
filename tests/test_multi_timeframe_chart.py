@@ -27,6 +27,11 @@ def test_chart_tooltip_stays_visible_long_enough_to_read() -> None:
     assert "document.hidden || isChartTooltipVisible()" in script
     assert 'event.key === "Escape"' in script
     assert "renderManualDrawings();" in script
+    assert '.chart-session-switcher form' in script
+    assert 'event.preventDefault();' in script
+    assert 'method: "POST"' in script
+    assert 'body: new URLSearchParams(new FormData(form))' in script
+    assert 'window.location.assign(response.url || "/charts")' in script
     assert "window.localStorage.setItem(drawingStorageKey" in script
     assert 'activeDrawingTool === "horizontal"' in script
 
