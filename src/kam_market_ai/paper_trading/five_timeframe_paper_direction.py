@@ -23,6 +23,8 @@ class FiveTimeframePaperDirection:
     trend_warning_codes: tuple[str, ...] = ()
     m15_ma20_position: str | None = None
     m15_ma20_direction: str | None = None
+    m60_ma20_support: str | None = None
+    m60_market_bias: str | None = None
     max_contracts: int = 1
 
     def safe_payload(self) -> dict[str, object]:
@@ -39,6 +41,8 @@ class FiveTimeframePaperDirection:
             "trend_warning_codes": list(self.trend_warning_codes),
             "m15_ma20_position": self.m15_ma20_position,
             "m15_ma20_direction": self.m15_ma20_direction,
+            "m60_ma20_support": self.m60_ma20_support,
+            "m60_market_bias": self.m60_market_bias,
             "max_contracts": 1,
             "scale_in_allowed": False,
             "averaging_down_allowed": False,
@@ -52,6 +56,8 @@ def decide_five_timeframe_paper_direction(
     trend_warning_codes: tuple[str, ...] = (),
     m15_ma20_position: str | None = None,
     m15_ma20_direction: str | None = None,
+    m60_ma20_support: str | None = None,
+    m60_market_bias: str | None = None,
 ) -> FiveTimeframePaperDirection:
     """Select long, short, or hold without constructing or sending an order.
 
@@ -70,6 +76,10 @@ def decide_five_timeframe_paper_direction(
         raise ValueError("m15_ma20_position must be a normalized MA20 relation")
     if m15_ma20_direction not in {None, "rising", "falling", "flat", "insufficient"}:
         raise ValueError("m15_ma20_direction must be a normalized MA20 direction")
+    if m60_ma20_support not in {None, "held", "retest_held", "broken", "insufficient"}:
+        raise ValueError("m60_ma20_support must be a normalized support state")
+    if m60_market_bias not in {None, "bullish", "bearish", "neutral", "insufficient"}:
+        raise ValueError("m60_market_bias must be a normalized market bias")
     if not isinstance(trend_warning_codes, tuple) or not all(
         isinstance(item, str) for item in trend_warning_codes
     ):
@@ -89,6 +99,8 @@ def decide_five_timeframe_paper_direction(
                 trend_warning_codes=trend_warning_codes,
                 m15_ma20_position=m15_ma20_position,
                 m15_ma20_direction=m15_ma20_direction,
+                m60_ma20_support=m60_ma20_support,
+                m60_market_bias=m60_market_bias,
             )
         if m15_ma20_position != "above" or m15_ma20_direction != "rising":
             return FiveTimeframePaperDirection(
@@ -97,6 +109,8 @@ def decide_five_timeframe_paper_direction(
                 trend_warning_codes=trend_warning_codes,
                 m15_ma20_position=m15_ma20_position,
                 m15_ma20_direction=m15_ma20_direction,
+                m60_ma20_support=m60_ma20_support,
+                m60_market_bias=m60_market_bias,
             )
         if weakening:
             return FiveTimeframePaperDirection(
@@ -105,6 +119,8 @@ def decide_five_timeframe_paper_direction(
                 trend_warning_codes=trend_warning_codes,
                 m15_ma20_position=m15_ma20_position,
                 m15_ma20_direction=m15_ma20_direction,
+                m60_ma20_support=m60_ma20_support,
+                m60_market_bias=m60_market_bias,
             )
         return FiveTimeframePaperDirection(
             "LONG", "PAPER_BUY", "FIVE_TIMEFRAME_BULLISH_CONFIRMED", codes, True,
@@ -112,9 +128,21 @@ def decide_five_timeframe_paper_direction(
             trend_warning_codes=trend_warning_codes,
             m15_ma20_position=m15_ma20_position,
             m15_ma20_direction=m15_ma20_direction,
+            m60_ma20_support=m60_ma20_support,
+            m60_market_bias=m60_market_bias,
         )
 
     if codes == ("BU",) * 5:
+        if m60_market_bias == "bullish":
+            return FiveTimeframePaperDirection(
+                "HOLD", "NO_PAPER_ORDER", "M60_MA20_SUPPORT_BULLISH_BIAS",
+                codes, False, daily_ma60_position=daily_ma60_position,
+                trend_warning_codes=trend_warning_codes,
+                m15_ma20_position=m15_ma20_position,
+                m15_ma20_direction=m15_ma20_direction,
+                m60_ma20_support=m60_ma20_support,
+                m60_market_bias=m60_market_bias,
+            )
         if daily_ma60_position != "below":
             return FiveTimeframePaperDirection(
                 "HOLD", "NO_PAPER_ORDER", "DAILY_MA60_NOT_BEARISH",
@@ -122,6 +150,8 @@ def decide_five_timeframe_paper_direction(
                 trend_warning_codes=trend_warning_codes,
                 m15_ma20_position=m15_ma20_position,
                 m15_ma20_direction=m15_ma20_direction,
+                m60_ma20_support=m60_ma20_support,
+                m60_market_bias=m60_market_bias,
             )
         if m15_ma20_position != "below" or m15_ma20_direction != "falling":
             return FiveTimeframePaperDirection(
@@ -130,6 +160,8 @@ def decide_five_timeframe_paper_direction(
                 trend_warning_codes=trend_warning_codes,
                 m15_ma20_position=m15_ma20_position,
                 m15_ma20_direction=m15_ma20_direction,
+                m60_ma20_support=m60_ma20_support,
+                m60_market_bias=m60_market_bias,
             )
         return FiveTimeframePaperDirection(
             "SHORT", "PAPER_SELL", "FIVE_TIMEFRAME_BEARISH_CONFIRMED", codes, True,
@@ -137,6 +169,8 @@ def decide_five_timeframe_paper_direction(
             trend_warning_codes=trend_warning_codes,
             m15_ma20_position=m15_ma20_position,
             m15_ma20_direction=m15_ma20_direction,
+            m60_ma20_support=m60_ma20_support,
+            m60_market_bias=m60_market_bias,
         )
 
     return FiveTimeframePaperDirection(
