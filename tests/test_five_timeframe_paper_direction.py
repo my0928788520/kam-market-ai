@@ -169,3 +169,36 @@ def test_m15_ma20_mismatch_or_missing_data_holds(
     assert result.eligible is False
     assert result.reason_code == reason
     assert result.live_order_allowed is False
+
+
+def test_intact_m60_ma20_support_blocks_fresh_short_and_exposes_bullish_bias() -> None:
+    result = decide_five_timeframe_paper_direction(
+        states("BU"),
+        daily_ma60_position="below",
+        m15_ma20_position="below",
+        m15_ma20_direction="falling",
+        m60_ma20_support="retest_held",
+        m60_market_bias="bullish",
+    )
+
+    assert result.direction == "HOLD"
+    assert result.action == "NO_PAPER_ORDER"
+    assert result.reason_code == "M60_MA20_SUPPORT_BULLISH_BIAS"
+    assert result.safe_payload()["m60_ma20_support"] == "retest_held"
+    assert result.safe_payload()["m60_market_bias"] == "bullish"
+    assert result.live_order_allowed is False
+
+
+def test_broken_m60_ma20_support_blocks_fresh_long() -> None:
+    result = decide_five_timeframe_paper_direction(
+        states("AU"),
+        daily_ma60_position="above",
+        m15_ma20_position="above",
+        m15_ma20_direction="rising",
+        m60_ma20_support="broken",
+        m60_market_bias="bearish",
+    )
+
+    assert result.direction == "HOLD"
+    assert result.reason_code == "M60_MA20_SUPPORT_BROKEN"
+    assert result.live_order_allowed is False
