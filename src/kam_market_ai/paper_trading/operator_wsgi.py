@@ -677,15 +677,33 @@ def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], a
             body = json.dumps(payload, separators=(",", ":")).encode()
             start_response("200 OK" if ready else "503 Service Unavailable", [("Content-Type", "application/json; charset=utf-8"), *headers]); return [body]
         if path == "/session-switch" and method == "POST" and callable(session_switcher):
+            instrument, timeframe = default_market_product, "60m"
             try:
-                length = min(int(str(environ.get("CONTENT_LENGTH") or "0")), 128)
+                length = min(int(str(environ.get("CONTENT_LENGTH") or "0")), 256)
                 stream = environ.get("wsgi.input")
                 raw = stream.read(length) if stream is not None else b""
-                requested = parse_qs(raw.decode("ascii"), keep_blank_values=True).get("session", [""])[0]
+                values = parse_qs(raw.decode("ascii"), keep_blank_values=True)
+                requested = values.get("session", [""])[0]
+                requested_instrument = values.get("instrument", [default_market_product])[0]
+                requested_timeframe = values.get("timeframe", ["60m"])[0]
+                instrument = (
+                    requested_instrument
+                    if requested_instrument in available_products
+                    else default_market_product
+                )
+                timeframe = (
+                    requested_timeframe
+                    if requested_timeframe in {"15m", "60m", "1d", "1w"}
+                    else "60m"
+                )
                 success, message = session_switcher(requested)
             except (TypeError, ValueError, UnicodeDecodeError):
                 success, message = False, "切換要求無效"
-            location = "/charts?session_notice=" + ("ok" if success else "failed")
+            notice = "ok" if success else "failed"
+            location = (
+                f"/charts?instrument={instrument}&timeframe={timeframe}"
+                f"&session_notice={notice}"
+            )
             start_response("303 See Other", [("Location", location), *headers]); return [message.encode("utf-8")]
         if method != "GET":
             start_response("405 Method Not Allowed", [("Content-Type", "text/plain; charset=utf-8"), ("Allow", "GET")]); return ["唯讀端點，不接受此操作。".encode()]
