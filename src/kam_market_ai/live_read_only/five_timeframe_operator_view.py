@@ -120,7 +120,6 @@ def build_five_timeframe_operator_view(
     five_minute = five_minute if isinstance(five_minute, Mapping) else {}
 
     m60_bias = str(diagnostics.get("m60_market_bias", "insufficient"))
-    m60_support = str(diagnostics.get("m60_ma20_support", "insufficient"))
     m60_bias_message = (
         "60分20MA支撐未破・行情偏多看待"
         if m60_bias == "bullish"
