@@ -193,6 +193,28 @@
     crosshair.removeAttribute("hidden");
   };
 
+  document.addEventListener("submit", async (event) => {
+    const form = event.target.closest?.(".chart-session-switcher form");
+    if (!form) return;
+    event.preventDefault();
+    const buttons = Array.from(form.closest(".chart-session-switcher").querySelectorAll("button"));
+    buttons.forEach((button) => { button.disabled = true; });
+    showStatus("切換盤別中…", "refreshing");
+    try {
+      const response = await fetch(form.action, {
+        method: "POST",
+        body: new URLSearchParams(new FormData(form)),
+        cache: "no-store",
+        redirect: "follow",
+      });
+      if (!response.ok) throw new Error(`session switch failed: ${response.status}`);
+      window.location.assign(response.url || "/charts");
+    } catch (_error) {
+      buttons.forEach((button) => { button.disabled = false; });
+      showStatus("盤別切換失敗・請重試", "error");
+    }
+  });
+
   document.addEventListener("pointermove", (event) => {
     const zone = event.target.closest?.(".chart-hover-zone");
     if (zone) showChartTooltip(zone, event.clientX, event.clientY);
