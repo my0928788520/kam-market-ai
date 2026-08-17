@@ -73,7 +73,7 @@ def test_local_session_switch_post_is_explicit_and_redirects_to_charts() -> None
         session_switcher=lambda value: (calls.append(value) is None, "已切換"),
     )
     response = {}
-    body = b"session=afterhours"
+    body = b"session=afterhours&instrument=TMF&timeframe=15m"
     result = b"".join(app({
         "REQUEST_METHOD": "POST",
         "PATH_INFO": "/session-switch",
@@ -83,8 +83,33 @@ def test_local_session_switch_post_is_explicit_and_redirects_to_charts() -> None
 
     assert calls == ["afterhours"]
     assert response["status"] == "303 See Other"
-    assert response["headers"]["Location"] == "/charts?session_notice=ok"
+    assert response["headers"]["Location"] == (
+        "/charts?instrument=TMF&timeframe=15m&session_notice=ok"
+    )
     assert result.decode() == "已切換"
+
+
+
+def test_local_session_switch_redirect_rejects_untrusted_chart_context() -> None:
+    app = build_operator_wsgi(
+        _view,
+        session_switcher=lambda _value: (False, "新時段資料驗證失敗，已維持原時段"),
+    )
+    response = {}
+    body = b"session=invalid&instrument=%2Faccount&timeframe=bad"
+
+    result = b"".join(app({
+        "REQUEST_METHOD": "POST",
+        "PATH_INFO": "/session-switch",
+        "CONTENT_LENGTH": str(len(body)),
+        "wsgi.input": BytesIO(body),
+    }, lambda status, headers: response.update(status=status, headers=dict(headers))))
+
+    assert response["status"] == "303 See Other"
+    assert response["headers"]["Location"] == (
+        "/charts?instrument=TMF&timeframe=60m&session_notice=failed"
+    )
+    assert result.decode() == "新時段資料驗證失敗，已維持原時段"
 
 
 def test_help_page_contains_sop_horizons_rollover_and_risk_boundaries() -> None:
