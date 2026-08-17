@@ -246,3 +246,43 @@ def test_operator_explains_exact_ma_and_alignment_blockers_in_chinese() -> None:
     assert view.demo["next_step"] == message
     assert page.count(message) >= 2
     assert view.live_order_allowed is False
+
+
+def test_operator_assigns_one_control_vote_to_intact_m60_ma20_support() -> None:
+    payload = {
+        "status": "READY_VERIFIED_FIVE_TIMEFRAMES",
+        "symbol": "TMFI6",
+        "market_data_only": True,
+        "trading_enabled": False,
+        "analysis_preview": {
+            "three_second_summary": {"headline": "五週期分析已更新", "direction": "觀望"},
+            "decision_diagnostics": {
+                "m60_ma20_support": "retest_held",
+                "m60_market_bias": "bullish",
+            },
+            "kam_rule_decision": {
+                "direction": "HOLD",
+                "primary_next_action": "等待五週期確認",
+                "states": {
+                    "1w": {"code": "ND"},
+                    "1d": {"code": "NF"},
+                    "60m": {"code": "AU"},
+                    "15m": {"code": "AF"},
+                    "5m": {"code": "NU"},
+                },
+            },
+            "timeframes": {"5m": {"last_price": 46137}},
+        },
+    }
+
+    view = build_five_timeframe_operator_view(payload)
+    page = render_operator_html(view)
+
+    assert view.demo is not None
+    assert view.demo["direction"] == "偏多"
+    assert view.demo["direction_reason"] == "60分20MA支撐未破・行情偏多看待"
+    assert view.demo["bull_score"] == "60"
+    assert view.demo["bear_score"] == "0"
+    assert view.demo["unconfirmed_score"] == "40"
+    assert "多方 6｜空方 0｜未確認 4" in page
+    assert view.live_order_allowed is False
