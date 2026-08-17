@@ -191,6 +191,8 @@ def decide_five_timeframe_paper_direction(
         trend_warning_codes=trend_warning_codes,
         m15_ma20_position=m15_ma20_position,
         m15_ma20_direction=m15_ma20_direction,
+        m60_ma20_support=m60_ma20_support,
+        m60_market_bias=m60_market_bias,
     )
 
 
