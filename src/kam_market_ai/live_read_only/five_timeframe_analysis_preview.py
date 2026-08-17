@@ -129,6 +129,41 @@ def _ma20_display_metrics(candles: tuple[Candle, ...]) -> dict[str, object]:
     }
 
 
+def _m60_ma20_support_metrics(candles: tuple[Candle, ...]) -> dict[str, object]:
+    """Classify support from closed 60-minute candles only.
+
+    The live intraday series keeps a final forming candle.  It is deliberately
+    excluded so a temporary intrabar dip cannot flip the control bias.
+    """
+    closed = candles[:-1]
+    if len(closed) < 20:
+        return {
+            "ma20_support": "insufficient",
+            "market_bias": "insufficient",
+            "support_close": None,
+            "support_low": None,
+        }
+    ma20 = sum(float(item.close) for item in closed[-20:]) / 20
+    latest = closed[-1]
+    close = float(latest.close)
+    low = float(latest.low)
+    if close < ma20:
+        support = "broken"
+        bias = "bearish"
+    elif low <= ma20:
+        support = "retest_held"
+        bias = "bullish"
+    else:
+        support = "held"
+        bias = "bullish"
+    return {
+        "ma20_support": support,
+        "market_bias": bias,
+        "support_close": close,
+        "support_low": low,
+    }
+
+
 def _daily_ma60_display_metrics(candles: tuple[Candle, ...]) -> dict[str, object]:
     """Expose the closed daily MA60 relation used only as a direction filter."""
     closes = tuple(float(item.close) for item in candles)
@@ -320,6 +355,11 @@ def build_verified_five_timeframe_analysis_preview(
             "error_codes": list(frame.error_codes),
             **_ma20_display_metrics(series[source_timeframe]),
             **(
+                _m60_ma20_support_metrics(series[source_timeframe])
+                if source_timeframe is FiveTimeframe.M60
+                else {}
+            ),
+            **(
                 _daily_ma60_display_metrics(series[source_timeframe])
                 if source_timeframe is FiveTimeframe.DAY
                 else {}
@@ -347,6 +387,8 @@ def build_verified_five_timeframe_analysis_preview(
         trend_warning_codes=trend_warning_codes,
         m15_ma20_position=str(analysis["15m"].get("price_vs_ma20", "insufficient")),
         m15_ma20_direction=str(analysis["15m"].get("ma20_direction", "insufficient")),
+        m60_ma20_support=str(analysis["60m"].get("ma20_support", "insufficient")),
+        m60_market_bias=str(analysis["60m"].get("market_bias", "insufficient")),
     )
     blockers.extend(kam_decision.blockers)
     diagnostics: dict[str, object] = {
@@ -364,6 +406,8 @@ def build_verified_five_timeframe_analysis_preview(
         "daily_ma60_position": analysis["1d"].get("price_vs_ma60", "insufficient"),
         "m15_ma20_position": analysis["15m"].get("price_vs_ma20", "insufficient"),
         "m15_ma20_direction": analysis["15m"].get("ma20_direction", "insufficient"),
+        "m60_ma20_support": analysis["60m"].get("ma20_support", "insufficient"),
+        "m60_market_bias": analysis["60m"].get("market_bias", "insufficient"),
         "max_contracts": 1,
         "scale_in_allowed": False,
         "observation_only": True,
