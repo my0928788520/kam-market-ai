@@ -360,6 +360,29 @@ def test_terminal_account_drawer_is_closed_by_default_and_reuses_get_only_accoun
     assert ".account-embedded .account-main > header" in css
 
 
+def test_unknown_cycle_does_not_place_current_marker_on_a_market_stage() -> None:
+    view = PaperTradingOperatorView(
+        "KAM",
+        "安全",
+        {},
+        {},
+        {},
+        (),
+        False,
+        demo={"source_kind": "FUBON_LIVE_FIVE_TIMEFRAME", "u_stage": "U0"},
+    )
+
+    html = render_operator_html(
+        view,
+        OFFLINE_DEMO_MARKET_DATA_SOURCE.read_snapshot("TX"),
+    )
+
+    assert "class='cycle-position-pending'" in html
+    assert ">等待位置判讀</text>" in html
+    assert "class='cycle-marker'" not in html
+    assert "class='cycle-current-label'" not in html
+
+
 def test_embedded_account_center_hides_duplicate_chrome_and_preserves_navigation() -> None:
     embedded = render_account_html(selected_view="position", selected_instrument="TMF", embedded=True)
     full = render_account_html(selected_view="position", selected_instrument="TMF")
@@ -395,6 +418,8 @@ def test_dashboard_renders_real_control_cells_and_coloured_cycle_structure() -> 
     assert "linearGradient id='cycle-rise'" in html and "linearGradient id='cycle-fall'" in html
     assert "filter id='cycle-glow'" in html and "filter id='cycle-marker-glow'" in html
     assert "class='cycle-marker'" in html and "transform='translate(150 59)'" in html
+    assert "class='cycle-current-label'" in html and ">目前位置</text>" in html
+    assert "class='cycle-position-pending'" not in html
     assert "preserveAspectRatio='xMidYMid meet'" in html
     for field in ("目前位置", "循環狀態", "上一階段", "下一階段", "唯一下一步", "風險"):
         assert field in html
