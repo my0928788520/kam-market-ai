@@ -76,6 +76,7 @@ _LINE_ALERT_STATUS_LABELS = {
     "WAITING_OR_DUPLICATE": "等待下一階段",
     "RETRY_PENDING": "傳送失敗・等待重試",
     "ROLLOVER_SENT": "換倉提醒已傳送",
+    "ANALYSIS_SENT": "現況分析已傳送",
 }
 
 
@@ -183,6 +184,8 @@ def build_five_timeframe_operator_view(
     execution_boundary = paper.get("execution_boundary")
     execution_boundary = execution_boundary if isinstance(execution_boundary, Mapping) else {}
     real_order_requires_human = execution_boundary.get("real_order_requires_human_action") is True
+    current_analysis = paper.get("current_analysis")
+    current_analysis = current_analysis if isinstance(current_analysis, Mapping) else {}
     demo = {
         "source_kind": "FUBON_LIVE_FIVE_TIMEFRAME",
         "banner": (
@@ -221,6 +224,7 @@ def build_five_timeframe_operator_view(
         "position": f"{open_positions} 口模擬部位" if open_positions else "無模擬部位",
         "unrealized_pnl": str(margin_state.get("unrealized_pnl", "0")),
         "next_step": next_step,
+        "current_analysis": dict(current_analysis),
         "automation_mode": "AUTO PAPER" if paper_armed else "未武裝",
     }
     proposal = {

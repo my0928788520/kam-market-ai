@@ -31,6 +31,8 @@ from kam_market_ai.models import Candle, Instrument
 from kam_market_ai.notifications import (
     LinePushNotifier,
     PersistentRefreshFaultMonitor,
+    build_current_market_analysis,
+    build_current_market_analysis_alert,
     build_due_tmf_rollover_alert,
     build_paper_exit_alert,
     build_paper_health_alert,
@@ -311,6 +313,9 @@ def main(
     refresh_fault_monitor: PersistentRefreshFaultMonitor | None = None
     active_line_alert = None
     active_line_alert_is_exit = False
+    current_analysis_bucket: str | None = None
+    current_analysis_fingerprint: str | None = None
+    pending_current_analysis_alert = None
     paper_runtime: dict[str, object] = {"armed": False, "action": "DISARMED"}
     if args.line_alerts:
         if not args.paper_test_armed:
@@ -388,6 +393,8 @@ def main(
 
     def capture_verified_refresh() -> None:
         nonlocal active_line_alert, active_line_alert_is_exit
+        nonlocal current_analysis_bucket, current_analysis_fingerprint
+        nonlocal pending_current_analysis_alert
         quote_source.refresh_safely()
         chart_source.capture_latest()
         if line_notifier is not None:
@@ -401,6 +408,32 @@ def main(
         if paper_session is None or verifier.latest_candle_result is None:
             return
         now = datetime.now(UTC)
+        try:
+            analysis = build_current_market_analysis(
+                read_five_timeframe_snapshot(args.snapshot),
+                observed_at=now,
+            )
+            if analysis.bucket != current_analysis_bucket:
+                changed = (
+                    current_analysis_fingerprint is not None
+                    and analysis.fingerprint != current_analysis_fingerprint
+                )
+                current_analysis_bucket = analysis.bucket
+                current_analysis_fingerprint = analysis.fingerprint
+                if changed or "current_analysis" not in paper_runtime:
+                    paper_runtime["current_analysis"] = analysis.safe_payload()
+                if changed and line_notifier is not None:
+                    pending_current_analysis_alert = build_current_market_analysis_alert(
+                        analysis, observed_at=now
+                    )
+            if pending_current_analysis_alert is not None and line_notifier is not None:
+                sent = line_notifier.send_once(pending_current_analysis_alert)
+                pending_current_analysis_alert = None
+                if sent:
+                    paper_runtime["line_analysis_status"] = "SENT"
+                    paper_runtime["line_alert_status"] = "ANALYSIS_SENT"
+        except (OSError, RuntimeError, TypeError, ValueError):
+            paper_runtime["line_analysis_status"] = "RETRY_PENDING"
         latest_quote = quote_source.latest
         try:
             journal_verified = (
@@ -445,7 +478,10 @@ def main(
                     except (OSError, RuntimeError, TimeoutError):
                         paper_runtime["line_sample_progress_status"] = "RETRY_PENDING"
                 exit_alert = build_paper_exit_alert(safe_result)
-                entry_alert = build_pending_order_alert(safe_result)
+                entry_alert = build_pending_order_alert(
+                    safe_result,
+                    take_profit_extension_points=paper_config.take_profit_extension_points,
+                )
                 if exit_alert is not None:
                     active_line_alert = exit_alert
                     active_line_alert_is_exit = True

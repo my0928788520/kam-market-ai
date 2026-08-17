@@ -66,6 +66,47 @@ def test_matching_margin_status_is_visually_emphasized() -> None:
     assert "<small>進度</small>" in html
 
 
+def test_current_analysis_uses_free_matching_space_and_stable_refresh_hash() -> None:
+    demo = {
+        "instrument": "TMF",
+        "source_kind": "FUBON_LIVE_FIVE_TIMEFRAME",
+        "current_analysis": {
+            "headline": "中期偏多、短線尚未同步，維持觀望",
+            "basis": "日線在60MA上方、60分20MA支撐未破、60分偏多",
+            "conflict": "5分與15分尚未同步轉強",
+            "waiting_for": "等待15分與5分完成多方確認",
+            "risk": "60分有效跌破20MA則注意轉弱",
+            "fingerprint": "abc123",
+            "bucket": "2026-08-17T08:00:00+00:00",
+        },
+    }
+    view = PaperTradingOperatorView(
+        "KAM",
+        "安全",
+        {},
+        {"LINE 通知": "已啟用"},
+        {"cash": "100"},
+        (),
+        False,
+        demo=demo,
+    )
+    html = render_operator_html(view)
+    css = Path("src/kam_market_ai/paper_trading/static/operator.css").read_text(
+        encoding="utf-8"
+    )
+    refresh = Path(
+        "src/kam_market_ai/paper_trading/static/dashboard-refresh.js"
+    ).read_text(encoding="utf-8")
+
+    assert "<h2>現況分析</h2>" in html
+    assert "data-analysis-hash='abc123'" in html
+    assert "即時盤勢判讀" in html
+    assert all(label in html for label in ("理由", "矛盾", "等待", "風險"))
+    assert ".current-analysis-details" in css
+    assert "currentCard.dataset.analysisHash === nextCard.dataset.analysisHash" in refresh
+    assert "nextDetails.replaceWith(currentDetails)" in refresh
+
+
 def test_local_session_switch_post_is_explicit_and_redirects_to_charts() -> None:
     calls = []
     app = build_operator_wsgi(

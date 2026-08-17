@@ -35,7 +35,22 @@
       if (!current || !replacement) {
         throw new Error(`missing dashboard refresh region: ${selector}`);
       }
-      current.replaceWith(document.importNode(replacement, true));
+      const imported = document.importNode(replacement, true);
+      if (selector === ".dashboard") {
+        const currentCard = current.querySelector(".current-analysis-card");
+        const nextCard = imported.querySelector(".current-analysis-card");
+        const currentDetails = current.querySelector(".current-analysis-details");
+        const nextDetails = imported.querySelector(".current-analysis-details");
+        const unchanged =
+          currentCard &&
+          nextCard &&
+          currentCard.dataset.analysisHash === nextCard.dataset.analysisHash;
+        if (unchanged) {
+          nextCard.replaceWith(currentCard);
+          if (currentDetails && nextDetails) nextDetails.replaceWith(currentDetails);
+        }
+      }
+      current.replaceWith(imported);
     }
     placeAccountMetrics();
   };

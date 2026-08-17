@@ -263,6 +263,30 @@ def _matching_rows(values: dict[str, str]) -> str:
     return f"<dl class='matching-status'>{_rows(status)}</dl><div class='performance-sample'><b>績效樣本</b>{metrics}</div>"
 
 
+def _current_analysis(demo: Mapping[str, object]) -> tuple[str, str]:
+    raw = demo.get("current_analysis")
+    analysis = raw if isinstance(raw, Mapping) else {}
+    headline = str(analysis.get("headline") or demo.get("next_step") or "等待資料完整")
+    fingerprint = str(analysis.get("fingerprint") or "pending")
+    bucket = str(analysis.get("bucket") or "等待首個五分鐘分析")
+    card = (
+        f"<section class='next-card current-analysis-card next-wait' data-analysis-hash='{escape(fingerprint)}'>"
+        "<h2>現況分析</h2>"
+        f"<strong>{escape(headline)}</strong>"
+        f"<small>五分鐘判讀：{escape(bucket)}</small></section>"
+    )
+    details = (
+        f"<aside class='current-analysis-details' data-analysis-hash='{escape(fingerprint)}'>"
+        "<b>即時盤勢判讀</b>"
+        f"<p><span>理由</span>{escape(str(analysis.get('basis') or '等待五週期資料'))}</p>"
+        f"<p><span>矛盾</span>{escape(str(analysis.get('conflict') or '等待週期比對'))}</p>"
+        f"<p><span>等待</span>{escape(str(analysis.get('waiting_for') or '等待資料完整'))}</p>"
+        f"<p><span>風險</span>{escape(str(analysis.get('risk') or '資料未完整前維持觀望'))}</p>"
+        "</aside>"
+    )
+    return card, details
+
+
 def _timeframe_card(name: object, state: object, details: Mapping[str, object] | None = None) -> str:
     """Apply a compact, presentation-only vocabulary to existing timeframe values."""
     raw = str(state)
@@ -509,6 +533,7 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
     """Render existing terminal cards plus a read-only market snapshot header only."""
     snapshot = snapshot or OFFLINE_DEMO_MARKET_DATA_SOURCE.read_snapshot(DEFAULT_MARKET_PRODUCT)
     demo = view.demo or {}
+    analysis_card, analysis_details = _current_analysis(demo)
     bull, cells = _cells(view)
     frames = _frontend_timeframe_cards(demo.get("timeframes", ()), demo.get("timeframe_details"))
     control_label = _control_label(view, bull)
@@ -527,7 +552,7 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
         "期貨具高槓桿，可能產生超過原始保證金之損失；所有實際委託均由使用者自行判斷並於券商端操作，交易結果與損益由使用者自行承擔。",
     )
     disclaimer = "".join(f"<span>{escape(line)}</span>" for line in disclaimer_lines)
-    return f"""<!doctype html><html lang='zh-Hant-TW'><head><meta charset='utf-8'><title>{escape(view.title)}</title><link rel='stylesheet' href='/static/operator.css'></head><body><main><header><h1>{escape(view.title)}</h1>{_market_header_status(snapshot)}<a class='account-chip' href='/account'>期貨帳戶｜資金安全</a>{_market_snapshot_header(snapshot)}</header><div class='banner'><span class='banner-message'>{escape(str(demo.get('banner', '尚未載入模擬委託建議。本機頁面目前為唯讀模式。')))} · 目前僅 Header 已切換至離線示範行情；決策卡尚未接入此商品 snapshot。</span>{line_alert_chip}</div><div class='dashboard'><section class='direction-card'><h2>市場方向</h2><strong>{escape(str(demo.get('direction', '—')))}</strong><p>{escape(str(demo.get('direction_reason', '尚未載入方向資料')))}</p></section><section class='control-card'><h2>多空控制權</h2><strong>{escape(control_label)}</strong><small>控制權分裂</small><div class='control-cells'>{cells}</div></section>{_cycle(view)}<section class='timeframes'><h2>四週期狀態</h2><div>{frames}</div></section><section class='trend-health-card'><h2>趨勢健康度</h2><strong>{escape(str(demo.get('trend_health', '—')))}</strong></section><section class='position-card'><h2>目前模擬部位</h2><strong>{escape(str(demo.get('position', '無部位')))}</strong><p>現價 {escape(str(demo.get('current_price', '—')))} · 未實現 {escape(str(demo.get('unrealized_pnl', '—')))}</p></section><section class='next-card next-wait'><h2>唯一下一步</h2><strong>{escape(str(demo.get('next_step', '等待資料完整')))}</strong></section>{proposal}<section class='matching'><h2>模擬撮合結果</h2>{_matching_rows(view.matching)}</section></div><footer><div class='footer-metrics'><span>模擬現金：{escape(str(view.ledger.get('cash', '—')))}</span><span>模擬部位：{escape(str(view.ledger.get('positions', '—')))}</span><span>已實現損益：—</span><span>未實現損益：{escape(str(demo.get('unrealized_pnl', '—')))}</span><span>緊急停止：{'已啟動' if view.emergency_stop else '未啟動'}</span><span class='audit'>稽核紀錄：{audit}</span></div><p class='risk-disclaimer'>{disclaimer}</p></footer></main></body></html>"""
+    return f"""<!doctype html><html lang='zh-Hant-TW'><head><meta charset='utf-8'><title>{escape(view.title)}</title><link rel='stylesheet' href='/static/operator.css'></head><body><main><header><h1>{escape(view.title)}</h1>{_market_header_status(snapshot)}<a class='account-chip' href='/account'>期貨帳戶｜資金安全</a>{_market_snapshot_header(snapshot)}</header><div class='banner'><span class='banner-message'>{escape(str(demo.get('banner', '尚未載入模擬委託建議。本機頁面目前為唯讀模式。')))} · 目前僅 Header 已切換至離線示範行情；決策卡尚未接入此商品 snapshot。</span>{line_alert_chip}</div><div class='dashboard'><section class='direction-card'><h2>市場方向</h2><strong>{escape(str(demo.get('direction', '—')))}</strong><p>{escape(str(demo.get('direction_reason', '尚未載入方向資料')))}</p></section><section class='control-card'><h2>多空控制權</h2><strong>{escape(control_label)}</strong><small>控制權分裂</small><div class='control-cells'>{cells}</div></section>{_cycle(view)}<section class='timeframes'><h2>四週期狀態</h2><div>{frames}</div></section><section class='trend-health-card'><h2>趨勢健康度</h2><strong>{escape(str(demo.get('trend_health', '—')))}</strong></section><section class='position-card'><h2>目前模擬部位</h2><strong>{escape(str(demo.get('position', '無部位')))}</strong><p>現價 {escape(str(demo.get('current_price', '—')))} · 未實現 {escape(str(demo.get('unrealized_pnl', '—')))}</p></section>{analysis_card}{proposal}<section class='matching'><h2>模擬撮合結果</h2>{_matching_rows(view.matching)}{analysis_details}</section></div><footer><div class='footer-metrics'><span>模擬現金：{escape(str(view.ledger.get('cash', '—')))}</span><span>模擬部位：{escape(str(view.ledger.get('positions', '—')))}</span><span>已實現損益：—</span><span>未實現損益：{escape(str(demo.get('unrealized_pnl', '—')))}</span><span>緊急停止：{'已啟動' if view.emergency_stop else '未啟動'}</span><span class='audit'>稽核紀錄：{audit}</span></div><p class='risk-disclaimer'>{disclaimer}</p></footer></main></body></html>"""
 
 
 _render_terminal_html = render_operator_html

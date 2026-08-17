@@ -44,8 +44,13 @@ def test_alert_contains_only_review_fields_and_expires_in_fifteen_minutes() -> N
     alert = build_pending_order_alert(payload())
     assert alert is not None
     assert alert.expires_at == datetime(2026, 8, 17, 1, 15, tzinfo=UTC)
-    assert "偏多" in alert.text and "TMFH6" in alert.text
-    assert "停損：21980" in alert.text and "停利：22040" in alert.text
+    assert "方向：做多" in alert.text and "TMFH6" in alert.text
+    assert "口數：固定 1 口微台" in alert.text
+    assert "建議進場：22000" in alert.text
+    assert "停損：21980" in alert.text and "第一停利：22040" in alert.text
+    assert "延伸停利：22060" in alert.text
+    assert "15分20MA條件失效" in alert.text
+    assert "Paper Trading" in alert.text and "不會送出真實委託" in alert.text
     for forbidden in ("account", "password", "token", "certificate"):
         assert forbidden not in alert.text.lower()
 
@@ -53,6 +58,31 @@ def test_alert_contains_only_review_fields_and_expires_in_fifteen_minutes() -> N
 def test_non_entry_or_live_capable_payload_never_builds_an_alert() -> None:
     value = payload()
     value["action"] = "hold"
+    assert build_pending_order_alert(value) is None
+
+
+def test_short_alert_has_one_contract_and_descending_exit_prices() -> None:
+    value = payload()
+    value["direction"] = "SHORT"
+    value["performance_event"].update(
+        {
+            "stop_loss_price": "22020",
+            "take_profit_price": "21960",
+        }
+    )
+
+    alert = build_pending_order_alert(value)
+
+    assert alert is not None
+    assert "方向：做空" in alert.text
+    assert "第一停利：21960" in alert.text
+    assert "延伸停利：21940" in alert.text
+
+
+def test_entry_alert_rejects_more_than_one_micro_contract() -> None:
+    value = payload()
+    value["performance_event"]["quantity"] = "2"
+
     assert build_pending_order_alert(value) is None
     value = payload()
     value["live_order_allowed"] = True
@@ -153,6 +183,27 @@ def test_take_profit_exit_is_deduplicated_separately_from_entry() -> None:
     assert entry_alert is not None and exit_alert is not None
     assert entry_alert.proposal_hash != exit_alert.proposal_hash
     assert "模擬停利平倉" in exit_alert.text
+
+
+def test_m15_ma20_rule_exit_reports_actual_exit_price_and_reason() -> None:
+    value = payload()
+    value["action"] = "exit_filled"
+    value["performance_event"].update(
+        {
+            "event_type": "m15_ma20_rule_exit",
+            "current_price": "21995",
+            "realized_pnl": "-50",
+            "fill_hash": "d" * 64,
+            "proposal_hash": "a" * 64,
+        }
+    )
+
+    alert = build_paper_exit_alert(value)
+
+    assert alert is not None
+    assert "模擬15分20MA條件失效平倉" in alert.text
+    assert "平倉價：21995" in alert.text
+    assert "出場原因：15分20MA條件失效平倉" in alert.text
 
 
 def test_delivery_deduplication_survives_process_restart(tmp_path: Path) -> None:

@@ -218,7 +218,11 @@ class PersistentRefreshFaultMonitor:
         replace(temporary, self.state_path)
 
 
-def build_pending_order_alert(payload: Mapping[str, object]) -> LinePendingOrderAlert | None:
+def build_pending_order_alert(
+    payload: Mapping[str, object],
+    *,
+    take_profit_extension_points: Decimal = Decimal(20),
+) -> LinePendingOrderAlert | None:
     """Build only from a completed paper entry; never include account data."""
     if payload.get("action") != "entry_filled" or payload.get("live_order_allowed") is not False:
         return None
@@ -231,21 +235,49 @@ def build_pending_order_alert(payload: Mapping[str, object]) -> LinePendingOrder
         return None
     if boundary.get("broker_submission_available") is not False:
         return None
+    try:
+        quantity = Decimal(str(event.get("quantity")))
+        entry_price = Decimal(str(event.get("entry_price")))
+        stop_loss_price = Decimal(str(event.get("stop_loss_price")))
+        take_profit_price = Decimal(str(event.get("take_profit_price")))
+    except (ArithmeticError, TypeError, ValueError):
+        return None
+    direction = str(payload.get("direction", "")).upper()
+    if (
+        quantity != Decimal(1)
+        or direction not in {"LONG", "SHORT"}
+        or not take_profit_extension_points.is_finite()
+        or take_profit_extension_points <= 0
+    ):
+        return None
     observed = datetime.fromisoformat(str(event["observed_at"]).replace("Z", "+00:00"))
     expires = observed + timedelta(minutes=15)
-    side = "偏多" if str(payload.get("direction", "")).upper() == "LONG" else "偏空"
+    side = "做多" if direction == "LONG" else "做空"
+    extension_price = (
+        take_profit_price + take_profit_extension_points
+        if direction == "LONG"
+        else take_profit_price - take_profit_extension_points
+    )
+    if not (
+        stop_loss_price < entry_price < take_profit_price < extension_price
+        if direction == "LONG"
+        else extension_price < take_profit_price < entry_price < stop_loss_price
+    ):
+        return None
     text = "\n".join(
         (
-            "KAM 待確認委託",
+            "KAM 模擬交易提案",
             f"方向：{side}",
             f"商品：{event['instrument']}",
-            f"建議口數：{event['quantity']} 口",
-            f"參考委託價：{event['entry_price']}",
+            "口數：固定 1 口微台",
+            f"建議進場：{event['entry_price']}",
             f"停損：{event['stop_loss_price']}",
-            f"停利：{event['take_profit_price']}",
+            f"第一停利：{event['take_profit_price']}",
+            f"延伸停利：{extension_price}",
+            "出場條件：停損／第一停利／15分20MA條件失效",
             f"有效期限：{expires.isoformat()}",
             "狀態：等待本人確認",
-            "安全：本通知不會送出真實委託",
+            "模式：Paper Trading｜不會送出真實委託",
         )
     )
     return LinePendingOrderAlert(proposal_hash, text, expires)
@@ -265,6 +297,7 @@ def build_paper_exit_alert(payload: Mapping[str, object]) -> LinePendingOrderAle
     labels = {
         "stop_loss_exit": "停損平倉",
         "take_profit_exit": "停利平倉",
+        "m15_ma20_rule_exit": "15分20MA條件失效平倉",
     }
     if event_type not in labels:
         return None
@@ -287,6 +320,7 @@ def build_paper_exit_alert(payload: Mapping[str, object]) -> LinePendingOrderAle
             f"口數：{event['quantity']} 口",
             f"進場價：{event['entry_price']}",
             f"平倉價：{event['current_price']}",
+            f"出場原因：{labels[event_type]}",
             f"已實現損益：{event['realized_pnl']}",
             f"平倉時間：{observed.isoformat()}",
             "狀態：模擬部位已平倉，舊提醒已停止",
