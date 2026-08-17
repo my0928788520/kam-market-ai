@@ -136,6 +136,7 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
 .chart-session-afterhours { border-color: #6f79d8; color: #cbd0ff; background: #20264e; box-shadow: 0 0 14px #8791ff2b; }
 .chart-session-unknown { border-color: #586273; color: #aab3c1; background: #202630; }
 .chart-session-switcher { display: inline-flex; gap: 4px; padding: 3px; border: 1px solid #344158; border-radius: 999px; background: #0d1420; }
+.chart-session-switcher form { margin: 0; }
 .chart-session-choice { border: 0; border-radius: 999px; padding: 5px 12px; color: #9da9bb; background: transparent; cursor: pointer; font-weight: 700; }
 .chart-session-choice:hover { color: #fff; background: #263247; }
 .chart-session-choice.active { color: #101722; background: #f0c467; box-shadow: 0 0 12px #f0c46744; }
