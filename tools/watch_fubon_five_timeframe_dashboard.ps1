@@ -1,6 +1,6 @@
 param(
     [ValidatePattern('^[A-Za-z0-9]+$')]
-    [string]$Symbol = 'TMFH6',
+    [string]$Symbol,
 
     [ValidateSet('regular', 'afterhours')]
     [string]$Session = 'afterhours',
@@ -19,6 +19,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $dashboardScript = Join-Path $PSScriptRoot 'start_fubon_five_timeframe_dashboard.ps1'
+$python = Join-Path $projectRoot '.venv\Scripts\python.exe'
+$envFile = Join-Path $projectRoot '.env'
 $healthUrl = "http://127.0.0.1:$Port/api/five-timeframe/health"
 $logDirectory = Join-Path $projectRoot 'debug\watchdog'
 $stdoutLog = Join-Path $logDirectory 'dashboard.stdout.log'
@@ -68,27 +70,17 @@ function Send-LineRecoveryNotice {
     if (-not $token -or -not $recipient) {
         return
     }
-    $message = @(
-        'KAM Paper Trading 看門狗已恢復服務',
-        "商品：$Symbol",
-        "時段：$Session",
-        "健康網址：$healthUrl",
-        "恢復時間：$([DateTimeOffset]::Now.ToString('o'))",
-        '安全：僅啟動 Paper Trading，不會送出真實委託'
-    ) -join "`n"
-    $body = @{
-        to = $recipient
-        messages = @(@{ type = 'text'; text = $message })
-    } | ConvertTo-Json -Depth 4 -Compress
     try {
-        Invoke-RestMethod `
-            -Uri 'https://api.line.me/v2/bot/message/push' `
-            -Method Post `
-            -Headers @{ Authorization = "Bearer $token" } `
-            -ContentType 'application/json; charset=utf-8' `
-            -Body ([Text.Encoding]::UTF8.GetBytes($body)) `
-            -TimeoutSec 10 | Out-Null
-    }
+        $noticeArguments = @(
+            '-m', 'kam_market_ai.notifications.watchdog_recovery_cli',
+            '--env', $envFile,
+            '--session', $Session,
+            '--health-url', $healthUrl
+        )
+        if ($Symbol) {
+            $noticeArguments += @('--symbol', $Symbol)
+        }
+        & $python @noticeArguments | Out-Null
     catch {
         # The next healthy dashboard cycle still provides its own persistent LINE recovery notice.
     }
@@ -103,10 +95,12 @@ function Start-DashboardProcess {
         '-NoProfile',
         '-ExecutionPolicy', 'Bypass',
         '-File', ('"{0}"' -f $dashboardScript),
-        '-Symbol', $Symbol,
         '-Session', $Session,
         '-Port', [string]$Port
     )
+    if ($Symbol) {
+        $arguments += @('-Symbol', $Symbol)
+    }
     if ($PaperTestArmed) {
         $arguments += '-PaperTestArmed'
     }
