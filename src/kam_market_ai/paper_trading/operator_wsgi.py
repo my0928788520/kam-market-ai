@@ -179,6 +179,20 @@ def _cycle(view: PaperTradingOperatorView) -> str:
         f"<text class='cycle-stage-label' x='{px}' y='{py}'>{label}</text>"
         for label, px, py in labels
     )
+    if index == 0:
+        current_marker = (
+            "<g class='cycle-position-pending' transform='translate(200 112)'>"
+            "<rect x='-56' y='-13' width='112' height='26' rx='13'/>"
+            "<text x='0' y='4'>等待位置判讀</text></g>"
+        )
+    else:
+        marker_label_y = -19 if y >= 82 else 25
+        current_marker = (
+            f"<g class='cycle-marker' transform='translate({x} {y})' "
+            "filter='url(#cycle-marker-glow)'><circle class='marker-outer' r='15'/>"
+            "<circle class='marker-inner-ring' r='9'/><circle class='marker-core' r='4'/>"
+            f"<text class='cycle-current-label' x='0' y='{marker_label_y}'>目前位置</text></g>"
+        )
     return f"""
     <section class='cycle-card' aria-label='市場循環位置（倒 U 階段）'>
       <header class='cycle-card-header'>
@@ -198,7 +212,7 @@ def _cycle(view: PaperTradingOperatorView) -> str:
             <path class='cycle-path fall-path' d='M198 48 Q222 50 246 61 Q269 79 292 91 Q314 111 336 127 Q356 140 376 146' fill='none' stroke='url(#cycle-fall)' stroke-width='7' stroke-linecap='round' filter='url(#cycle-glow)'/>
             <circle class='cycle-peak-glow' cx='198' cy='48' r='7'/>
             {stage_labels}
-            <g class='cycle-marker' transform='translate({x} {y})' filter='url(#cycle-marker-glow)'><circle class='marker-outer' r='15'/><circle class='marker-inner-ring' r='9'/><circle class='marker-core' r='4'/></g>
+            {current_marker}
           </svg>
         </div>
         <dl class='cycle-info'>
