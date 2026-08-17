@@ -129,6 +129,8 @@ def test_preview_runs_all_five_timeframes_and_remains_fail_closed() -> None:
         "daily_ma60_position",
         "m15_ma20_position",
         "m15_ma20_direction",
+        "m60_ma20_support",
+        "m60_market_bias",
         "max_contracts",
         "scale_in_allowed",
         "observation_only",
@@ -174,6 +176,13 @@ def test_preview_exposes_bounded_ma20_display_metrics_without_raw_candles() -> N
     assert daily["range_support"] == 99
     assert daily["range_window_bars"] == 20
     assert daily["range_excludes_latest"] is False
+    m60 = payload["timeframes"]["60m"]
+    assert m60["ma20_support"] == "held"
+    assert m60["market_bias"] == "bullish"
+    assert m60["support_close"] == 119
+    assert m60["support_low"] == 117
+    assert payload["decision_diagnostics"]["m60_ma20_support"] == "held"
+    assert payload["decision_diagnostics"]["m60_market_bias"] == "bullish"
     intraday = payload["timeframes"]["15m"]
     assert intraday["range_resistance"] == 121
     assert intraday["range_support"] == 98
@@ -219,3 +228,37 @@ def test_preview_exposes_daily_ma60_direction_filter_metrics() -> None:
     assert isinstance(payload["timeframes"]["15m"]["trend_warning_codes"], list)
     assert payload["decision_diagnostics"]["m15_ma20_position"] == "above"
     assert payload["decision_diagnostics"]["m15_ma20_direction"] == "rising"
+
+
+def test_m60_support_uses_closed_candle_and_ignores_forming_break() -> None:
+    base = complete_result_with_ma_history()
+    series = dict(base.series)
+    m60 = list(series[FiveTimeframe.M60])
+    forming = m60[-1]
+    m60[-1] = Candle(
+        forming.instrument,
+        forming.start,
+        forming.end,
+        forming.open,
+        forming.high,
+        50,
+        50,
+        forming.volume,
+    )
+    series[FiveTimeframe.M60] = tuple(m60)
+    result = CompleteFiveTimeframeCandleResult(
+        instrument=Instrument.TMF,
+        session=None,
+        series=MappingProxyType(series),
+        endpoint_call_count=3,
+    )
+
+    payload = build_verified_five_timeframe_analysis_preview(
+        result, evaluated_at=NOW
+    ).safe_payload()
+
+    assert payload["timeframes"]["60m"]["ma20_support"] == "held"
+    assert payload["timeframes"]["60m"]["market_bias"] == "bullish"
+    assert payload["decision_diagnostics"]["m60_market_bias"] == "bullish"
+    assert payload["kam_rule_decision"]["paper_test_direction"]["m60_market_bias"] == "bullish"
+    assert payload["live_order_allowed"] is False
