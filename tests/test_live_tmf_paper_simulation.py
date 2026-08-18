@@ -45,6 +45,8 @@ def direction(code: str):
             daily_ma60_position="above",
             m15_ma20_position="above",
             m15_ma20_direction="rising",
+            m60_ma20_support="held",
+            m60_market_bias="bullish",
         )
     if code == "BU":
         return decide_five_timeframe_paper_direction(
@@ -52,12 +54,16 @@ def direction(code: str):
             daily_ma60_position="below",
             m15_ma20_position="below",
             m15_ma20_direction="falling",
+            m60_ma20_support="broken",
+            m60_market_bias="bearish",
         )
     return decide_five_timeframe_paper_direction(
         states,
         daily_ma60_position="insufficient",
         m15_ma20_position="insufficient",
         m15_ma20_direction="insufficient",
+        m60_ma20_support="insufficient",
+        m60_market_bias="insufficient",
     )
 
 
@@ -947,6 +953,8 @@ def test_m15_ma20_invalidation_exits_open_paper_position_without_reversal(
         daily_ma60_position="above" if entry_code == "AU" else "below",
         m15_ma20_position=invalid_position,
         m15_ma20_direction=invalid_slope,
+        m60_ma20_support="held" if entry_code == "AU" else "broken",
+        m60_market_bias="bullish" if entry_code == "AU" else "bearish",
     )
 
     result = session.process_evaluation(
