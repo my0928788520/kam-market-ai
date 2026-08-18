@@ -2,6 +2,7 @@ from pathlib import Path
 
 from kam_market_ai.market_data.fubon_live_five_timeframe_dashboard_cli import (
     LiveFiveTimeframeSnapshotRefresher,
+    _safe_initial_refresh_error_code,
     main,
 )
 from kam_market_ai.market_data.fubon_live_five_timeframe_verifier import (
@@ -134,3 +135,18 @@ def test_service_source_contains_no_order_or_account_capability() -> None:
     source = Path(module.__file__).read_text(encoding="utf-8").lower()
     assert "place_order" not in source
     assert "accounting" not in source
+
+
+def test_initial_refresh_diagnostic_exposes_only_canonical_error_codes() -> None:
+    assert (
+        _safe_initial_refresh_error_code(ValueError("FIVE_TIMEFRAME_EMPTY_15M"))
+        == "FIVE_TIMEFRAME_EMPTY_15M"
+    )
+    assert (
+        _safe_initial_refresh_error_code(ValueError("account secret: do not expose"))
+        == "UNCLASSIFIED_VALUE_ERROR"
+    )
+    assert (
+        _safe_initial_refresh_error_code(RuntimeError("transport failed for user"))
+        == "UNCLASSIFIED_ERROR"
+    )

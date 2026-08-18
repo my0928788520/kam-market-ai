@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import threading
 import webbrowser
 from collections.abc import Callable, Sequence
@@ -61,6 +62,17 @@ from .fubon_neo import (
 from .fubon_tmf_contract_probe import FubonTmfContractProbe
 from .index_futures_product import index_futures_product, infer_index_futures_instrument
 from .taifex_official_history import TaifexOfficialHistorySource
+
+
+_SAFE_DIAGNOSTIC_CODE = re.compile(r"[A-Z][A-Z0-9_]{2,79}")
+
+
+def _safe_initial_refresh_error_code(error: Exception) -> str:
+    """Expose only canonical machine codes; never serialize arbitrary exception text."""
+    candidate = str(error)
+    if _SAFE_DIAGNOSTIC_CODE.fullmatch(candidate):
+        return candidate
+    return "UNCLASSIFIED_VALUE_ERROR" if isinstance(error, ValueError) else "UNCLASSIFIED_ERROR"
 
 
 @dataclass(frozen=True, slots=True)
@@ -573,6 +585,7 @@ def main(
                     "success": False,
                     "failure_stage": "INITIAL_REFRESH_ERROR",
                     "error_type": type(error).__name__,
+                    "error_code": _safe_initial_refresh_error_code(error),
                 }
             )
         )
