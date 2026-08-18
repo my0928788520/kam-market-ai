@@ -59,14 +59,15 @@ def decide_five_timeframe_paper_direction(
     m60_ma20_support: str | None = None,
     m60_market_bias: str | None = None,
 ) -> FiveTimeframePaperDirection:
-    """Select long, short, or hold without constructing or sending an order.
+    """Select a paper direction from M60 location and an M15 trigger.
 
-    Daily MA60 is a direction filter.  Closed M15 MA20 position and slope are
-    entry triggers.  Closed M60 MA20 support adds a directional bias: intact
-    support blocks fresh shorts, while a confirmed close below blocks fresh
-    longs.  Trendline warnings block fresh long entries but never
-    create an opposite order by themselves.  Quantity is permanently capped at
-    one Micro Taiwan Index Futures contract with no scale-in or averaging down.
+    Closed M60 candles provide the primary directional location: held MA20
+    support permits longs, while a confirmed break permits shorts.  Closed M15
+    MA20 position and slope provide the actual entry trigger.  The remaining
+    timeframes, daily MA60, and trendline warnings stay in the payload as
+    context; they do not impose the former five-timeframe alignment veto.
+    Quantity remains capped at one Micro Taiwan Index Futures contract with no
+    scale-in or averaging down, and this function never enables live orders.
     """
     if len(states) != 5 or not all(
         isinstance(item, MappedKamTimeframeState) for item in states
@@ -88,111 +89,38 @@ def decide_five_timeframe_paper_direction(
         raise TypeError("trend_warning_codes must be a tuple of strings")
 
     codes = tuple(item.code for item in states)
-    weakening = {
-        "M15_ASCENDING_TRENDLINE_BROKEN_WEAKENING",
-        "M15_DESCENDING_TRENDLINE_RESISTANCE_WEAKENING",
-    }.intersection(trend_warning_codes)
-
-    if codes == ("AU",) * 5:
-        if m60_market_bias == "bearish":
+    payload = {
+        "daily_ma60_position": daily_ma60_position,
+        "trend_warning_codes": trend_warning_codes,
+        "m15_ma20_position": m15_ma20_position,
+        "m15_ma20_direction": m15_ma20_direction,
+        "m60_ma20_support": m60_ma20_support,
+        "m60_market_bias": m60_market_bias,
+    }
+    if m60_market_bias == "bullish" and m60_ma20_support in {"held", "retest_held"}:
+        if m15_ma20_position == "above" and m15_ma20_direction == "rising":
             return FiveTimeframePaperDirection(
-                "HOLD", "NO_PAPER_ORDER", "M60_MA20_SUPPORT_BROKEN",
-                codes, False, daily_ma60_position=daily_ma60_position,
-                trend_warning_codes=trend_warning_codes,
-                m15_ma20_position=m15_ma20_position,
-                m15_ma20_direction=m15_ma20_direction,
-                m60_ma20_support=m60_ma20_support,
-                m60_market_bias=m60_market_bias,
+                "LONG", "PAPER_BUY", "M60_BULLISH_M15_LONG_TRIGGER", codes, True,
+                **payload,
             )
-        if daily_ma60_position != "above":
+        reason_code = "M15_MA20_LONG_TRIGGER_NOT_CONFIRMED"
+    elif m60_market_bias == "bearish" and m60_ma20_support == "broken":
+        if m15_ma20_position == "below" and m15_ma20_direction == "falling":
             return FiveTimeframePaperDirection(
-                "HOLD", "NO_PAPER_ORDER", "DAILY_MA60_NOT_BULLISH",
-                codes, False, daily_ma60_position=daily_ma60_position,
-                trend_warning_codes=trend_warning_codes,
-                m15_ma20_position=m15_ma20_position,
-                m15_ma20_direction=m15_ma20_direction,
-                m60_ma20_support=m60_ma20_support,
-                m60_market_bias=m60_market_bias,
+                "SHORT", "PAPER_SELL", "M60_BEARISH_M15_SHORT_TRIGGER", codes, True,
+                **payload,
             )
-        if m15_ma20_position != "above" or m15_ma20_direction != "rising":
-            return FiveTimeframePaperDirection(
-                "HOLD", "NO_PAPER_ORDER", "M15_MA20_LONG_TRIGGER_NOT_CONFIRMED",
-                codes, False, daily_ma60_position=daily_ma60_position,
-                trend_warning_codes=trend_warning_codes,
-                m15_ma20_position=m15_ma20_position,
-                m15_ma20_direction=m15_ma20_direction,
-                m60_ma20_support=m60_ma20_support,
-                m60_market_bias=m60_market_bias,
-            )
-        if weakening:
-            return FiveTimeframePaperDirection(
-                "HOLD", "NO_PAPER_ORDER", "M15_TREND_WEAKENING_WARNING",
-                codes, False, daily_ma60_position=daily_ma60_position,
-                trend_warning_codes=trend_warning_codes,
-                m15_ma20_position=m15_ma20_position,
-                m15_ma20_direction=m15_ma20_direction,
-                m60_ma20_support=m60_ma20_support,
-                m60_market_bias=m60_market_bias,
-            )
-        return FiveTimeframePaperDirection(
-            "LONG", "PAPER_BUY", "FIVE_TIMEFRAME_BULLISH_CONFIRMED", codes, True,
-            daily_ma60_position=daily_ma60_position,
-            trend_warning_codes=trend_warning_codes,
-            m15_ma20_position=m15_ma20_position,
-            m15_ma20_direction=m15_ma20_direction,
-            m60_ma20_support=m60_ma20_support,
-            m60_market_bias=m60_market_bias,
-        )
-
-    if codes == ("BU",) * 5:
-        if m60_market_bias == "bullish":
-            return FiveTimeframePaperDirection(
-                "HOLD", "NO_PAPER_ORDER", "M60_MA20_SUPPORT_BULLISH_BIAS",
-                codes, False, daily_ma60_position=daily_ma60_position,
-                trend_warning_codes=trend_warning_codes,
-                m15_ma20_position=m15_ma20_position,
-                m15_ma20_direction=m15_ma20_direction,
-                m60_ma20_support=m60_ma20_support,
-                m60_market_bias=m60_market_bias,
-            )
-        if daily_ma60_position != "below":
-            return FiveTimeframePaperDirection(
-                "HOLD", "NO_PAPER_ORDER", "DAILY_MA60_NOT_BEARISH",
-                codes, False, daily_ma60_position=daily_ma60_position,
-                trend_warning_codes=trend_warning_codes,
-                m15_ma20_position=m15_ma20_position,
-                m15_ma20_direction=m15_ma20_direction,
-                m60_ma20_support=m60_ma20_support,
-                m60_market_bias=m60_market_bias,
-            )
-        if m15_ma20_position != "below" or m15_ma20_direction != "falling":
-            return FiveTimeframePaperDirection(
-                "HOLD", "NO_PAPER_ORDER", "M15_MA20_SHORT_TRIGGER_NOT_CONFIRMED",
-                codes, False, daily_ma60_position=daily_ma60_position,
-                trend_warning_codes=trend_warning_codes,
-                m15_ma20_position=m15_ma20_position,
-                m15_ma20_direction=m15_ma20_direction,
-                m60_ma20_support=m60_ma20_support,
-                m60_market_bias=m60_market_bias,
-            )
-        return FiveTimeframePaperDirection(
-            "SHORT", "PAPER_SELL", "FIVE_TIMEFRAME_BEARISH_CONFIRMED", codes, True,
-            daily_ma60_position=daily_ma60_position,
-            trend_warning_codes=trend_warning_codes,
-            m15_ma20_position=m15_ma20_position,
-            m15_ma20_direction=m15_ma20_direction,
-            m60_ma20_support=m60_ma20_support,
-            m60_market_bias=m60_market_bias,
-        )
+        reason_code = "M15_MA20_SHORT_TRIGGER_NOT_CONFIRMED"
+    elif m60_market_bias in {None, "insufficient"} or m60_ma20_support in {
+        None,
+        "insufficient",
+    }:
+        reason_code = "M60_LOCATION_INSUFFICIENT"
+    else:
+        reason_code = "M60_LOCATION_NOT_DIRECTIONAL"
 
     return FiveTimeframePaperDirection(
-        "HOLD", "NO_PAPER_ORDER", "FIVE_TIMEFRAME_NOT_FULLY_ALIGNED", codes, False,
-        daily_ma60_position=daily_ma60_position,
-        trend_warning_codes=trend_warning_codes,
-        m15_ma20_position=m15_ma20_position,
-        m15_ma20_direction=m15_ma20_direction,
-        m60_ma20_support=m60_ma20_support,
-        m60_market_bias=m60_market_bias,
+        "HOLD", "NO_PAPER_ORDER", reason_code, codes, False, **payload,
     )
 
 
