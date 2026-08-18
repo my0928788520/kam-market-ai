@@ -566,8 +566,16 @@ def main(
     )
     try:
         refresher.refresh_once()
-    except Exception:  # noqa: BLE001
-        print(json.dumps({"success": False, "failure_stage": "INITIAL_REFRESH_ERROR"}))
+    except Exception as error:  # noqa: BLE001
+        print(
+            json.dumps(
+                {
+                    "success": False,
+                    "failure_stage": "INITIAL_REFRESH_ERROR",
+                    "error_type": type(error).__name__,
+                }
+            )
+        )
         return 1
 
     def deliver_refresh_monitor_result(success: bool) -> None:
