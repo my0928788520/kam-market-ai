@@ -41,7 +41,12 @@ function Stop-OldKamProcesses {
         }
     foreach ($process in $processes) {
         if ($process.ProcessId -ne $PID) {
-            & taskkill.exe /PID $process.ProcessId /T /F 2>$null | Out-Null
+            Start-Process `
+                -FilePath 'taskkill.exe' `
+                -ArgumentList @('/PID', [string]$process.ProcessId, '/T', '/F') `
+                -WindowStyle Hidden `
+                -Wait `
+                -ErrorAction SilentlyContinue | Out-Null
         }
     }
 

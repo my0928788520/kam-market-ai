@@ -131,7 +131,12 @@ function Stop-ProjectDashboardProcesses {
     $processes = Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" |
         Where-Object { $_.CommandLine -and $_.CommandLine -match $escapedName }
     foreach ($process in $processes) {
-        & taskkill.exe /PID $process.ProcessId /T /F 2>$null | Out-Null
+        Start-Process `
+            -FilePath 'taskkill.exe' `
+            -ArgumentList @('/PID', [string]$process.ProcessId, '/T', '/F') `
+            -WindowStyle Hidden `
+            -Wait `
+            -ErrorAction SilentlyContinue | Out-Null
     }
 }
 

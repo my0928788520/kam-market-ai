@@ -46,4 +46,12 @@ def test_one_click_launcher_detects_session_waits_for_health_and_stays_paper_onl
     assert "-PaperTestArmed" in script
     assert "-NoBrowser" in script
     assert "Start-Process $dashboardUrl" in script
+    assert "-FilePath 'taskkill.exe'" in script
+    assert "-ErrorAction SilentlyContinue" in script
     assert "place_order" not in script
+
+    watchdog = (TOOLS / "watch_fubon_five_timeframe_dashboard.ps1").read_text(
+        encoding="utf-8"
+    )
+    assert "-FilePath 'taskkill.exe'" in watchdog
+    assert "& taskkill.exe" not in watchdog
