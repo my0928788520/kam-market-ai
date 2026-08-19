@@ -83,6 +83,7 @@ function Send-LineRecoveryNotice {
             $noticeArguments += @('--symbol', $Symbol)
         }
         & $python @noticeArguments | Out-Null
+    }
     catch {
         # The next healthy dashboard cycle still provides its own persistent LINE recovery notice.
     }

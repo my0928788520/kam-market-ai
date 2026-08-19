@@ -15,6 +15,7 @@ def test_watchdog_is_paper_only_and_single_instance() -> None:
     assert "-PaperTestArmed" in script
     assert "-LineAlerts" in script
     assert "-NoBrowser" in script
+    assert "& $python @noticeArguments | Out-Null\n    }\n    catch {" in script
     assert "live" not in script.lower().replace("live_order", "")
 
 
