@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 
 from kam_market_ai.paper_trading.operator_presenter import PaperTradingOperatorView
-from kam_market_ai.paper_trading.operator_wsgi import build_operator_wsgi, render_account_html, render_help_html, render_operator_html
+from kam_market_ai.paper_trading.operator_wsgi import _cycle, _timeframe_card, build_operator_wsgi, render_account_html, render_help_html, render_operator_html
 from kam_market_ai.paper_trading.demo_proposal import build_demo_session
 from kam_market_ai.paper_trading.demo_snapshot import DEMO_SNAPSHOT
 from kam_market_ai.paper_trading.operator_presenter import build_demo_operator_presenter
@@ -87,6 +87,16 @@ def test_matching_margin_status_is_visually_emphasized() -> None:
     assert ".proposal .proposal-hash-label" in css
     assert ".matching .journal-validation-label" in css
     assert ".matching .journal-hash-value { display: none; }" in css
+
+
+def test_operator_frontend_translates_internal_state_codes_to_chinese() -> None:
+    card = _timeframe_card("60 分", "BD", {"status": "stale"})
+    cycle = _cycle(PaperTradingOperatorView(
+        "KAM", "安全", {}, {}, {}, (), False, demo={"u_stage": "U4"}
+    ))
+
+    assert ">BD<" not in card and "<strong>偏空</strong>" in card
+    assert ">U4<" not in cycle and "class='cycle-code'>多方延伸後段<" in cycle
 
 
 def test_matching_shortens_journal_hash_without_losing_full_tooltip() -> None:
@@ -604,7 +614,8 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert ".proposal dd, .matching dd" in css and "text-overflow: ellipsis" in css
     assert ".matching > .footer-metrics" in css
     assert ".timeframes > div { display: grid; min-height: 0; grid-template-columns: repeat(3, minmax(0, 1fr));" in css
-    assert ".cycle-weekly-pill text { font-size: 11.5px; font-weight: 900;" in css
+    assert ".cycle-weekly-pill text { font-size: 13.5px; }" in css
+    assert "transform='translate({pill_x} -9)'" in Path("src/kam_market_ai/paper_trading/operator_wsgi.py").read_text(encoding="utf-8")
     assert ".timeframes { grid-column: 1 / 3; grid-row: 2; display: grid; grid-template-rows: auto minmax(0, 1fr);" in css
     assert ".timeframes h2 { margin-bottom: 7px; color: #f5f8ff; font-size: 16px;" in css
     assert ".timeframes > div { display: grid; min-height: 0;" in css

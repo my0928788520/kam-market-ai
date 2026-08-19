@@ -177,3 +177,6 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
   .performance-sample > b { grid-column: 1 / -1; }
   .performance-sample span, .performance-sample small, .performance-sample strong { overflow: visible; white-space: normal; text-overflow: clip; overflow-wrap: anywhere; }
 }
+
+/* Frontend-only weekly reference emphasis. */
+.cycle-weekly-pill text { font-size: 13.5px; }

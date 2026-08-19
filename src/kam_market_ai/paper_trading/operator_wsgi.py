@@ -141,9 +141,9 @@ def _cycle(view: PaperTradingOperatorView) -> str:
     weekly = weekly if isinstance(weekly, Mapping) else {}
     weekly_current = weekly.get("last_price", demo.get("current_price"))
     weekly_reference_labels = "".join(
-        f"<g class='cycle-weekly-pill {class_name}' transform='translate({pill_x} 1)'>"
-        "<rect width='96' height='24' rx='7'/>"
-        f"<text x='48' y='16'>{label} {_display_price(value)}</text></g>"
+        f"<g class='cycle-weekly-pill {class_name}' transform='translate({pill_x} -9)'>"
+        "<rect width='96' height='28' rx='8'/>"
+        f"<text x='48' y='19'>{label} {_display_price(value)}</text></g>"
         for class_name, pill_x, label, value in (
             ("cycle-weekly-current", 2, "週現", weekly_current),
             ("cycle-weekly-ma", 102, "20MA", weekly.get("ma20")),
@@ -176,7 +176,7 @@ def _cycle(view: PaperTradingOperatorView) -> str:
     return f"""
     <section class='cycle-card' aria-label='市場循環位置（倒 U 階段）'>
       <header class='cycle-card-header'>
-        <div><h2>市場循環位置</h2><small class='cycle-code'>{escape(raw[:2])}</small></div>
+        <div><h2>市場循環位置</h2><small class='cycle-code'>{escape(stage)}</small></div>
         <span class='cycle-badge'>規則性</span>
       </header>
       <div class='cycle-card-body'>
@@ -376,7 +376,8 @@ def _timeframe_card(name: object, state: object, details: Mapping[str, object] |
     except (TypeError, ValueError):
         range_bars = 0
     range_label = f"{range_bars}棒" if range_bars else "區間"
-    status_code = "" if code == "ND" else f"<strong>{escape(code)}</strong>"
+    status_label = {"A": "偏多", "N": "中性", "B": "偏空"}.get(code[:1], "")
+    status_code = f"<strong>{escape(status_label)}</strong>" if status_label else ""
     return (
         "<article class='timeframe-card'>"
         f"<b>{escape(str(name))}</b>{status_code}<span>{escape(interpretation)}</span>"
