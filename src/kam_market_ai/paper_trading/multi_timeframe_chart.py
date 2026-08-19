@@ -531,6 +531,28 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     ma_line = (
         f"<polyline class='chart-ma20' points='{' '.join(points)}'/>" if len(points) > 1 else ""
     )
+    daily_descending_line = ""
+    if series.timeframe == "1d":
+        _, falling, _ = _recent_trend_anchors(series)
+        if falling is not None:
+            left_at, left_high, right_at, right_high = falling
+            index_by_time = {candle.opened_at: index for index, candle in enumerate(candles)}
+            left_index = index_by_time.get(left_at)
+            right_index = index_by_time.get(right_at)
+            if left_index is not None and right_index is not None and right_index > left_index:
+                slope = (right_high - left_high) / (right_index - left_index)
+                latest_index = len(candles) - 1
+                projected = left_high + slope * (latest_index - left_index)
+                x1 = first_x + left_index * step
+                x2 = first_x + latest_index * step
+                daily_descending_line = (
+                    "<g class='chart-auto-descending' aria-label='日線下降趨勢線・多方轉弱參考'>"
+                    f"<line x1='{x1:.2f}' y1='{y(left_high):.2f}' "
+                    f"x2='{x2:.2f}' y2='{y(projected):.2f}'/>"
+                    f"<circle cx='{x1:.2f}' cy='{y(left_high):.2f}' r='3.5'/>"
+                    f"<circle cx='{first_x + right_index * step:.2f}' "
+                    f"cy='{y(right_high):.2f}' r='3.5'/></g>"
+                )
     grid_values = tuple(low + span * index / 4 for index in range(5))
     grid = "".join(
         f"<line class='chart-grid' x1='{left:.0f}' y1='{y(value):.2f}' x2='{right:.0f}' y2='{y(value):.2f}'/>"
@@ -547,7 +569,7 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
         "<svg class='candlestick-chart' viewBox='0 0 1024 392' role='img' aria-label='唯讀 K 線、20MA、即時水平線與成交量'>"
         f"{grid}<line class='chart-current-line' x1='{left:.0f}' y1='{latest_y:.2f}' x2='{right:.0f}' y2='{latest_y:.2f}'/>"
         f"<text class='chart-current-price-label' x='{right - 4:.0f}' y='{latest_y - 6:.2f}' text-anchor='end'>即時 {_price_text(displayed_price)}</text>"
-        f"<g class='chart-candles'>{''.join(bodies)}</g>{ma_line}<g class='chart-manual-drawings'></g><g class='chart-volumes'>{''.join(volumes)}</g>"
+        f"<g class='chart-candles'>{''.join(bodies)}</g>{ma_line}{daily_descending_line}<g class='chart-manual-drawings'></g><g class='chart-volumes'>{''.join(volumes)}</g>"
         f"<text class='chart-volume-label' x='{left:.0f}' y='288'>成交量</text>{time_labels}"
         f"<g class='chart-crosshair' hidden><line class='chart-crosshair-x' x1='0' y1='{top:.2f}' x2='0' y2='{volume_bottom:.2f}'/><line class='chart-crosshair-y' x1='{left:.2f}' y1='0' x2='{right:.2f}' y2='0'/></g>"
         f"<g class='chart-hover-zones'>{''.join(hover_zones)}</g></svg>"
@@ -594,7 +616,11 @@ def render_multi_timeframe_chart_html(
         if metrics.resistance is not None and metrics.support is not None
         else "<span>支撐壓力｜資料不足</span>"
     )
-    trend_overlay = "<span class='enabled'>趨勢／頸線｜手動畫線</span>"
+    trend_overlay = (
+        "<span class='enabled'>日線下降趨勢線｜自動確認波高點</span>"
+        if series.timeframe == "1d"
+        else "<span class='enabled'>趨勢／頸線｜手動畫線</span>"
+    )
     session_text = {"regular": "日盤", "afterhours": "夜盤"}.get(
         series.trading_session, "時段未確認"
     )

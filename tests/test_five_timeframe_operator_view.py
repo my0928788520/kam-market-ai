@@ -215,6 +215,35 @@ def test_operator_prioritizes_m15_trendline_weakening_warning() -> None:
     assert "15分上升趨勢線跌破・注意可能轉弱" in page
 
 
+def test_operator_prioritizes_daily_descending_trendline_weakening() -> None:
+    payload = {
+        "status": "READY_VERIFIED_FIVE_TIMEFRAMES",
+        "symbol": "TMFH6",
+        "market_data_only": True,
+        "trading_enabled": False,
+        "analysis_preview": {
+            "three_second_summary": {"headline": "五週期分析已更新"},
+            "decision_diagnostics": {"daily_bullish_weakening": True},
+            "kam_rule_decision": {
+                "direction": "SHORT",
+                "primary_next_action": "等待",
+                "states": {},
+                "paper_test_direction": {
+                    "reason_code": (
+                        "D1_DESCENDING_TRENDLINE_WEAKENING_M60_M15_SHORT_TRIGGER"
+                    )
+                },
+            },
+        },
+    }
+
+    view = build_five_timeframe_operator_view(payload)
+    page = render_operator_html(view)
+
+    assert "日線下降趨勢線壓制・多方轉弱・空方條件加強" in page
+    assert view.live_order_allowed is False
+
+
 
 def test_operator_explains_exact_ma_and_alignment_blockers_in_chinese() -> None:
     payload = {

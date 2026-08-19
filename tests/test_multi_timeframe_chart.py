@@ -369,6 +369,35 @@ def test_falling_line_connects_prominent_high_to_next_lower_wave_high() -> None:
     )
 
 
+def test_daily_chart_renders_confirmed_descending_wave_high_line() -> None:
+    start = datetime(2026, 8, 1, tzinfo=UTC)
+    highs = (104, 110, 105, 108, 104, 106, 102, 104, 100)
+    candles = tuple(
+        ChartCandle(
+            start + timedelta(days=index),
+            high - 2,
+            high,
+            high - 4,
+            high - 2,
+            10,
+        )
+        for index, high in enumerate(highs)
+    )
+    series = ChartSeries("TMF", "1d", candles, "daily-waves", candles[-1].opened_at)
+    source = type(
+        "DailySource",
+        (),
+        {"read_series": lambda self, instrument, timeframe: series},
+    )()
+
+    html = render_multi_timeframe_chart_html(source, timeframe="1d")
+
+    assert "class='chart-auto-descending'" in html
+    assert "日線下降趨勢線・多方轉弱參考" in html
+    assert "日線下降趨勢線｜自動確認波高點" in html
+    assert "禁止真實下單" in html
+
+
 def test_broken_rising_trend_is_removed_until_a_new_structure_forms() -> None:
     start = datetime(2026, 8, 1, tzinfo=UTC)
     lows = (10, 11, 8, 12, 13, 14, 10, 15, 14, 16, 11, 15, 14, 16, 17, 5)
