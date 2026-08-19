@@ -183,6 +183,11 @@ def test_current_analysis_uses_free_matching_space_and_stable_refresh_hash() -> 
     assert "class='current-analysis-details'" not in html
     assert ".proposal { grid-column: 1; grid-row: 3 / 5; }" in css
     assert ".matching { grid-column: 2 / 4; grid-row: 3 / 5; }" in css
+    assert "grid-template-rows: 88px 150px 75px minmax(85px, 1fr)" in css
+    assert ".cycle-chart svg { height: 128px; min-height: 128px; }" in css
+    assert ".timeframe-card strong { font-size: 23px; line-height: 24px; }" in css
+    assert ".proposal dt, .proposal dd, .matching dl { font-size: 14px;" in css
+    assert ".performance-sample strong { font-size: 16px; }" in css
     assert "currentCard.dataset.analysisHash === nextCard.dataset.analysisHash" in refresh
     assert "nextDetails.replaceWith(currentDetails)" not in refresh
 
