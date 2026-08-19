@@ -66,6 +66,25 @@ def test_matching_margin_status_is_visually_emphasized() -> None:
     assert "<small>進度</small>" in html
 
 
+def test_matching_shortens_journal_hash_without_losing_full_tooltip() -> None:
+    full_hash = "6be8f7e52ac49a77a7d7773f7a27fed41ac6999d2d00360e92c3fd262332137f"
+    view = PaperTradingOperatorView(
+        "KAM",
+        "安全",
+        {},
+        {"日誌雜湊": full_hash},
+        {"cash": "100"},
+        (),
+        False,
+    )
+
+    html = render_operator_html(view)
+
+    assert f"title='{full_hash}'" in html
+    assert "6be8f7e52ac4…</dd>" in html
+    assert f">{full_hash}</dd>" not in html
+
+
 def test_current_analysis_uses_free_matching_space_and_stable_refresh_hash() -> None:
     demo = {
         "instrument": "TMF",

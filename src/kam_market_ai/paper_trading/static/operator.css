@@ -173,7 +173,10 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
   html, body { height: auto; min-height: 100%; overflow-x: hidden; overflow-y: auto; }
   main { height: auto; min-height: 100vh; grid-template-rows: auto auto auto auto; }
   .dashboard { grid-template-rows: minmax(132px, auto) minmax(192px, auto) minmax(110px, auto) auto; overflow: visible; }
-  .matching { min-height: 210px; }
+  .matching { min-height: 170px; }
+  .matching:has(.current-analysis-details):has(> .footer-metrics) { grid-template-columns: minmax(320px, 1.25fr) minmax(300px, 1.1fr) minmax(190px, .75fr); gap: 3px 10px; }
   .matching-status { overflow: visible; }
-  .matching dd { white-space: normal; text-overflow: clip; overflow-wrap: anywhere; }
+  .matching dd { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; overflow-wrap: normal; }
+  .current-analysis-details { padding-inline: 10px; }
+  .matching:has(.current-analysis-details) > .footer-metrics { padding-left: 10px; }
 }

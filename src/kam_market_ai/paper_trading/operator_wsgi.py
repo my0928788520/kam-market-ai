@@ -238,10 +238,10 @@ def _rows(values: dict[str, str]) -> str:
         (
             f"<dt class='{row_classes[key]}-label'>{escape(key.replace('_', ' '))}</dt>"
             f"<dd class='{row_classes[key]}-value' title='{escape(str(value))}'>"
-            f"{escape(str(value)[:10]) if key.endswith('hash') else escape(str(value))}</dd>"
+            f"{escape(str(value)[:12]) + '…' if key.endswith('hash') or '雜湊' in key else escape(str(value))}</dd>"
             if key in row_classes
             else f"<dt>{escape(key.replace('_', ' '))}</dt><dd title='{escape(str(value))}'>"
-            f"{escape(str(value)[:10]) if key.endswith('hash') else escape(str(value))}</dd>"
+            f"{escape(str(value)[:12]) + '…' if key.endswith('hash') or '雜湊' in key else escape(str(value))}</dd>"
         )
         for key, value in values.items()
     )
