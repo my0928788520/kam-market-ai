@@ -56,12 +56,13 @@ def test_matching_margin_status_is_visually_emphasized() -> None:
     assert "grid-template-rows: auto minmax(0, 1fr)" in css
     assert ".matching:has(.performance-sample) .performance-sample { grid-column: 2; grid-row: 2;" in css
     assert ".matching:has(.performance-sample) > .footer-metrics { grid-column: 3; grid-row: 2;" in css
-    assert "minmax(280px, 1.25fr) minmax(190px, .75fr) minmax(260px, 1fr)" in css
+    assert "minmax(270px, 1fr) minmax(440px, 1.55fr) minmax(290px, 1fr)" in css
     assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in css
     assert "grid-auto-rows: min-content" in css
-    assert ".performance-sample > b { grid-column: 1 / -1; font-size: 12px; }" in css
-    assert ".performance-sample small { font-size: 11px; }" in css
-    assert ".performance-sample strong { font-size: 13px; line-height: 1.25; }" in css
+    assert ".performance-sample { grid-column: 2; grid-row: 2; grid-template-columns: repeat(4, minmax(0, 1fr));" in css
+    assert ".performance-sample > b { grid-column: 1 / -1; font-size: 14px; }" in css
+    assert ".performance-sample small { font-size: 12px; }" in css
+    assert ".performance-sample strong { font-size: 15px; line-height: 1.3; }" in css
     assert "padding-left: 14px; font-size: 13.5px; line-height: 1.45;" in css
     html = render_operator_html(_view())
     assert "<KAM>" not in html
