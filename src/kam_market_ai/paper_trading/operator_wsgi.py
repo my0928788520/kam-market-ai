@@ -239,13 +239,32 @@ def _rows(values: dict[str, str]) -> str:
 
 
 _PERFORMANCE_KEYS = ("績效樣本", "模擬勝率", "期望／獲利因子", "最大回撤")
+_SIMULATION_POSITION_KEYS = (
+    "Paper 持倉",
+    "停損／停利",
+    "最近動作",
+    "目前模擬價",
+    "未實現損益",
+    "已實現損益",
+    "保證金狀態",
+)
+
+
+def _proposal_rows(proposal: dict[str, str], matching: dict[str, str]) -> str:
+    frontend = dict(proposal)
+    frontend.update(
+        (key, matching[key]) for key in _SIMULATION_POSITION_KEYS if key in matching
+    )
+    return _rows(frontend)
 
 
 def _matching_rows(values: dict[str, str]) -> str:
     status = {
         key: value
         for key, value in values.items()
-        if key not in _PERFORMANCE_KEYS and key != "LINE 通知"
+        if key not in _PERFORMANCE_KEYS
+        and key not in _SIMULATION_POSITION_KEYS
+        and key != "LINE 通知"
     }
     performance = {key: values.get(key, "—") for key in _PERFORMANCE_KEYS}
     metrics = "".join(
@@ -529,7 +548,7 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
     control_label = _control_label(view, bull)
     audit = "".join(f"<li title='{escape(item['hash'])}'>{escape(item['type'])} · {escape(item['hash'][:10])}</li>" for item in view.audit_events[-3:])
     proposal_title = "自動模擬執行" if demo.get("automation_mode") == "AUTO PAPER" else "模擬委託建議"
-    proposal = f"<section class='proposal'><h2>{proposal_title}</h2><dl>{_rows(view.proposal)}</dl></section>"
+    proposal = f"<section class='proposal'><h2>{proposal_title}</h2><dl>{_proposal_rows(view.proposal, view.matching)}</dl></section>"
     line_alert_status = escape(str(view.matching.get("LINE 通知", "狀態待確認")))
     line_alert_chip = (
         f"<span class='line-alert-chip' title='LINE 通知：{line_alert_status}'>"

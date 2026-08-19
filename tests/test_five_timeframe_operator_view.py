@@ -169,6 +169,13 @@ def test_market_dashboard_exposes_armed_auto_paper_runtime_without_live_executio
     assert "自動停利</dt><dd title='45740'>45740" in page
     assert "未實現損益</dt><dd title='150'>150" in page
     assert "保證金狀態</dt><dd title='保證金安全'>保證金安全" in page
+    proposal_section = page.split("<section class='proposal'>", 1)[1].split("</section>", 1)[0]
+    matching_section = page.split("<section class='matching'>", 1)[1].split("</section>", 1)[0]
+    for label in ("Paper 持倉", "停損／停利", "最近動作", "目前模擬價", "未實現損益", "已實現損益", "保證金狀態"):
+        assert label in proposal_section
+        assert label not in matching_section
+    for label in ("目前契約", "行情更新（台灣）", "契約檢查", "實盤狀態"):
+        assert label in matching_section
     assert "<span class='line-alert-chip' title='LINE 通知：已啟用・等待模擬提案'>" in page
     assert "<b>LINE 通知</b><strong>已啟用・等待模擬提案</strong>" in page
     assert "class='line-alert-label'" not in page and "class='line-alert-value'" not in page
