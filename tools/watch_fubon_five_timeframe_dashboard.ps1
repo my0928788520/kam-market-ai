@@ -13,7 +13,9 @@ param(
 
     [switch]$PaperTestArmed,
 
-    [switch]$LineAlerts
+    [switch]$LineAlerts,
+
+    [switch]$NoBrowser
 )
 
 $ErrorActionPreference = 'Stop'
@@ -109,6 +111,9 @@ function Start-DashboardProcess {
             throw 'LineAlerts requires PaperTestArmed.'
         }
         $arguments += '-LineAlerts'
+    }
+    if ($NoBrowser) {
+        $arguments += '-NoBrowser'
     }
     return Start-Process `
         -FilePath 'powershell.exe' `

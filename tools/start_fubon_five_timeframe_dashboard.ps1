@@ -13,7 +13,9 @@ param(
 
     [switch]$PaperTestArmed,
 
-    [switch]$LineAlerts
+    [switch]$LineAlerts,
+
+    [switch]$NoBrowser
 )
 
 $ErrorActionPreference = 'Stop'
@@ -64,9 +66,12 @@ $arguments = @(
     '--chart-history', (Join-Path $projectRoot "debug\five_timeframe\${productSlug}_60m_history.json"),
     '--chart-history-15m', (Join-Path $projectRoot "debug\five_timeframe\${productSlug}_15m_history.json"),
     '--taifex-history-cache', (Join-Path $projectRoot "debug\five_timeframe\${productSlug}_taifex_official_history.json"),
-    '--taiex-weekly-cache', (Join-Path $projectRoot "debug\five_timeframe\taiex_official_weekly.json"),
-    '--open-browser'
+    '--taiex-weekly-cache', (Join-Path $projectRoot "debug\five_timeframe\taiex_official_weekly.json")
 )
+
+if (-not $NoBrowser) {
+    $arguments += '--open-browser'
+}
 
 if ($Symbol) {
     $arguments += @('--symbol', $Symbol)
