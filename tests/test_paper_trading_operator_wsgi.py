@@ -518,7 +518,8 @@ def test_dashboard_reference_prices_use_standard_half_up_integer_rounding() -> N
         demo={
             "current_price": 45895.5,
             "timeframe_details": {
-                "60 分": {
+                "週線": {
+                    "last_price": 45895.5,
                     "ma20": 45895.5,
                     "price_vs_ma20": "equal",
                     "ma20_direction": "flat",

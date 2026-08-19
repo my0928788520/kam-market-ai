@@ -82,73 +82,37 @@ def _display_price(value: object) -> str:
     return f"{int(rounded):,}"
 
 
-def _reference_level_text(
-    candidates: list[tuple[float, str]],
-    *,
-    current: float | None,
-    resistance: bool,
-) -> str:
-    if not candidates:
-        return "尚未形成"
-    if current is None:
-        level, source = (min if resistance else max)(candidates)
-        return f"{_display_price(level)}（{source.replace(' ', '')}）"
-    preferred = [item for item in candidates if item[0] >= current]
-    if not resistance:
-        preferred = [item for item in candidates if item[0] <= current]
-    if preferred:
-        level, source = (min if resistance else max)(preferred)
-        distance = abs(level - current)
-        sign = "+" if resistance else "−"
-        relation = f"{sign}{_display_price(distance)}點"
-    else:
-        level, source = (max if resistance else min)(candidates)
-        distance = abs(level - current)
-        relation = f"已突破 {_display_price(distance)}點" if resistance else f"已跌破 {_display_price(distance)}點"
-    return f"{_display_price(level)}（{source.replace(' ', '')}／{relation}）"
-
-
 def _cycle_market_references(demo: Mapping[str, object]) -> str:
     details = demo.get("timeframe_details")
     details = details if isinstance(details, Mapping) else {}
-    current = _numeric_price(demo.get("current_price"))
-    sixty = details.get("60 分")
-    sixty = sixty if isinstance(sixty, Mapping) else {}
-    ma20 = _display_price(sixty.get("ma20"))
+    weekly = details.get("週線")
+    weekly = weekly if isinstance(weekly, Mapping) else {}
+    current = _numeric_price(weekly.get("last_price"))
+    if current is None:
+        current = _numeric_price(demo.get("current_price"))
+    ma20 = _display_price(weekly.get("ma20"))
     ma_relation = {"above": "現價在上", "below": "現價在下", "equal": "現價貼近"}.get(
-        str(sixty.get("price_vs_ma20", "")),
+        str(weekly.get("price_vs_ma20", "")),
         "",
     )
     ma_direction = {"rising": "上彎", "falling": "下彎", "flat": "走平"}.get(
-        str(sixty.get("ma20_direction", "")),
+        str(weekly.get("ma20_direction", "")),
         "",
     )
     if ma20 != "尚未形成" and (ma_relation or ma_direction):
         ma20 += f"（{'・'.join(item for item in (ma_relation, ma_direction) if item)}）"
-    resistance_levels: list[tuple[float, str]] = []
-    support_levels: list[tuple[float, str]] = []
-    for label in ("15 分", "60 分", "日線", "週線"):
-        frame = details.get(label)
-        if not isinstance(frame, Mapping):
-            continue
-        resistance_value = _numeric_price(frame.get("range_resistance"))
-        support_value = _numeric_price(frame.get("range_support"))
-        if resistance_value is not None:
-            resistance_levels.append((resistance_value, label))
-        if support_value is not None:
-            support_levels.append((support_value, label))
     rows = (
-        ("cycle-market-current", "即時微台", _display_price(current)),
-        ("cycle-market-ma", "60分20MA", ma20),
+        ("cycle-market-current", "週線現價", _display_price(current)),
+        ("cycle-market-ma", "週線20MA", ma20),
         (
             "cycle-market-resistance",
-            "最近上壓",
-            _reference_level_text(resistance_levels, current=current, resistance=True),
+            "週線上壓",
+            _display_price(weekly.get("range_resistance")),
         ),
         (
             "cycle-market-support",
-            "最近下撐",
-            _reference_level_text(support_levels, current=current, resistance=False),
+            "週線下撐",
+            _display_price(weekly.get("range_support")),
         ),
     )
     return "".join(
@@ -171,6 +135,22 @@ def _cycle(view: PaperTradingOperatorView) -> str:
     next_step = str(demo.get("next_step", "等待資料完整"))
     risk = "不可判讀" if index == 0 else "偏高" if index >= 5 else "風險受控"
     market_references = _cycle_market_references(demo)
+    details = demo.get("timeframe_details")
+    details = details if isinstance(details, Mapping) else {}
+    weekly = details.get("週線")
+    weekly = weekly if isinstance(weekly, Mapping) else {}
+    weekly_current = weekly.get("last_price", demo.get("current_price"))
+    weekly_reference_labels = "".join(
+        f"<g class='cycle-weekly-pill {class_name}' transform='translate({pill_x} 3)'>"
+        "<rect width='92' height='18' rx='6'/>"
+        f"<text x='46' y='12'>{label} {_display_price(value)}</text></g>"
+        for class_name, pill_x, label, value in (
+            ("cycle-weekly-current", 4, "週現", weekly_current),
+            ("cycle-weekly-ma", 104, "20MA", weekly.get("ma20")),
+            ("cycle-weekly-resistance", 204, "週壓", weekly.get("range_resistance")),
+            ("cycle-weekly-support", 304, "週撐", weekly.get("range_support")),
+        )
+    )
     labels = (
         ("低檔確認", 30, 164), ("起漲形成", 96, 79), ("多方延伸", 156, 30),
         ("高檔回落", 229, 74), ("起跌形成", 275, 105), ("空方延伸", 329, 151), ("低點止跌", 367, 169),
@@ -208,6 +188,7 @@ def _cycle(view: PaperTradingOperatorView) -> str:
               <filter id='cycle-glow' x='-20%' y='-35%' width='140%' height='170%'><feGaussianBlur stdDeviation='3.6' result='blur'/><feMerge><feMergeNode in='blur'/><feMergeNode in='SourceGraphic'/></feMerge></filter>
               <filter id='cycle-marker-glow' x='-120%' y='-120%' width='340%' height='340%'><feGaussianBlur stdDeviation='6' result='blur'/><feMerge><feMergeNode in='blur'/><feMergeNode in='SourceGraphic'/></feMerge></filter>
             </defs>
+            {weekly_reference_labels}
             <path class='cycle-path rise-path' d='M24 142 Q42 140 58 129 Q81 111 104 91 Q127 75 150 59 Q174 45 198 48' fill='none' stroke='url(#cycle-rise)' stroke-width='7' stroke-linecap='round' filter='url(#cycle-glow)'/>
             <path class='cycle-path fall-path' d='M198 48 Q222 50 246 61 Q269 79 292 91 Q314 111 336 127 Q356 140 376 146' fill='none' stroke='url(#cycle-fall)' stroke-width='7' stroke-linecap='round' filter='url(#cycle-glow)'/>
             <circle class='cycle-peak-glow' cx='198' cy='48' r='7'/>
@@ -226,7 +207,7 @@ def _cycle(view: PaperTradingOperatorView) -> str:
           <div><dt>風險</dt><dd>{risk}</dd></div>
         </dl>
       </div>
-      <p class='cycle-note'>倒 U 為市場位置判讀；壓力／支撐為 20 棒區間參考，不是買賣訊號。</p>
+      <p class='cycle-note'>倒 U 以週線現價、20MA、20 棒壓力與支撐作位置參考；不是買賣訊號。</p>
     </section>"""
 
 def _rows(values: dict[str, str]) -> str:
