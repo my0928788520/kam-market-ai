@@ -54,17 +54,17 @@ def test_matching_margin_status_is_visually_emphasized() -> None:
     assert ".matching:has(.performance-sample):has(> .footer-metrics)" in css
     assert "\\n.matching" not in css
     assert "border: 1px solid #b58a45" in css
-    assert "grid-template-rows: auto minmax(0, 1fr)" in css
-    assert ".matching:has(.performance-sample) .performance-sample { grid-column: 2; grid-row: 2;" in css
-    assert ".matching:has(.performance-sample) > .footer-metrics { grid-column: 3; grid-row: 2;" in css
-    assert "minmax(250px, .9fr) minmax(520px, 1.8fr) minmax(280px, 1fr)" in css
+    assert "grid-template-rows: auto auto minmax(0, 1fr)" in css
+    assert ".matching:has(.performance-sample) .performance-sample { grid-column: 1 / -1; grid-row: 2;" in css
+    assert ".matching:has(.performance-sample) > .footer-metrics { grid-column: 2; grid-row: 3;" in css
+    assert "grid-template-columns: minmax(0, 1.55fr) minmax(250px, .85fr)" in css
     assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in css
     assert "grid-auto-rows: min-content" in css
-    assert ".performance-sample { grid-column: 2; grid-row: 2; grid-template-columns: auto repeat(4, minmax(82px, 1fr));" in css
-    assert ".performance-sample > b { grid-column: auto; font-size: 14px; }" in css
-    assert ".performance-sample small { font-size: 12px; }" in css
-    assert ".performance-sample strong { font-size: 15px; line-height: 1.3; }" in css
-    assert "padding-left: 14px; font-size: 13.5px; line-height: 1.45;" in css
+    assert ".performance-sample { grid-column: 1 / -1; grid-row: 2; grid-template-columns: auto repeat(4, minmax(0, 1fr));" in css
+    assert ".performance-sample > b { grid-column: auto; font-size: 13px; }" in css
+    assert ".performance-sample small { font-size: 11.5px; }" in css
+    assert ".performance-sample strong { font-size: 14px; line-height: 1.25; }" in css
+    assert "padding-left: 14px; font-size: 13px; line-height: 1.35;" in css
     html = render_operator_html(_view())
     assert "<KAM>" not in html
     assert "class='matching-status'" in html
@@ -612,7 +612,7 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert "@media (max-height: 820px) and (min-width: 1001px)" not in css
     assert ".matching { min-height: 170px; }" not in css
     assert "grid-template-rows: 30px 30px minmax(0, 1fr) 44px" in css
-    assert "grid-template-rows: 76px 130px 84px minmax(112px, 1fr)" in css
+    assert "grid-template-rows: 76px 130px 90px minmax(106px, 1fr)" in css
     assert ".current-analysis-summary { gap: 1px 8px; padding-left: 12px; }" in css
     assert ".cycle-chart svg { height: 108px; min-height: 108px; }" in css
     assert ".proposal { padding-bottom: 4px; }.matching { overflow: hidden; }" in css
