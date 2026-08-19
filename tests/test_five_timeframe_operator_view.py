@@ -73,7 +73,7 @@ def test_live_five_timeframe_uses_established_kam_operator_ui() -> None:
     assert "KAM 交易決策操作台" in page
     assert "多空控制權" in page
     assert "市場循環位置" in page
-    assert "四週期狀態" in page
+    assert "三週期狀態" in page
     assert "等待有效週期資料恢復" in page
     assert "TMFH6" in page
     assert "多方 4｜空方 0｜未確認 6" in page

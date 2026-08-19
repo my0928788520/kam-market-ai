@@ -486,11 +486,12 @@ def test_dashboard_renders_real_control_cells_and_coloured_cycle_structure() -> 
     assert "preserveAspectRatio='xMidYMid meet'" in html
     for field in ("目前位置", "循環狀態", "上一階段", "下一階段", "唯一下一步", "風險"):
         assert field in html
-    assert html.count("class='timeframe-card'") == 4
+    assert html.count("class='timeframe-card'") == 3
     assert "<strong>ND</strong>" not in html
-    assert "四週期狀態" in html
-    for timeframe in ("週線", "日線", "60 分", "15 分"):
+    assert "三週期狀態" in html
+    for timeframe in ("日線", "60 分", "15 分"):
         assert timeframe in html
+    assert "<b>週線</b>" not in html
     assert "<b>5 分</b>" not in html
     assert len(view.demo["timeframes"]) == 5
     for footer_field in ("已實現損益", "未實現損益", "緊急停止"):
@@ -577,7 +578,8 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert ".proposal dl, .matching dl" in css and "align-content: center" in css
     assert ".proposal dd, .matching dd" in css and "text-overflow: ellipsis" in css
     assert ".matching > .footer-metrics" in css
-    assert "grid-template-columns: repeat(4, minmax(0, 1fr))" in css
+    assert ".timeframes > div { display: grid; min-height: 0; grid-template-columns: repeat(3, minmax(0, 1fr));" in css
+    assert ".cycle-weekly-pill text { font-size: 11.5px; font-weight: 900;" in css
     assert ".timeframes { grid-column: 1 / 3; grid-row: 2; display: grid; grid-template-rows: auto minmax(0, 1fr);" in css
     assert ".timeframes h2 { margin-bottom: 7px; color: #f5f8ff; font-size: 16px;" in css
     assert ".timeframes > div { display: grid; min-height: 0;" in css

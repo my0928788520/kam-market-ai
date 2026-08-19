@@ -14,7 +14,7 @@ def test_demo_is_explicitly_labelled_fixed_offline_data_and_renders_full_flow() 
         "禁止真實下單",
         "決策呈現已切換；模擬委託流程尚未接入此商品資料快照。",
         "倒 U 階段",
-        "四週期狀態",
+        "三週期狀態",
         "唯一下一步",
         "模擬委託建議",
         "模擬撮合結果",
