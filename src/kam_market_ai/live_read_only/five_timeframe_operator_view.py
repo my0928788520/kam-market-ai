@@ -227,7 +227,6 @@ def build_five_timeframe_operator_view(
     performance_summary = performance_summary if isinstance(performance_summary, Mapping) else {}
     execution_boundary = paper.get("execution_boundary")
     execution_boundary = execution_boundary if isinstance(execution_boundary, Mapping) else {}
-    real_order_requires_human = execution_boundary.get("real_order_requires_human_action") is True
     current_analysis = paper.get("current_analysis")
     current_analysis = current_analysis if isinstance(current_analysis, Mapping) else {}
     current_symbol = str(payload.get("symbol", "TMF"))
@@ -299,11 +298,24 @@ def build_five_timeframe_operator_view(
         "阻擋原因": "、".join(
             _PAPER_REASON_LABELS.get(str(item), str(item)) for item in paper_reasons
         ) or "—",
-        "提案雜湊": str(paper.get("proposal_hash") or "—"),
         "模擬成交價": str(performance.get("entry_price", "—")),
-        "自動停損": str(performance.get("stop_loss_price", "—")),
-        "自動停利": str(performance.get("take_profit_price", "—")),
-        "真單狀態": "必須本人於券商端操作" if real_order_requires_human else "未開放",
+    }
+    stop_value = performance.get("stop_loss_price")
+    entry_value = performance.get("entry_price")
+    emergency_stop = "—"
+    if open_positions and stop_value is not None and entry_value is not None:
+        try:
+            stop_number = Decimal(str(stop_value))
+            entry_number = Decimal(str(entry_value))
+            emergency_stop = str(
+                stop_number - Decimal("20")
+                if stop_number < entry_number
+                else stop_number + Decimal("20")
+            )
+        except Exception:
+            emergency_stop = "—"
+    structural_waiting = "STRUCTURAL_STOP_TESTED_WAITING_FOR_5M_CLOSE" in {
+        str(item) for item in paper_reasons
     }
     matching = {
         "目前契約": current_symbol,
@@ -318,6 +330,23 @@ def build_five_timeframe_operator_view(
         "停損／停利": (
             f"{performance.get('stop_loss_price', '—')}／"
             f"{performance.get('take_profit_price', '—')}"
+        ),
+        "風控狀態": (
+            "波浪結構受測・等待五分鐘收盤確認"
+            if structural_waiting
+            else "持倉中・依波浪結構保護"
+            if open_positions
+            else "目前無部位"
+        ),
+        "結構警戒": str(stop_value if open_positions and stop_value is not None else "—"),
+        "五分鐘確認": (
+            f"收盤越過 {stop_value} 才出場"
+            if open_positions and stop_value is not None
+            else "—"
+        ),
+        "緊急停損": emergency_stop,
+        "第一目標": str(
+            performance.get("take_profit_price", "—") if open_positions else "—"
         ),
         "契約檢查": contract_consistency,
         "日誌驗證": (

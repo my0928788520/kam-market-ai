@@ -121,7 +121,7 @@ def test_market_dashboard_exposes_armed_auto_paper_runtime_without_live_executio
         "direction": "HOLD",
         "reason_codes": ["KAM_BUY_CONDITION_NOT_MET"],
         "cash_balance": "1000000",
-        "open_positions": 0,
+        "open_positions": 1,
         "journal_hash": "a" * 64,
         "proposal_hash": None,
         "fill_hashes": [],
@@ -170,27 +170,32 @@ def test_market_dashboard_exposes_armed_auto_paper_runtime_without_live_executio
     assert "自動模擬執行" in page
     assert "KAM 買進條件尚未成立" in page
     assert "1000000" in page
-    assert "自動停損</dt><dd title='45680'>45680" in page
-    assert "自動停利</dt><dd title='45740'>45740" in page
-    assert "未實現損益</dt><dd title='150'>150" in page
-    assert "保證金狀態</dt><dd title='保證金安全'>保證金安全" in page
+    assert "結構警戒</dt><dd title='45680'>45680" in page
+    assert "五分鐘確認</dt><dd title='收盤越過 45680 才出場'>收盤越過 45680 才出場" in page
+    assert "緊急停損</dt><dd title='45660'>45660" in page
+    assert "第一目標</dt><dd title='45740'>45740" in page
+    assert "未實現損益</dt><dd class='unrealized-pnl-value' title='150'>150" in page
+    assert "持倉中・依波浪結構保護" in page
     proposal_section = page.split("<section class='proposal'>", 1)[1].split("</section>", 1)[0]
     matching_section = page.split("<section class='matching'>", 1)[1].split("</section>", 1)[0]
-    for label in ("Paper 持倉", "停損／停利", "最近動作", "目前模擬價", "未實現損益", "已實現損益", "保證金狀態"):
+    for label in ("Paper 持倉", "最近動作", "目前模擬價", "未實現損益", "已實現損益", "風控狀態", "結構警戒", "五分鐘確認", "緊急停損", "第一目標"):
         assert label in proposal_section
         assert label not in matching_section
-    for label in ("目前契約", "行情更新（台灣）", "契約檢查", "實盤狀態"):
+    for label in ("目前契約", "行情更新（台灣）"):
         assert label in matching_section
+    for hidden_label in ("提案雜湊", "日誌雜湊", "日誌驗證", "實盤狀態", "保證金狀態"):
+        assert hidden_label not in page
     assert "<span class='line-alert-chip' title='LINE 通知：已啟用・等待模擬提案'>" in page
     assert "<b>LINE 通知</b><strong>已啟用・等待模擬提案</strong>" in page
     assert "class='line-alert-label'" not in page and "class='line-alert-value'" not in page
-    assert "<div class='performance-sample'><b>績效樣本</b>" in page
+    assert "<div class='performance-sample'><b>績效摘要</b>" in page
+    assert "<h2>交易績效</h2>" in page
+    assert "class='position-card'" not in page
     assert "<small>進度</small><strong>12／30</strong>" in page
     assert "<small>累計損益</small><strong>510</strong>" in page
     assert "<small>勝敗／勝率</small><strong>7勝5敗・58.33%</strong>" in page
     assert "<small>均賺／均賠</small><strong>130.00／80.00</strong>" in page
     assert "<small>獲利因子／回撤</small><strong>1.70／440</strong>" in page
-    assert "class='live-order-status-label'>真單狀態</dt><dd class='live-order-status-value' title='必須本人於券商端操作'>必須本人於券商端操作" in page
     assert ">HOLD<" not in page and ">stale<" not in page
     assert view.live_order_allowed is False and view.broker_connected is False
 

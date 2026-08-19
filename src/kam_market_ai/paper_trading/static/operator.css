@@ -193,3 +193,16 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
 .paper-position-profit strong { color: #ffadbd; }
 .paper-position-risk { border-color: #25866b; background: linear-gradient(135deg, #103128, #0a1316); box-shadow: inset 3px 0 #3fd6a7; }
 .paper-position-risk strong { color: #8ff0c9; }
+
+/* Decision-first Paper Trading layout: position and wave risk live in one card. */
+.current-analysis-card { grid-column: 1 / 4; }
+.proposal { grid-column: 1; grid-row: 4; }
+.matching { grid-column: 2 / 4; grid-row: 4; }
+.proposal dl { grid-template-columns: max-content minmax(0, 1fr); align-content: start; }
+.proposal .position-risk-label,
+.proposal .position-risk-value,
+.proposal .paper-current-price-label,
+.proposal .paper-current-price-value,
+.proposal .unrealized-pnl-label,
+.proposal .unrealized-pnl-value { display: block; }
+.proposal dt, .proposal dd { font-size: 12px; line-height: 1.25; }
