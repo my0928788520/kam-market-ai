@@ -121,9 +121,12 @@ def test_current_analysis_uses_free_matching_space_and_stable_refresh_hash() -> 
     assert "data-analysis-hash='abc123'" in html
     assert "即時盤勢判讀" in html
     assert all(label in html for label in ("理由", "矛盾", "等待", "風險"))
-    assert ".current-analysis-details" in css
+    assert "class='current-analysis-summary'" in html
+    assert ".current-analysis-summary" in css
+    assert "font-size: 14px" in css
+    assert "class='current-analysis-details'" not in html
     assert "currentCard.dataset.analysisHash === nextCard.dataset.analysisHash" in refresh
-    assert "nextDetails.replaceWith(currentDetails)" in refresh
+    assert "nextDetails.replaceWith(currentDetails)" not in refresh
 
 
 def test_local_session_switch_post_is_explicit_and_redirects_to_charts() -> None:

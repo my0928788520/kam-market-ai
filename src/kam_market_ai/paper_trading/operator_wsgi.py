@@ -253,20 +253,18 @@ def _current_analysis(demo: Mapping[str, object]) -> tuple[str, str]:
     bucket = str(analysis.get("bucket") or "等待首個五分鐘分析")
     card = (
         f"<section class='next-card current-analysis-card next-wait' data-analysis-hash='{escape(fingerprint)}'>"
-        "<h2>現況分析</h2>"
+        "<div class='current-analysis-conclusion'><h2>現況分析</h2>"
         f"<strong>{escape(headline)}</strong>"
-        f"<small>五分鐘判讀：{escape(bucket)}</small></section>"
-    )
-    details = (
-        f"<aside class='current-analysis-details' data-analysis-hash='{escape(fingerprint)}'>"
+        f"<small>五分鐘判讀：{escape(bucket)}</small></div>"
+        f"<div class='current-analysis-summary' data-analysis-hash='{escape(fingerprint)}'>"
         "<b>即時盤勢判讀</b>"
         f"<p><span>理由</span>{escape(str(analysis.get('basis') or '等待五週期資料'))}</p>"
         f"<p><span>矛盾</span>{escape(str(analysis.get('conflict') or '等待週期比對'))}</p>"
         f"<p><span>等待</span>{escape(str(analysis.get('waiting_for') or '等待資料完整'))}</p>"
         f"<p><span>風險</span>{escape(str(analysis.get('risk') or '資料未完整前維持觀望'))}</p>"
-        "</aside>"
+        "</div></section>"
     )
-    return card, details
+    return card, ""
 
 
 def _timeframe_card(name: object, state: object, details: Mapping[str, object] | None = None) -> str:
