@@ -203,7 +203,7 @@ def _cycle(view: PaperTradingOperatorView) -> str:
           <div><dt>循環狀態</dt><dd>{escape(state)}</dd></div>
           <div><dt>上一階段</dt><dd>{escape(previous)}</dd></div>
           <div><dt>下一階段</dt><dd>{escape(following)}</dd></div>
-          <div><dt>下一步</dt><dd>{escape(next_step)}</dd></div>
+          <div class='cycle-next-step'><dt>下一步</dt><dd>{escape(next_step)}</dd></div>
           <div><dt>風險</dt><dd>{risk}</dd></div>
         </dl>
       </div>

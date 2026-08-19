@@ -615,6 +615,8 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert ".matching > .footer-metrics" in css
     assert ".timeframes > div { display: grid; min-height: 0; grid-template-columns: repeat(3, minmax(0, 1fr));" in css
     assert ".cycle-weekly-pill text { font-size: 13.5px; }" in css
+    assert ".cycle-card-body { grid-template-columns: minmax(0, 1.18fr) minmax(260px, 1.22fr); gap: 5px; }" in css
+    assert ".cycle-info .cycle-next-step dd { overflow: visible;" in css
     assert "transform='translate({pill_x} -18)'" in Path("src/kam_market_ai/paper_trading/operator_wsgi.py").read_text(encoding="utf-8")
     assert ".timeframes { grid-column: 1 / 3; grid-row: 2; display: grid; grid-template-rows: auto minmax(0, 1fr);" in css
     assert ".timeframes h2 { margin-bottom: 7px; color: #f5f8ff; font-size: 16px;" in css

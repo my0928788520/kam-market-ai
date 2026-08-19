@@ -180,3 +180,5 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
 
 /* Frontend-only weekly reference emphasis. */
 .cycle-weekly-pill text { font-size: 13.5px; }
+.cycle-card-body { grid-template-columns: minmax(0, 1.18fr) minmax(260px, 1.22fr); gap: 5px; }
+.cycle-info .cycle-next-step dd { overflow: visible; line-height: 1.18; overflow-wrap: anywhere; white-space: normal; text-overflow: clip; }
