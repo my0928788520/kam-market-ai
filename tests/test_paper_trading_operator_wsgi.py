@@ -608,6 +608,11 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert ".control-cells-unscored" in css
     assert ".control-cell.unconfirmed" in css
     assert "@media (max-height: 650px) and (min-width: 1001px)" in css
+    assert "grid-template-rows: 30px 30px minmax(0, 1fr) 44px" in css
+    assert "grid-template-rows: 62px 132px 62px minmax(132px, 1fr)" in css
+    assert ".cycle-chart svg { height: 108px; min-height: 108px; }" in css
+    assert ".proposal { padding-bottom: 4px; }.matching { overflow: hidden; }" in css
+    assert "footer { gap: 2px; padding: 4px 9px; }" in css
     assert "grid-template-rows: 68px 142px 70px minmax(0, 1fr)" in css
     assert ".trend-health-card strong, .position-card strong { font-size: 24px; line-height: 1.05; }" in css
     assert ".position-card p { margin: 0; font-size: 14px; font-weight: 850; line-height: 1.1; }" in css
