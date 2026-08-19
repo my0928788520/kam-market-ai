@@ -84,6 +84,9 @@ def test_matching_margin_status_is_visually_emphasized() -> None:
     assert "class='live-trading-status-value' title='永久鎖定・禁止下單'>永久鎖定・禁止下單</dd>" in html
     assert ".matching-status .live-trading-status-value { grid-column: 2 / -1;" in css
     assert "minmax(156px, 1.65fr)" in css
+    assert ".proposal .proposal-hash-label" in css
+    assert ".matching .journal-validation-label" in css
+    assert ".matching .journal-hash-value { display: none; }" in css
 
 
 def test_matching_shortens_journal_hash_without_losing_full_tooltip() -> None:

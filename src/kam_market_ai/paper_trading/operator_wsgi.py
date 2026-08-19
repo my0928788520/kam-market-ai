@@ -217,6 +217,13 @@ def _rows(values: dict[str, str]) -> str:
         "行情更新（台灣）": "market-update",
         "Paper 持倉": "paper-position",
         "實盤狀態": "live-trading-status",
+        "提案雜湊": "proposal-hash",
+        "模擬成交價": "paper-fill-price",
+        "自動停損": "proposal-stop-loss",
+        "自動停利": "proposal-take-profit",
+        "日誌驗證": "journal-validation",
+        "模擬成交": "paper-fill-count",
+        "日誌雜湊": "journal-hash",
     }
     return "".join(
         (
