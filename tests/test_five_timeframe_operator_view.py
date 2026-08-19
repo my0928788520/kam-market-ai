@@ -198,6 +198,70 @@ def test_paper_performance_keeps_zero_expectancy_visible() -> None:
     assert "<small>期望／獲利因子</small><strong>0.0／0.0</strong>" in page
 
 
+def test_operator_shows_self_contained_paper_runtime_diagnostics() -> None:
+    payload = {
+        "status": "READY_VERIFIED_FIVE_TIMEFRAMES",
+        "symbol": "TMFI6",
+        "snapshot_written_at": "2026-08-19T05:52:31+00:00",
+        "market_data_only": True,
+        "trading_enabled": False,
+        "analysis_preview": {"kam_rule_decision": {"direction": "SHORT", "states": {}}},
+    }
+    runtime = {
+        "instrument": "TMFI6",
+        "armed": True,
+        "open_positions": 1,
+        "quote_observed_at": "2026-08-19T05:53:00+00:00",
+        "journal_integrity_status": "VERIFIED",
+        "performance_event": {
+            "instrument": "TMFI6",
+            "stop_loss_price": "44535",
+            "take_profit_price": "44495",
+        },
+        "live_order_allowed": False,
+        "broker_connected": False,
+        "execution_boundary": {
+            "broker_submission_available": False,
+            "live_order_allowed": False,
+        },
+    }
+
+    view = build_five_timeframe_operator_view(payload, runtime)
+    page = render_operator_html(view)
+
+    assert view.matching["目前契約"] == "TMFI6"
+    assert view.matching["行情更新（台灣）"] == "2026-08-19 13:53:00"
+    assert view.matching["Paper 持倉"] == "1 口・TMFI6"
+    assert view.matching["停損／停利"] == "44535／44495"
+    assert view.matching["契約檢查"] == "一致"
+    assert view.matching["日誌驗證"] == "正常"
+    assert view.matching["實盤狀態"] == "永久鎖定・禁止下單"
+    assert "永久鎖定・禁止下單" in page
+    assert view.live_order_allowed is False
+
+
+def test_operator_warns_when_open_paper_position_contract_differs_from_quote() -> None:
+    payload = {
+        "status": "READY_VERIFIED_FIVE_TIMEFRAMES",
+        "symbol": "TMFI6",
+        "market_data_only": True,
+        "trading_enabled": False,
+        "analysis_preview": {"kam_rule_decision": {"states": {}}},
+    }
+    runtime = {
+        "instrument": "TMFH6",
+        "open_positions": 1,
+        "live_order_allowed": False,
+        "broker_connected": False,
+        "execution_boundary": {"broker_submission_available": False},
+    }
+
+    view = build_five_timeframe_operator_view(payload, runtime)
+
+    assert view.matching["契約檢查"] == "異常：持倉 TMFH6／行情 TMFI6"
+    assert view.live_order_allowed is False
+
+
 def test_operator_prioritizes_m15_trendline_weakening_warning() -> None:
     payload = {
         "status": "READY_VERIFIED_FIVE_TIMEFRAMES",

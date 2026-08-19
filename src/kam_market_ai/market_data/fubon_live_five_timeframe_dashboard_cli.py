@@ -347,6 +347,7 @@ def main(
     paper_runtime: dict[str, object] = {
         "armed": False,
         "action": "DISARMED",
+        "instrument": symbol,
         "taiex_weekly_cycle": taiex_weekly_cycle,
     }
     if args.line_alerts:
@@ -392,6 +393,7 @@ def main(
             paper_runtime = {
                 "armed": True,
                 "action": "WAITING_FOR_KAM",
+                "instrument": symbol,
                 "taiex_weekly_cycle": taiex_weekly_cycle,
                 "line_alert_status": (
                     "ARMED_WAITING_FOR_PAPER_PROPOSAL" if line_notifier is not None else "DISABLED"
@@ -468,6 +470,9 @@ def main(
         except (OSError, RuntimeError, TypeError, ValueError):
             paper_runtime["line_analysis_status"] = "RETRY_PENDING"
         latest_quote = quote_source.latest
+        paper_runtime["quote_observed_at"] = (
+            latest_quote.observed_at.isoformat() if latest_quote is not None else None
+        )
         try:
             journal_verified = (
                 paper_store.load(paper_config).journal_hash == paper_session.journal.journal_hash

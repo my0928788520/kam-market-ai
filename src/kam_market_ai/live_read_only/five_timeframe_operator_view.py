@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from kam_market_ai.paper_trading.operator_presenter import PaperTradingOperatorView
 
@@ -85,6 +87,18 @@ _LINE_ALERT_STATUS_LABELS = {
     "ROLLOVER_SENT": "換倉提醒已傳送",
     "ANALYSIS_SENT": "現況分析已傳送",
 }
+
+
+def _taiwan_time(value: object) -> str:
+    if value in (None, "", "—"):
+        return "—"
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return str(value)
+    if parsed.tzinfo is None:
+        return str(value)
+    return parsed.astimezone(ZoneInfo("Asia/Taipei")).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def build_five_timeframe_operator_view(
@@ -203,6 +217,20 @@ def build_five_timeframe_operator_view(
     real_order_requires_human = execution_boundary.get("real_order_requires_human_action") is True
     current_analysis = paper.get("current_analysis")
     current_analysis = current_analysis if isinstance(current_analysis, Mapping) else {}
+    current_symbol = str(payload.get("symbol", "TMF"))
+    paper_instrument = str(
+        performance.get("instrument") or paper.get("instrument") or current_symbol
+    )
+    contract_consistency = (
+        "一致"
+        if not open_positions or paper_instrument == current_symbol
+        else f"異常：持倉 {paper_instrument}／行情 {current_symbol}"
+    )
+    execution_safe = (
+        paper.get("live_order_allowed") is not True
+        and paper.get("broker_connected") is not True
+        and execution_boundary.get("broker_submission_available") is not True
+    )
     demo = {
         "source_kind": "FUBON_LIVE_FIVE_TIMEFRAME",
         "banner": (
@@ -211,7 +239,7 @@ def build_five_timeframe_operator_view(
             else "富邦即時行情・自動模擬未啟用・禁止真實下單"
         ),
         "data_freshness": status,
-        "instrument": str(payload.get("symbol", "TMF")),
+        "instrument": current_symbol,
         "snapshot_time": payload.get("snapshot_written_at", "—"),
         "current_price": five_minute.get("last_price", "—"),
         "u_stage": str(taiex_cycle.get("stage", "U0")),
@@ -265,6 +293,28 @@ def build_five_timeframe_operator_view(
         "真單狀態": "必須本人於券商端操作" if real_order_requires_human else "未開放",
     }
     matching = {
+        "目前契約": current_symbol,
+        "行情更新（台灣）": _taiwan_time(
+            paper.get("quote_observed_at") or payload.get("snapshot_written_at")
+        ),
+        "Paper 持倉": (
+            f"{open_positions} 口・{paper_instrument}"
+            if open_positions
+            else "無持倉"
+        ),
+        "停損／停利": (
+            f"{performance.get('stop_loss_price', '—')}／"
+            f"{performance.get('take_profit_price', '—')}"
+        ),
+        "契約檢查": contract_consistency,
+        "日誌驗證": (
+            "正常"
+            if paper.get("journal_integrity_status") == "VERIFIED"
+            else "等待首次驗證"
+            if not paper.get("journal_integrity_status")
+            else "異常・已停止模擬處理"
+        ),
+        "實盤狀態": "永久鎖定・禁止下單" if execution_safe else "安全邊界待確認",
         "最近動作": paper_action_label,
         "模擬成交": str(len(paper.get("fill_hashes", ()))),
         "日誌雜湊": str(paper.get("journal_hash") or "—"),
