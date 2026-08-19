@@ -57,11 +57,11 @@ def test_matching_margin_status_is_visually_emphasized() -> None:
     assert "grid-template-rows: auto minmax(0, 1fr)" in css
     assert ".matching:has(.performance-sample) .performance-sample { grid-column: 2; grid-row: 2;" in css
     assert ".matching:has(.performance-sample) > .footer-metrics { grid-column: 3; grid-row: 2;" in css
-    assert "minmax(270px, 1fr) minmax(440px, 1.55fr) minmax(290px, 1fr)" in css
+    assert "minmax(250px, .9fr) minmax(520px, 1.8fr) minmax(280px, 1fr)" in css
     assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in css
     assert "grid-auto-rows: min-content" in css
-    assert ".performance-sample { grid-column: 2; grid-row: 2; grid-template-columns: repeat(4, minmax(0, 1fr));" in css
-    assert ".performance-sample > b { grid-column: 1 / -1; font-size: 14px; }" in css
+    assert ".performance-sample { grid-column: 2; grid-row: 2; grid-template-columns: auto repeat(4, minmax(82px, 1fr));" in css
+    assert ".performance-sample > b { grid-column: auto; font-size: 14px; }" in css
     assert ".performance-sample small { font-size: 12px; }" in css
     assert ".performance-sample strong { font-size: 15px; line-height: 1.3; }" in css
     assert "padding-left: 14px; font-size: 13.5px; line-height: 1.45;" in css
