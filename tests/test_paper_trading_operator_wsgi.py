@@ -37,6 +37,7 @@ def test_wsgi_is_get_only_escapes_html_and_serves_static_css() -> None:
     assert b"".join(app({"REQUEST_METHOD": "POST", "PATH_INFO": "/"}, start)) == "唯讀端點，不接受此操作。".encode("utf-8")
     assert response["status"] == "405 Method Not Allowed"
     assert b"body" in b"".join(app({"REQUEST_METHOD": "GET", "PATH_INFO": "/static/operator.css"}, start))
+    assert ("Cache-Control", "no-store") in response["headers"]
 
 
 def test_matching_margin_status_is_visually_emphasized() -> None:
@@ -607,7 +608,7 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert ".next-card { grid-column: 2 / 4; grid-row: 3; display: grid;" in css
     assert ".control-cells-unscored" in css
     assert ".control-cell.unconfirmed" in css
-    assert "@media (max-height: 650px) and (min-width: 1001px)" in css
+    assert "@media (max-height: 800px) and (min-width: 1001px)" in css
     assert "grid-template-rows: 30px 30px minmax(0, 1fr) 44px" in css
     assert "grid-template-rows: 62px 132px 62px minmax(132px, 1fr)" in css
     assert ".cycle-chart svg { height: 108px; min-height: 108px; }" in css

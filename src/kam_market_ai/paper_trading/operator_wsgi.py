@@ -727,7 +727,7 @@ def build_operator_wsgi(view_provider: Callable[[], PaperTradingOperatorView], a
         if method != "GET":
             start_response("405 Method Not Allowed", [("Content-Type", "text/plain; charset=utf-8"), ("Allow", "GET")]); return ["唯讀端點，不接受此操作。".encode()]
         if path == "/static/operator.css":
-            start_response("200 OK", [("Content-Type", "text/css; charset=utf-8")]); return [css_path.read_bytes()]
+            start_response("200 OK", [("Content-Type", "text/css; charset=utf-8"), *headers]); return [css_path.read_bytes()]
         if path == "/static/chart-refresh.js":
             start_response("200 OK", [("Content-Type", "text/javascript; charset=utf-8"), *headers]); return [chart_refresh_path.read_bytes()]
         if path == "/static/dashboard-refresh.js":
