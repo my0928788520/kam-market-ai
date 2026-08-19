@@ -225,6 +225,8 @@ def build_five_timeframe_operator_view(
     margin_state = margin_state if isinstance(margin_state, Mapping) else {}
     performance_summary = paper.get("performance_summary")
     performance_summary = performance_summary if isinstance(performance_summary, Mapping) else {}
+    opportunity_summary = paper.get("opportunity_summary")
+    opportunity_summary = opportunity_summary if isinstance(opportunity_summary, Mapping) else {}
     execution_boundary = paper.get("execution_boundary")
     execution_boundary = execution_boundary if isinstance(execution_boundary, Mapping) else {}
     current_analysis = paper.get("current_analysis")
@@ -306,6 +308,11 @@ def build_five_timeframe_operator_view(
         "尚差條件": str(paper_test_direction.get("missing_condition") or "已完成"),
         "提前觸發": str(paper_test_direction.get("early_trigger") or "尚未形成"),
         "回踩位置": str(paper_test_direction.get("pullback_reference") or "—"),
+        "影子統計": (
+            f"30點 {opportunity_summary.get('reached_30_points', 0)}／"
+            f"60點 {opportunity_summary.get('reached_60_points', 0)}／"
+            f"120點 {opportunity_summary.get('reached_120_points', 0)}"
+        ),
         "模擬成交價": str(performance.get("entry_price", "—")),
     }
     stop_value = performance.get("stop_loss_price")

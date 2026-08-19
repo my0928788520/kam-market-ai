@@ -266,7 +266,10 @@ def _proposal_rows(proposal: dict[str, str], matching: dict[str, str]) -> str:
     frontend = {
         key: value
         for key, value in proposal.items()
-        if key in {"模式", "狀態", "KAM 方向", "阻擋原因"}
+        if key in {
+            "模式", "狀態", "KAM 方向", "阻擋原因",
+            "機會等級", "尚差條件", "提前觸發", "回踩位置", "影子統計",
+        }
     }
     position = str(matching.get("Paper 持倉", "無持倉"))
     has_position = "無持倉" not in position and position not in {"—", "0", "0 口"}

@@ -30,6 +30,7 @@ class FiveTimeframePaperDirection:
     short_setup_grade: str | None = None
     opportunity_grade: str | None = None
     opportunity_mode: str = "WAIT"
+    opportunity_direction: str | None = None
     missing_condition: str | None = None
     early_trigger: str | None = None
     pullback_reference: float | None = None
@@ -56,6 +57,7 @@ class FiveTimeframePaperDirection:
             "short_setup_grade": self.short_setup_grade,
             "opportunity_grade": self.opportunity_grade,
             "opportunity_mode": self.opportunity_mode,
+            "opportunity_direction": self.opportunity_direction,
             "missing_condition": self.missing_condition,
             "early_trigger": self.early_trigger,
             "pullback_reference": self.pullback_reference,
@@ -201,6 +203,7 @@ def decide_five_timeframe_paper_direction(
             "HOLD", "NO_PAPER_ORDER", reason_code, codes, False,
             opportunity_grade="C",
             opportunity_mode="SHADOW_ONLY",
+            opportunity_direction="LONG" if long_side else "SHORT",
             missing_condition=missing,
             early_trigger=trigger,
             **payload,

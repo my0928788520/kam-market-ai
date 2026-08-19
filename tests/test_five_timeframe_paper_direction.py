@@ -85,6 +85,7 @@ def test_directional_m60_with_partial_m15_is_c_grade_shadow_only() -> None:
     )
     assert result.opportunity_grade == "C"
     assert result.opportunity_mode == "SHADOW_ONLY"
+    assert result.opportunity_direction == "SHORT"
     assert result.missing_condition == "15分20MA方向確認"
     assert result.early_trigger == "15分已跌破20MA"
     assert result.pullback_reference == 44820.0

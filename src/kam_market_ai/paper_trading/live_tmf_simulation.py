@@ -57,6 +57,7 @@ from .order_proposal import (
     PaperOrderProposalRiskStatus,
     build_paper_order_proposal,
 )
+from .paper_opportunity_tracker import PaperOpportunityTracker
 from .proposal_runner import (
     PaperOrderProposalRunnerState,
     confirm_paper_order_proposal,
@@ -997,6 +998,7 @@ class TmfPaperCycleResult:
     reason_codes: tuple[str, ...]
     journal: TmfPaperSimulationJournal
     performance_event: TmfPaperPerformanceEvent | None = None
+    opportunity_summary: dict[str, object] | None = None
     dry_run: bool = True
     live_order_allowed: bool = False
     broker_connected: bool = False
@@ -1034,6 +1036,7 @@ class TmfPaperCycleResult:
                 if self.performance_event is None
                 else self.performance_event.canonical_payload()
             ),
+            "opportunity_summary": dict(self.opportunity_summary or {}),
             "dry_run": True,
             "live_order_allowed": False,
             "broker_connected": False,
@@ -1067,6 +1070,12 @@ class LiveTmfPaperSimulation:
         self.journal = journal or TmfPaperSimulationJournal.empty(config)
         self._pending_entry_direction: str | None = None
         self._pending_entry_candles: list[tuple[datetime, Decimal]] = []
+        opportunity_path = (
+            None
+            if store is None
+            else store.path.with_name(f"{store.path.stem}_opportunities.json")
+        )
+        self._opportunity_tracker = PaperOpportunityTracker(opportunity_path)
         if (
             self.journal.instrument != config.instrument
             or self.journal.point_value != config.point_value
@@ -1209,6 +1218,12 @@ class LiveTmfPaperSimulation:
                 quote,
                 reasons=("QUOTE_NOT_ON_TICK",),
             )
+        self._opportunity_tracker.observe(
+            grade=direction.opportunity_grade,
+            direction=direction.opportunity_direction,
+            price=quote.price,
+            observed_at=quote.observed_at,
+        )
         if self.journal.open_entry is not None:
             return self._mark_or_exit(
                 direction,
@@ -1911,6 +1926,7 @@ class LiveTmfPaperSimulation:
             tuple(sorted(set(reasons))),
             self.journal,
             event,
+            self._opportunity_tracker.safe_payload(),
         )
 
 

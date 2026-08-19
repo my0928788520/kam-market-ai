@@ -399,14 +399,28 @@ def test_operator_exposes_compact_opportunity_funnel_without_live_permissions() 
         },
     }
 
-    view = build_five_timeframe_operator_view(payload)
+    view = build_five_timeframe_operator_view(
+        payload,
+        paper_runtime={
+            "opportunity_summary": {
+                "reached_30_points": 3,
+                "reached_60_points": 2,
+                "reached_120_points": 1,
+                "live_order_allowed": False,
+            }
+        },
+    )
     page = render_operator_html(view)
 
     assert view.proposal["機會等級"] == "C級"
     assert view.proposal["尚差條件"] == "15分20MA方向確認"
     assert view.proposal["提前觸發"] == "15分已跌破20MA"
     assert view.proposal["回踩位置"] == "44820.0"
-    for text in ("機會等級", "C級", "尚差條件", "提前觸發", "回踩位置"):
+    assert view.proposal["影子統計"] == "30點 3／60點 2／120點 1"
+    for text in (
+        "機會等級", "C級", "尚差條件", "提前觸發", "回踩位置", "影子統計",
+        "30點 3／60點 2／120點 1",
+    ):
         assert text in page
     assert view.live_order_allowed is False
 
