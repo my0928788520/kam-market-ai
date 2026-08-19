@@ -245,6 +245,7 @@ def _rows(values: dict[str, str]) -> str:
 
 
 _PERFORMANCE_KEYS = ("績效樣本", "累計損益", "勝敗／勝率", "均賺／均賠", "獲利因子／回撤")
+_STOP_QUALITY_KEYS = ("停損品質", "獲利保留", "固定停損比較")
 _SIMULATION_POSITION_KEYS = (
     "Paper 持倉",
     "停損／停利",
@@ -328,7 +329,15 @@ def _matching_rows(values: dict[str, str]) -> str:
         f"<span><small>{escape('進度' if key == '績效樣本' else key)}</small><strong>{escape(str(value))}</strong></span>"
         for key, value in performance.items()
     )
-    return f"<dl class='matching-status'>{_rows(status)}</dl><div class='performance-sample'><b>績效摘要</b>{metrics}</div>"
+    quality = "".join(
+        f"<span><small>{escape(key)}</small><strong>{escape(str(values.get(key, '—')))}</strong></span>"
+        for key in _STOP_QUALITY_KEYS
+    )
+    return (
+        f"<dl class='matching-status'>{_rows(status)}</dl>"
+        f"<div class='performance-sample'><b>績效摘要</b>{metrics}</div>"
+        f"<div class='stop-quality-sample'>{quality}</div>"
+    )
 
 
 def _current_analysis(demo: Mapping[str, object]) -> tuple[str, str]:

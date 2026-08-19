@@ -660,6 +660,55 @@ class TmfPaperSimulationJournal:
             peak = max(peak, cumulative)
             maximum_drawdown = max(maximum_drawdown, peak - cumulative)
 
+        fixed_stop_touches = 0
+        avoided_premature_exits = 0
+        shadow_incremental_pnl = Decimal(0)
+        for exit_event in exits:
+            trade_events = [
+                event for event in self.events if event.trade_id == exit_event.trade_id
+            ]
+            entry_event = next(
+                (
+                    event
+                    for event in trade_events
+                    if event.event_type is TmfPaperPerformanceEventType.ENTRY
+                ),
+                None,
+            )
+            if entry_event is None:
+                continue
+            fixed_stop = entry_event.stop_loss_price
+            fixed_touch = next(
+                (
+                    event
+                    for event in trade_events[1:]
+                    if (
+                        entry_event.entry_side is PaperTradingSide.BUY
+                        and event.current_price <= fixed_stop
+                    )
+                    or (
+                        entry_event.entry_side is PaperTradingSide.SELL
+                        and event.current_price >= fixed_stop
+                    )
+                ),
+                None,
+            )
+            if fixed_touch is None:
+                continue
+            fixed_stop_touches += 1
+            fixed_pnl = (
+                (fixed_stop - entry_event.entry_price)
+                * (Decimal(1) if entry_event.entry_side is PaperTradingSide.BUY else Decimal(-1))
+                * entry_event.quantity
+                * entry_event.point_value
+            )
+            if (
+                fixed_touch.event_type is TmfPaperPerformanceEventType.MARK
+                and exit_event.realized_pnl > fixed_pnl
+            ):
+                avoided_premature_exits += 1
+                shadow_incremental_pnl += exit_event.realized_pnl - fixed_pnl
+
         def direction_summary(side: PaperTradingSide) -> dict[str, object]:
             selected = [event.realized_pnl for event in exits if event.entry_side is side]
             selected_wins = sum(1 for value in selected if value > 0)
@@ -707,6 +756,14 @@ class TmfPaperSimulationJournal:
             ),
             "maximum_drawdown": str(maximum_drawdown),
             "profit_retention_rate": None if profit_retention is None else str(profit_retention),
+            "stop_quality": (
+                "波浪保護有效"
+                if avoided_premature_exits > 0
+                else "持續累積比較樣本"
+            ),
+            "shadow_fixed_stop_touches": fixed_stop_touches,
+            "shadow_avoided_premature_exits": avoided_premature_exits,
+            "shadow_incremental_pnl": str(shadow_incremental_pnl),
             "exit_breakdown": {
                 "profit_lock": len(profitable_stop_exits),
                 "loss_stop": len(losing_stop_exits),

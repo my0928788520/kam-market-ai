@@ -393,6 +393,20 @@ def build_five_timeframe_operator_view(
             f"{performance_summary.get('profit_factor', '—') if performance_summary.get('profit_factor') is not None else '—'}／"
             f"{performance_summary.get('maximum_drawdown', '0')}"
         ),
+        "停損品質": str(performance_summary.get("stop_quality", "持續累積比較樣本")),
+        "獲利保留": (
+            "—"
+            if performance_summary.get("profit_retention_rate") is None
+            else f"{performance_summary['profit_retention_rate']}%"
+        ),
+        "固定停損比較": (
+            "尚無差異"
+            if not performance_summary.get("shadow_avoided_premature_exits")
+            else (
+                f"避免 {performance_summary['shadow_avoided_premature_exits']} 次過早出場・"
+                f"改善 {performance_summary.get('shadow_incremental_pnl', '0')}"
+            )
+        ),
     }
     ledger = {
         "cash": str(paper.get("cash_balance", "—")),

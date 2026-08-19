@@ -142,6 +142,10 @@ def test_market_dashboard_exposes_armed_auto_paper_runtime_without_live_executio
             "expectancy": "42.50",
             "profit_factor": "1.70",
             "maximum_drawdown": "440",
+            "profit_retention_rate": "74.00",
+            "stop_quality": "波浪保護有效",
+            "shadow_avoided_premature_exits": 1,
+            "shadow_incremental_pnl": "260",
         },
         "performance_event": {
             "entry_price": "45700",
@@ -196,6 +200,9 @@ def test_market_dashboard_exposes_armed_auto_paper_runtime_without_live_executio
     assert "<small>勝敗／勝率</small><strong>7勝5敗・58.33%</strong>" in page
     assert "<small>均賺／均賠</small><strong>130.00／80.00</strong>" in page
     assert "<small>獲利因子／回撤</small><strong>1.70／440</strong>" in page
+    assert "<small>停損品質</small><strong>波浪保護有效</strong>" in page
+    assert "<small>獲利保留</small><strong>74.00%</strong>" in page
+    assert "<small>固定停損比較</small><strong>避免 1 次過早出場・改善 260</strong>" in page
     assert ">HOLD<" not in page and ">stale<" not in page
     assert view.live_order_allowed is False and view.broker_connected is False
 

@@ -253,3 +253,13 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
   .matching:has(.performance-sample) .matching-status,
   .matching:has(.performance-sample) > .footer-metrics { font-size: 14px; line-height: 1.4; }
 }
+
+.stop-quality-sample { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 14px; padding: 5px 0; border-bottom: 1px solid #354055; }
+.stop-quality-sample span { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+.stop-quality-sample small { margin: 0; color: #9eabc0; font-size: 12px; white-space: nowrap; }
+.stop-quality-sample strong { overflow: hidden; color: #f4d28e; font-size: 14px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.matching:has(.stop-quality-sample) { grid-template-rows: auto auto auto minmax(0, 1fr); }
+.matching:has(.stop-quality-sample) .performance-sample { grid-column: 1 / -1; grid-row: 2; }
+.matching:has(.stop-quality-sample) .stop-quality-sample { grid-column: 1 / -1; grid-row: 3; }
+.matching:has(.stop-quality-sample) .matching-status { grid-column: 1; grid-row: 4; }
+.matching:has(.stop-quality-sample) > .footer-metrics { grid-column: 2; grid-row: 4; }

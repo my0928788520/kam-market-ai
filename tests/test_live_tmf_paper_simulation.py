@@ -537,6 +537,10 @@ def test_performance_summary_separates_long_short_and_requires_evidence() -> Non
     assert summary["average_win"] == "420.00"
     assert summary["average_loss"] == "220.00"
     assert summary["profit_retention_rate"] == "100.00"
+    assert summary["stop_quality"] == "持續累積比較樣本"
+    assert summary["shadow_fixed_stop_touches"] == 1
+    assert summary["shadow_avoided_premature_exits"] == 0
+    assert summary["shadow_incremental_pnl"] == "0"
     assert summary["exit_breakdown"] == {
         "profit_lock": 0,
         "loss_stop": 1,
@@ -1122,6 +1126,18 @@ def test_open_position_uses_latest_confirmed_equal_wave_pivot_before_exit() -> N
     assert held.performance_event is not None
     assert held.performance_event.stop_loss_price == Decimal(21940)
     assert held.journal.ledger.positions
+
+    recovered = session.process_evaluation(
+        direction("AF"),
+        quote("22040", 26),
+        evaluated_at=NOW + timedelta(minutes=26),
+    )
+    shadow = recovered.safe_payload()["performance_summary"]
+    assert recovered.action is TmfPaperCycleAction.EXIT_FILLED
+    assert shadow["stop_quality"] == "波浪保護有效"
+    assert shadow["shadow_fixed_stop_touches"] == 1
+    assert shadow["shadow_avoided_premature_exits"] == 1
+    assert shadow["shadow_incremental_pnl"] == "600"
 
 
 def test_short_position_uses_confirmed_equal_wave_high_symmetrically() -> None:
