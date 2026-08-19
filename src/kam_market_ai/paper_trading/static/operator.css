@@ -263,3 +263,17 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
 .matching:has(.stop-quality-sample) .stop-quality-sample { grid-column: 1 / -1; grid-row: 3; }
 .matching:has(.stop-quality-sample) .matching-status { grid-column: 1; grid-row: 4; }
 .matching:has(.stop-quality-sample) > .footer-metrics { grid-column: 2; grid-row: 4; }
+
+/* Keep every Paper performance value visible on one laptop row. */
+@media (max-height: 1000px) and (min-width: 1001px) {
+  .matching:has(.performance-sample) .performance-sample {
+    grid-template-columns: max-content minmax(72px, .65fr) minmax(92px, .8fr) minmax(165px, 1.35fr) minmax(150px, 1.2fr) minmax(145px, 1.15fr);
+    gap: 8px 14px;
+  }
+  .matching:has(.performance-sample) .performance-sample span,
+  .matching:has(.performance-sample) .performance-sample strong {
+    overflow: visible;
+    white-space: nowrap;
+    text-overflow: clip;
+  }
+}

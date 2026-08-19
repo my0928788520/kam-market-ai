@@ -188,6 +188,9 @@ def test_current_analysis_uses_free_matching_space_and_stable_refresh_hash() -> 
     assert ".timeframe-card strong { font-size: 23px; line-height: 24px; }" in css
     assert ".proposal dt, .proposal dd, .matching dl { font-size: 14px;" in css
     assert ".performance-sample strong { font-size: 16px; }" in css
+    assert "minmax(165px, 1.35fr)" in css
+    assert ".performance-sample span,\n  .matching:has(.performance-sample) .performance-sample strong" in css
+    assert "text-overflow: clip;" in css
     assert "currentCard.dataset.analysisHash === nextCard.dataset.analysisHash" in refresh
     assert "nextDetails.replaceWith(currentDetails)" not in refresh
 
