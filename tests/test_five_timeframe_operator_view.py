@@ -170,15 +170,15 @@ def test_market_dashboard_exposes_armed_auto_paper_runtime_without_live_executio
     assert "自動模擬執行" in page
     assert "KAM 買進條件尚未成立" in page
     assert "1000000" in page
-    assert "結構警戒</dt><dd title='45680'>45680" in page
+    assert "<small>結構警戒</small><strong>45680</strong>" in page
     assert "五分鐘確認</dt><dd title='收盤越過 45680 才出場'>收盤越過 45680 才出場" in page
     assert "緊急停損</dt><dd title='45660'>45660" in page
-    assert "第一目標</dt><dd title='45740'>45740" in page
-    assert "未實現損益</dt><dd class='unrealized-pnl-value' title='150'>150" in page
+    assert "<small>目標</small><strong>45740</strong>" in page
+    assert "<small>浮動損益</small><strong>150</strong>" in page
     assert "持倉中・依波浪結構保護" in page
     proposal_section = page.split("<section class='proposal'>", 1)[1].split("</section>", 1)[0]
     matching_section = page.split("<section class='matching'>", 1)[1].split("</section>", 1)[0]
-    for label in ("Paper 持倉", "最近動作", "目前模擬價", "未實現損益", "已實現損益", "風控狀態", "結構警戒", "五分鐘確認", "緊急停損", "第一目標"):
+    for label in ("風控狀態", "五分鐘確認", "緊急停損"):
         assert label in proposal_section
         assert label not in matching_section
     for label in ("目前契約", "行情更新（台灣）"):

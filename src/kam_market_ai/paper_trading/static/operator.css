@@ -206,3 +206,12 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
 .proposal .unrealized-pnl-label,
 .proposal .unrealized-pnl-value { display: block; }
 .proposal dt, .proposal dd { font-size: 12px; line-height: 1.25; }
+
+/* Prevent the compact auto-paper card from stacking labels over values. */
+.proposal { padding: 9px 12px; }
+.proposal h2 { margin-bottom: 5px; }
+.proposal dl { flex: 0 1 auto; gap: 4px 10px; overflow: hidden; }
+.proposal dt { color: #9eabc0; white-space: nowrap; }
+.proposal dd { min-width: 0; margin: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.paper-position-strip { flex: 0 0 auto; margin-bottom: 5px; }
+.paper-position-flat { padding-block: 6px; }

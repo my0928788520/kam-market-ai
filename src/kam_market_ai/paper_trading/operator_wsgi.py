@@ -267,22 +267,14 @@ def _proposal_rows(proposal: dict[str, str], matching: dict[str, str]) -> str:
         for key, value in proposal.items()
         if key in {"模式", "狀態", "KAM 方向", "阻擋原因"}
     }
-    frontend.update(
-        (key, matching[key])
-        for key in (
-            "Paper 持倉",
-            "最近動作",
-            "目前模擬價",
-            "未實現損益",
-            "已實現損益",
-            "風控狀態",
-            "結構警戒",
-            "五分鐘確認",
-            "緊急停損",
-            "第一目標",
+    position = str(matching.get("Paper 持倉", "無持倉"))
+    has_position = "無持倉" not in position and position not in {"—", "0", "0 口"}
+    if has_position:
+        frontend.update(
+            (key, matching[key])
+            for key in ("風控狀態", "五分鐘確認", "緊急停損")
+            if key in matching and str(matching[key]) != "—"
         )
-        if key in matching
-    )
     return _rows(frontend)
 
 
@@ -310,7 +302,7 @@ def _paper_position_strip(proposal: Mapping[str, str], matching: Mapping[str, st
         ("方向／部位", f"{direction}・{position}"),
         ("進場", str(proposal.get("模擬成交價", "—"))),
         ("現價", str(matching.get("目前模擬價", "—"))),
-        ("停損", stop_loss),
+        ("結構警戒", stop_loss),
         ("目標", take_profit),
         ("浮動損益", raw_pnl),
     )
