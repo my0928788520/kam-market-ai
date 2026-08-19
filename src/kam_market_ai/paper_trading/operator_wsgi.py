@@ -216,6 +216,7 @@ def _rows(values: dict[str, str]) -> str:
         "真單狀態": "live-order-status",
         "行情更新（台灣）": "market-update",
         "Paper 持倉": "paper-position",
+        "實盤狀態": "live-trading-status",
     }
     return "".join(
         (

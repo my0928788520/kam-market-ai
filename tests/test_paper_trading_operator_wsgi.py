@@ -69,7 +69,7 @@ def test_matching_margin_status_is_visually_emphasized() -> None:
     assert "padding-left: 14px; font-size: 13px; line-height: 1.35;" in css
     html = render_operator_html(PaperTradingOperatorView(
         "<KAM>", "安全", {"instrument": "TEST"},
-        {"目前契約": "TMFI6", "行情更新（台灣）": "2026-08-19 13:53:00", "Paper 持倉": "無持倉"},
+        {"目前契約": "TMFI6", "行情更新（台灣）": "2026-08-19 13:53:00", "Paper 持倉": "無持倉", "實盤狀態": "永久鎖定・禁止下單"},
         {"cash": "100"}, (), False,
     ))
     assert "<KAM>" not in html
@@ -80,6 +80,9 @@ def test_matching_margin_status_is_visually_emphasized() -> None:
     assert "class='market-update-value'" in html
     assert "class='paper-position-label'" in html
     assert "class='paper-position-value'" in html
+    assert "class='live-trading-status-label'" in html
+    assert "class='live-trading-status-value' title='永久鎖定・禁止下單'>永久鎖定・禁止下單</dd>" in html
+    assert ".matching-status .live-trading-status-value { grid-column: 2 / -1;" in css
     assert "minmax(156px, 1.65fr)" in css
 
 
