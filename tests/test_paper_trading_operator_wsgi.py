@@ -519,7 +519,7 @@ def test_dashboard_renders_real_control_cells_and_coloured_cycle_structure() -> 
     assert "class='cycle-current-label'" in html and ">目前位置</text>" in html
     assert "class='cycle-position-pending'" not in html
     assert "preserveAspectRatio='xMidYMid meet'" in html
-    for field in ("目前位置", "循環狀態", "上一階段", "下一階段", "唯一下一步", "風險"):
+    for field in ("目前位置", "循環狀態", "上一階段", "下一階段", "下一步", "風險"):
         assert field in html
     assert html.count("class='timeframe-card'") == 3
     assert "<strong>ND</strong>" not in html
@@ -615,7 +615,7 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert ".matching > .footer-metrics" in css
     assert ".timeframes > div { display: grid; min-height: 0; grid-template-columns: repeat(3, minmax(0, 1fr));" in css
     assert ".cycle-weekly-pill text { font-size: 13.5px; }" in css
-    assert "transform='translate({pill_x} -9)'" in Path("src/kam_market_ai/paper_trading/operator_wsgi.py").read_text(encoding="utf-8")
+    assert "transform='translate({pill_x} -18)'" in Path("src/kam_market_ai/paper_trading/operator_wsgi.py").read_text(encoding="utf-8")
     assert ".timeframes { grid-column: 1 / 3; grid-row: 2; display: grid; grid-template-rows: auto minmax(0, 1fr);" in css
     assert ".timeframes h2 { margin-bottom: 7px; color: #f5f8ff; font-size: 16px;" in css
     assert ".timeframes > div { display: grid; min-height: 0;" in css

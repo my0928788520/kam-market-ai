@@ -141,7 +141,7 @@ def _cycle(view: PaperTradingOperatorView) -> str:
     weekly = weekly if isinstance(weekly, Mapping) else {}
     weekly_current = weekly.get("last_price", demo.get("current_price"))
     weekly_reference_labels = "".join(
-        f"<g class='cycle-weekly-pill {class_name}' transform='translate({pill_x} -9)'>"
+        f"<g class='cycle-weekly-pill {class_name}' transform='translate({pill_x} -18)'>"
         "<rect width='96' height='28' rx='8'/>"
         f"<text x='48' y='19'>{label} {_display_price(value)}</text></g>"
         for class_name, pill_x, label, value in (
@@ -203,7 +203,7 @@ def _cycle(view: PaperTradingOperatorView) -> str:
           <div><dt>循環狀態</dt><dd>{escape(state)}</dd></div>
           <div><dt>上一階段</dt><dd>{escape(previous)}</dd></div>
           <div><dt>下一階段</dt><dd>{escape(following)}</dd></div>
-          <div><dt>唯一下一步</dt><dd>{escape(next_step)}</dd></div>
+          <div><dt>下一步</dt><dd>{escape(next_step)}</dd></div>
           <div><dt>風險</dt><dd>{risk}</dd></div>
         </dl>
       </div>
