@@ -11,6 +11,9 @@ param(
     [ValidateRange(10, 300)]
     [int]$CheckSeconds = 30,
 
+    [ValidateRange(30, 600)]
+    [int]$StartupGraceSeconds = 180,
+
     [switch]$PaperTestArmed,
 
     [switch]$LineAlerts,
@@ -33,6 +36,7 @@ $hasMutex = $false
 $dashboardProcess = $null
 $consecutiveFailures = 0
 $restartInProgress = $false
+$dashboardStartedAt = $null
 
 function Test-DashboardHealth {
     try {
@@ -148,6 +152,7 @@ try {
     }
     if (-not (Test-DashboardHealth)) {
         $dashboardProcess = Start-DashboardProcess
+        $dashboardStartedAt = [DateTime]::UtcNow
         $restartInProgress = $true
     }
     while ($true) {
@@ -160,12 +165,19 @@ try {
             }
             continue
         }
+        if (
+            $null -ne $dashboardStartedAt -and
+            ([DateTime]::UtcNow - $dashboardStartedAt).TotalSeconds -lt $StartupGraceSeconds
+        ) {
+            continue
+        }
         $consecutiveFailures += 1
         if ($consecutiveFailures -lt 3) {
             continue
         }
         Stop-ProjectDashboardProcesses
         $dashboardProcess = Start-DashboardProcess
+        $dashboardStartedAt = [DateTime]::UtcNow
         $restartInProgress = $true
         $consecutiveFailures = 0
     }

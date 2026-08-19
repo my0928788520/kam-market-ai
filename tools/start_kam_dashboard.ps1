@@ -6,7 +6,7 @@ param(
     [int]$Port = 8765,
 
     [ValidateRange(30, 300)]
-    [int]$StartupTimeoutSeconds = 150
+    [int]$StartupTimeoutSeconds = 300
 )
 
 $ErrorActionPreference = 'Stop'
@@ -86,6 +86,7 @@ $watchdogArguments = @(
     '-Session', $session,
     '-Port', [string]$Port,
     '-CheckSeconds', '15',
+    '-StartupGraceSeconds', '180',
     '-PaperTestArmed',
     '-NoBrowser'
 )

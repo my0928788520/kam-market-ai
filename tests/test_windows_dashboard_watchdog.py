@@ -15,6 +15,9 @@ def test_watchdog_is_paper_only_and_single_instance() -> None:
     assert "-PaperTestArmed" in script
     assert "-LineAlerts" in script
     assert "-NoBrowser" in script
+    assert "StartupGraceSeconds = 180" in script
+    assert "TotalSeconds -lt $StartupGraceSeconds" in script
+    assert "$dashboardStartedAt = [DateTime]::UtcNow" in script
     assert "& $python @noticeArguments | Out-Null\n    }\n    catch {" in script
     assert "live" not in script.lower().replace("live_order", "")
 
@@ -45,6 +48,8 @@ def test_one_click_launcher_detects_session_waits_for_health_and_stays_paper_onl
     assert "$health.live_order_allowed -eq $false" in script
     assert "-PaperTestArmed" in script
     assert "-NoBrowser" in script
+    assert "StartupTimeoutSeconds = 300" in script
+    assert "'-StartupGraceSeconds', '180'" in script
     assert "Start-Process $dashboardUrl" in script
     assert "-FilePath 'taskkill.exe'" in script
     assert "-ErrorAction SilentlyContinue" in script
