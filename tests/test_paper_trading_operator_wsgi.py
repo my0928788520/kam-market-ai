@@ -608,7 +608,9 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert ".next-card { grid-column: 2 / 4; grid-row: 3; display: grid;" in css
     assert ".control-cells-unscored" in css
     assert ".control-cell.unconfirmed" in css
-    assert "@media (max-height: 800px) and (min-width: 1001px)" in css
+    assert "@media (max-height: 1000px) and (min-width: 1001px)" in css
+    assert "@media (max-height: 820px) and (min-width: 1001px)" not in css
+    assert ".matching { min-height: 170px; }" not in css
     assert "grid-template-rows: 30px 30px minmax(0, 1fr) 44px" in css
     assert "grid-template-rows: 62px 132px 62px minmax(132px, 1fr)" in css
     assert ".cycle-chart svg { height: 108px; min-height: 108px; }" in css

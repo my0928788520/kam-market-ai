@@ -74,7 +74,7 @@ html.help-page, body.help-page { height: auto; min-height: 100%; overflow-x: hid
 .account-metric span { display: block; color: #8d99ad; font-size: 10px; }.account-metric strong { display: block; margin-top: 5px; overflow: hidden; color: #edf3fc; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .water-level { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; padding: 8px 10px; border: 1px solid #876d3e; border-radius: 10px; background: #2b2419; }.water-level strong { font-size: 20px; }.water-level span { color: #c5b99e; font-size: 11px; }
 .account-detail-link { display: inline-block; margin-top: 10px; }.account-detail-panel { max-height: 31%; overflow: auto; margin-top: 10px; padding: 9px 12px; border: 1px solid #39445a; border-radius: 10px; background: #0b111b; font-size: 10px; }.account-detail-panel h3 { margin: 0 0 5px; font-size: 12px; }.account-detail-panel ul { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px 14px; margin: 0 0 6px; padding-left: 16px; }.account-invalid { display: grid; place-content: center; text-align: center; }.account-invalid h2 { color: #ffbb69; }.account-status-footer { grid-row: 5; display: flex; flex-wrap: wrap; align-items: center; align-content: center; justify-content: center; gap: 6px 8px; min-height: 42px; padding: 6px 10px; overflow: visible; }.account-status-footer span { flex: 0 0 auto; white-space: nowrap; }.account-embedded .account-main { grid-template-rows: minmax(0, 1fr); gap: 0; padding: 8px; }.account-embedded .account-main > header, .account-embedded .account-banner, .account-embedded .account-tabs, .account-embedded .account-status-footer { display: none; }.account-embedded .account-content { grid-row: 1; height: 100%; padding: 10px 12px 14px; overflow-x: hidden; overflow-y: auto; }.account-embedded .account-grid { gap: 7px; }.account-embedded .account-metric { padding: 8px; }
-@media (max-height: 800px) and (min-width: 1001px) {
+@media (max-height: 1000px) and (min-width: 1001px) {
   main { padding: 4px 6px; grid-template-rows: 30px 30px minmax(0, 1fr) 44px; gap: 4px; }
   header { gap: 10px; padding: 0 10px; }
   .banner { gap: 7px; padding: 3px 6px 3px 10px; }.line-alert-chip { gap: 5px; padding: 3px 8px; font-size: 10px; }.line-alert-chip b { font-size: 10px; }.line-alert-chip strong { font-size: 11px; }
@@ -170,16 +170,4 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
   .performance-sample { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .performance-sample > b { grid-column: 1 / -1; }
   .performance-sample span, .performance-sample small, .performance-sample strong { overflow: visible; white-space: normal; text-overflow: clip; overflow-wrap: anywhere; }
-}
-
-@media (max-height: 820px) and (min-width: 1001px) {
-  html, body { height: auto; min-height: 100%; overflow-x: hidden; overflow-y: auto; }
-  main { height: auto; min-height: 100vh; grid-template-rows: auto auto auto auto; }
-  .dashboard { grid-template-rows: minmax(132px, auto) minmax(192px, auto) minmax(110px, auto) auto; overflow: visible; }
-  .matching { min-height: 170px; }
-  .matching:has(.current-analysis-details):has(> .footer-metrics) { grid-template-columns: minmax(320px, 1.25fr) minmax(300px, 1.1fr) minmax(190px, .75fr); gap: 3px 10px; }
-  .matching-status { overflow: visible; }
-  .matching dd { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; overflow-wrap: normal; }
-  .current-analysis-details { padding-inline: 10px; }
-  .matching:has(.current-analysis-details) > .footer-metrics { padding-left: 10px; }
 }
