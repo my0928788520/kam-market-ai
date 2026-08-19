@@ -663,6 +663,9 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert ".proposal .live-order-status-value" in css and "white-space: nowrap" in css
     assert ".proposal .live-order-status-value { grid-column: 2 / -1;" in css
     assert ".proposal .simulation-status-label, .proposal .blocking-reason-label" in css
+    assert "margin-left: 16px" in css
+    assert "grid-template-columns: max-content minmax(0, 1.2fr) max-content minmax(0, 1fr)" in css
+    assert ".proposal dd { overflow: visible; white-space: normal; overflow-wrap: anywhere;" in css
     assert ".proposal .live-order-status-value { padding-bottom: 2px; font-size: 11.5px; line-height: 1.3; }" in css
     assert ".proposal { padding-bottom: 5px; }" in css
     assert "justify-content: center" in css and "border-radius: 7px" in css
