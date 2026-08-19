@@ -83,6 +83,7 @@ def build_current_market_analysis(
         )
     else:
         day_above = str(day.get("price_vs_ma60", "")) == "above"
+        daily_weakening = day.get("bullish_weakening") is True
         m60_support = str(sixty.get("ma20_support", "")) == "held"
         m60_bias = str(sixty.get("market_bias", ""))
         m15_position = str(fifteen.get("price_vs_ma20", ""))
@@ -94,6 +95,8 @@ def build_current_market_analysis(
         short_bearish = m15_position == "below" and m15_direction == "falling" and m5_position == "below"
         if bullish_base and short_bullish:
             headline = "五週期偏多條件增強，等待模擬進場確認"
+        elif daily_weakening and m60_bias == "bearish" and short_bearish:
+            headline = "日線下降趨勢線確認多方轉弱，空單條件成立"
         elif bearish_base and short_bearish:
             headline = "五週期偏空條件增強，等待模擬進場確認"
         elif bullish_base:
@@ -104,6 +107,7 @@ def build_current_market_analysis(
             headline = "五週期方向尚未一致，維持觀望"
         basis_parts = [
             "日線在60MA上方" if day_above else "日線未站上60MA",
+            "日線下降趨勢線壓制、多方轉弱" if daily_weakening else "日線下降趨勢線未確認轉弱",
             "60分20MA支撐未破" if m60_support else "60分20MA支撐未確認",
             "60分偏多" if m60_bias == "bullish" else "60分偏空" if m60_bias == "bearish" else "60分方向待確認",
         ]

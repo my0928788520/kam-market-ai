@@ -43,6 +43,46 @@ def test_m60_bearish_location_and_m15_trigger_select_one_contract_paper_short() 
     assert result.live_order_allowed is False
 
 
+def test_daily_descending_trendline_confirms_existing_m60_m15_paper_short() -> None:
+    result = decide_five_timeframe_paper_direction(
+        states("ND"),
+        daily_ma60_position="above",
+        daily_descending_trendline_state="rejected_below",
+        daily_bullish_weakening=True,
+        m15_ma20_position="below",
+        m15_ma20_direction="falling",
+        m60_ma20_support="broken",
+        m60_market_bias="bearish",
+    )
+
+    assert result.direction == "SHORT"
+    assert result.action == "PAPER_SELL"
+    assert result.eligible is True
+    assert result.reason_code == (
+        "D1_DESCENDING_TRENDLINE_WEAKENING_M60_M15_SHORT_TRIGGER"
+    )
+    assert result.safe_payload()["daily_bullish_weakening"] is True
+    assert result.max_contracts == 1
+    assert result.live_order_allowed is False
+
+
+def test_daily_price_far_below_trendline_does_not_claim_fresh_weakening() -> None:
+    result = decide_five_timeframe_paper_direction(
+        states("ND"),
+        daily_descending_trendline_state="active_below",
+        daily_bullish_weakening=False,
+        m15_ma20_position="below",
+        m15_ma20_direction="falling",
+        m60_ma20_support="broken",
+        m60_market_bias="bearish",
+    )
+
+    assert result.direction == "SHORT"
+    assert result.action == "PAPER_SELL"
+    assert result.reason_code == "M60_BEARISH_M15_SHORT_TRIGGER"
+    assert result.live_order_allowed is False
+
+
 @pytest.mark.parametrize("code", ["AU", "AF", "ND", "BU", "BD"])
 def test_five_timeframe_alignment_no_longer_vetoes_valid_m60_m15_setup(code: str) -> None:
     result = decide_five_timeframe_paper_direction(
@@ -124,3 +164,7 @@ def test_gate_still_requires_exactly_five_mapped_states_for_diagnostics() -> Non
 def test_normalized_inputs_are_still_validated() -> None:
     with pytest.raises(ValueError, match="m60_market_bias"):
         decide_five_timeframe_paper_direction(states("AU"), m60_market_bias="up")
+    with pytest.raises(ValueError, match="daily_descending_trendline_state"):
+        decide_five_timeframe_paper_direction(
+            states("AU"), daily_descending_trendline_state="guessed"
+        )

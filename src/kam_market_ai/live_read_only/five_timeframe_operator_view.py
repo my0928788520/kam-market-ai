@@ -68,6 +68,9 @@ _PAPER_REASON_LABELS = {
     "M60_MA20_SUPPORT_BROKEN": "60分K收破20MA支撐・多方轉弱・不建立多單",
     "M60_BULLISH_M15_LONG_TRIGGER": "60分位置偏多・15分多單條件成立",
     "M60_BEARISH_M15_SHORT_TRIGGER": "60分位置偏空・15分空單條件成立",
+    "D1_DESCENDING_TRENDLINE_WEAKENING_M60_M15_SHORT_TRIGGER": (
+        "日線下降趨勢線確認多方轉弱・60分與15分空單條件成立"
+    ),
     "M60_LOCATION_INSUFFICIENT": "60分位置資料不足・暫不進場",
     "M60_LOCATION_NOT_DIRECTIONAL": "60分位置尚未形成明確多空方向",
     "FIVE_TIMEFRAME_NOT_FULLY_ALIGNED": "五週期方向尚未一致・維持觀望",
@@ -110,8 +113,11 @@ def build_five_timeframe_operator_view(
     decision_blocker = _PAPER_REASON_LABELS.get(decision_reason_code, "")
     trend_warnings = diagnostics.get("trend_warning_codes", ())
     trend_warnings = trend_warnings if isinstance(trend_warnings, (list, tuple)) else ()
+    daily_weakening = diagnostics.get("daily_bullish_weakening") is True
     weakening_message = (
-        "15分上升趨勢線跌破・注意可能轉弱"
+        "日線下降趨勢線壓制・多方轉弱・空方條件加強"
+        if daily_weakening
+        else "15分上升趨勢線跌破・注意可能轉弱"
         if "M15_ASCENDING_TRENDLINE_BROKEN_WEAKENING" in trend_warnings
         else "15分波浪反彈碰下降趨勢線・注意可能轉弱"
         if "M15_DESCENDING_TRENDLINE_RESISTANCE_WEAKENING" in trend_warnings

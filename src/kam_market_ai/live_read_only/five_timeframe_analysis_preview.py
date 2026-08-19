@@ -26,8 +26,8 @@ from kam_market_ai.analysis.timing_engine import (
 from kam_market_ai.analysis.trend_engine import (
     RelationToTrendline,
     TrendEngineConfig,
-    TrendState,
     TrendlineType,
+    TrendState,
     evaluate_all_trendlines,
 )
 from kam_market_ai.decision.decision_confidence import (
@@ -184,6 +184,97 @@ def _daily_ma60_display_metrics(candles: tuple[Candle, ...]) -> dict[str, object
         "ma60": ma60,
         "price_vs_ma60": relation,
         "ma60_direction": direction,
+    }
+
+
+def _daily_descending_trendline_metrics(
+    candles: tuple[Candle, ...],
+) -> dict[str, object]:
+    """Project a daily resistance line from two confirmed wave highs.
+
+    Only completed daily bars are supplied at this boundary.  A pivot needs a
+    completed bar on both sides; the most prominent pivot is connected to the
+    first later, lower pivot.  The line is invalidated by a completed close
+    above it, so an intraday wick can only report a rejection, never a breakout.
+    """
+    window = candles[-80:]
+    insufficient = {
+        "descending_trendline_state": "insufficient",
+        "descending_trendline_relation": "insufficient",
+        "descending_trendline_value": None,
+        "descending_trendline_anchor_high_1": None,
+        "descending_trendline_anchor_high_2": None,
+        "bullish_weakening": None,
+    }
+    if len(window) < 5:
+        return insufficient
+    pivots = [
+        index
+        for index in range(1, len(window) - 1)
+        if float(window[index].high) >= float(window[index - 1].high)
+        and float(window[index].high) > float(window[index + 1].high)
+    ]
+    if len(pivots) < 2:
+        return insufficient
+    bases = sorted(
+        pivots[:-1],
+        key=lambda index: (float(window[index].high), index),
+        reverse=True,
+    )
+    anchors: tuple[int, int] | None = None
+    for left in bases:
+        right = next(
+            (
+                index
+                for index in pivots
+                if index > left
+                and float(window[index].high) < float(window[left].high)
+            ),
+            None,
+        )
+        if right is not None:
+            anchors = (left, right)
+            break
+    if anchors is None:
+        return insufficient
+    left, right = anchors
+    first_high = float(window[left].high)
+    second_high = float(window[right].high)
+    slope = (second_high - first_high) / (right - left)
+
+    def line_at(index: int) -> float:
+        return first_high + slope * (index - left)
+
+    broken = any(
+        float(window[index].close) > line_at(index)
+        for index in range(right + 1, len(window))
+    )
+    projected = line_at(len(window) - 1)
+    latest = window[-1]
+    close = float(latest.close)
+    high = float(latest.high)
+    if broken or close > projected:
+        state = "broken_above"
+        relation = "above"
+        weakening = False
+    elif high >= projected and close <= projected:
+        state = "rejected_below"
+        relation = "rejection"
+        weakening = True
+    else:
+        state = "active_below"
+        relation = "below"
+        # Being somewhere below a descending line is context, not a fresh
+        # weakening confirmation.  Require the completed daily candle to
+        # actually test the projected line and close back below it.
+        weakening = False
+    return {
+        "descending_trendline_state": state,
+        "descending_trendline_relation": relation,
+        "descending_trendline_value": projected,
+        "descending_trendline_anchor_high_1": first_high,
+        "descending_trendline_anchor_high_2": second_high,
+        "bullish_weakening": weakening,
     }
 
 
@@ -365,6 +456,11 @@ def build_verified_five_timeframe_analysis_preview(
                 else {}
             ),
             **(
+                _daily_descending_trendline_metrics(series[source_timeframe])
+                if source_timeframe is FiveTimeframe.DAY
+                else {}
+            ),
+            **(
                 {"trend_warning_codes": list(trend_warning_codes)}
                 if source_timeframe is FiveTimeframe.M15
                 else {}
@@ -389,6 +485,10 @@ def build_verified_five_timeframe_analysis_preview(
         m15_ma20_direction=str(analysis["15m"].get("ma20_direction", "insufficient")),
         m60_ma20_support=str(analysis["60m"].get("ma20_support", "insufficient")),
         m60_market_bias=str(analysis["60m"].get("market_bias", "insufficient")),
+        daily_descending_trendline_state=str(
+            analysis["1d"].get("descending_trendline_state", "insufficient")
+        ),
+        daily_bullish_weakening=analysis["1d"].get("bullish_weakening"),
     )
     blockers.extend(kam_decision.blockers)
     diagnostics: dict[str, object] = {
@@ -404,6 +504,13 @@ def build_verified_five_timeframe_analysis_preview(
         "next_step_priority": next_step.priority.value,
         "trend_warning_codes": list(trend_warning_codes),
         "daily_ma60_position": analysis["1d"].get("price_vs_ma60", "insufficient"),
+        "daily_descending_trendline_state": analysis["1d"].get(
+            "descending_trendline_state", "insufficient"
+        ),
+        "daily_descending_trendline_relation": analysis["1d"].get(
+            "descending_trendline_relation", "insufficient"
+        ),
+        "daily_bullish_weakening": analysis["1d"].get("bullish_weakening"),
         "m15_ma20_position": analysis["15m"].get("price_vs_ma20", "insufficient"),
         "m15_ma20_direction": analysis["15m"].get("ma20_direction", "insufficient"),
         "m60_ma20_support": analysis["60m"].get("ma20_support", "insufficient"),

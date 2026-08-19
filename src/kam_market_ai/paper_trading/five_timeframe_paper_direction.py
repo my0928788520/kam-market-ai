@@ -20,6 +20,8 @@ class FiveTimeframePaperDirection:
     live_order_allowed: bool = False
     broker_connected: bool = False
     daily_ma60_position: str | None = None
+    daily_descending_trendline_state: str | None = None
+    daily_bullish_weakening: bool | None = None
     trend_warning_codes: tuple[str, ...] = ()
     m15_ma20_position: str | None = None
     m15_ma20_direction: str | None = None
@@ -38,6 +40,8 @@ class FiveTimeframePaperDirection:
             "live_order_allowed": False,
             "broker_connected": False,
             "daily_ma60_position": self.daily_ma60_position,
+            "daily_descending_trendline_state": self.daily_descending_trendline_state,
+            "daily_bullish_weakening": self.daily_bullish_weakening,
             "trend_warning_codes": list(self.trend_warning_codes),
             "m15_ma20_position": self.m15_ma20_position,
             "m15_ma20_direction": self.m15_ma20_direction,
@@ -53,6 +57,8 @@ def decide_five_timeframe_paper_direction(
     states: tuple[MappedKamTimeframeState, ...],
     *,
     daily_ma60_position: str | None = None,
+    daily_descending_trendline_state: str | None = None,
+    daily_bullish_weakening: bool | None = None,
     trend_warning_codes: tuple[str, ...] = (),
     m15_ma20_position: str | None = None,
     m15_ma20_direction: str | None = None,
@@ -75,6 +81,16 @@ def decide_five_timeframe_paper_direction(
         raise TypeError("five mapped KAM timeframe states are required")
     if daily_ma60_position not in {None, "above", "below", "equal", "insufficient"}:
         raise ValueError("daily_ma60_position must be a normalized MA60 relation")
+    if daily_descending_trendline_state not in {
+        None,
+        "active_below",
+        "rejected_below",
+        "broken_above",
+        "insufficient",
+    }:
+        raise ValueError("daily_descending_trendline_state must be normalized")
+    if daily_bullish_weakening not in {None, True, False}:
+        raise ValueError("daily_bullish_weakening must be a boolean or None")
     if m15_ma20_position not in {None, "above", "below", "equal", "insufficient"}:
         raise ValueError("m15_ma20_position must be a normalized MA20 relation")
     if m15_ma20_direction not in {None, "rising", "falling", "flat", "insufficient"}:
@@ -91,6 +107,8 @@ def decide_five_timeframe_paper_direction(
     codes = tuple(item.code for item in states)
     payload = {
         "daily_ma60_position": daily_ma60_position,
+        "daily_descending_trendline_state": daily_descending_trendline_state,
+        "daily_bullish_weakening": daily_bullish_weakening,
         "trend_warning_codes": trend_warning_codes,
         "m15_ma20_position": m15_ma20_position,
         "m15_ma20_direction": m15_ma20_direction,
@@ -106,8 +124,14 @@ def decide_five_timeframe_paper_direction(
         reason_code = "M15_MA20_LONG_TRIGGER_NOT_CONFIRMED"
     elif m60_market_bias == "bearish" and m60_ma20_support == "broken":
         if m15_ma20_position == "below" and m15_ma20_direction == "falling":
+            reason = (
+                "D1_DESCENDING_TRENDLINE_WEAKENING_M60_M15_SHORT_TRIGGER"
+                if daily_bullish_weakening is True
+                and daily_descending_trendline_state == "rejected_below"
+                else "M60_BEARISH_M15_SHORT_TRIGGER"
+            )
             return FiveTimeframePaperDirection(
-                "SHORT", "PAPER_SELL", "M60_BEARISH_M15_SHORT_TRIGGER", codes, True,
+                "SHORT", "PAPER_SELL", reason, codes, True,
                 **payload,
             )
         reason_code = "M15_MA20_SHORT_TRIGGER_NOT_CONFIRMED"

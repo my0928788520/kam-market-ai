@@ -4,6 +4,7 @@ from types import MappingProxyType
 import pytest
 
 from kam_market_ai.live_read_only.five_timeframe_analysis_preview import (
+    _daily_descending_trendline_metrics,
     build_verified_five_timeframe_analysis_preview,
 )
 from kam_market_ai.market_data.fubon_five_timeframe_pipeline import (
@@ -127,6 +128,9 @@ def test_preview_runs_all_five_timeframes_and_remains_fail_closed() -> None:
         "next_step_priority",
         "trend_warning_codes",
         "daily_ma60_position",
+        "daily_descending_trendline_state",
+        "daily_descending_trendline_relation",
+        "daily_bullish_weakening",
         "m15_ma20_position",
         "m15_ma20_direction",
         "m60_ma20_support",
@@ -228,6 +232,67 @@ def test_preview_exposes_daily_ma60_direction_filter_metrics() -> None:
     assert isinstance(payload["timeframes"]["15m"]["trend_warning_codes"], list)
     assert payload["decision_diagnostics"]["m15_ma20_position"] == "above"
     assert payload["decision_diagnostics"]["m15_ma20_direction"] == "rising"
+
+
+def _daily_candles_for_highs(
+    highs: list[float], closes: list[float]
+) -> tuple[Candle, ...]:
+    first = NOW - timedelta(days=len(highs))
+    return tuple(
+        Candle(
+            Instrument.TMF,
+            first + timedelta(days=index),
+            first + timedelta(days=index + 1),
+            close - 1,
+            high,
+            close - 2,
+            close,
+            10,
+        )
+        for index, (high, close) in enumerate(zip(highs, closes, strict=True))
+    )
+
+
+def test_daily_descending_trendline_uses_major_high_then_later_lower_high() -> None:
+    metrics = _daily_descending_trendline_metrics(
+        _daily_candles_for_highs(
+            [100, 105, 101, 103, 99, 101, 98],
+            [98, 103, 99, 101, 97, 99, 97],
+        )
+    )
+
+    assert metrics["descending_trendline_anchor_high_1"] == 105
+    assert metrics["descending_trendline_anchor_high_2"] == 103
+    assert metrics["descending_trendline_value"] == 100
+    assert metrics["descending_trendline_state"] == "active_below"
+    assert metrics["descending_trendline_relation"] == "below"
+    assert metrics["bullish_weakening"] is False
+
+
+def test_daily_descending_trendline_rejection_confirms_weakening() -> None:
+    metrics = _daily_descending_trendline_metrics(
+        _daily_candles_for_highs(
+            [100, 105, 101, 103, 99, 101, 101],
+            [98, 103, 99, 101, 97, 99, 99],
+        )
+    )
+
+    assert metrics["descending_trendline_state"] == "rejected_below"
+    assert metrics["descending_trendline_relation"] == "rejection"
+    assert metrics["bullish_weakening"] is True
+
+
+def test_daily_close_above_descending_trendline_cancels_weakening() -> None:
+    metrics = _daily_descending_trendline_metrics(
+        _daily_candles_for_highs(
+            [100, 105, 101, 103, 99, 101, 105],
+            [98, 103, 99, 101, 97, 99, 104],
+        )
+    )
+
+    assert metrics["descending_trendline_state"] == "broken_above"
+    assert metrics["descending_trendline_relation"] == "above"
+    assert metrics["bullish_weakening"] is False
 
 
 def test_m60_support_uses_closed_candle_and_ignores_forming_break() -> None:

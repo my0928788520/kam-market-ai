@@ -66,6 +66,41 @@ def test_changed_market_semantics_change_fingerprint() -> None:
     assert "短線尚未同步" in changed.headline
 
 
+def test_daily_descending_trendline_weakening_is_explained_in_short_setup() -> None:
+    payload = _payload()
+    frames = payload["analysis_preview"]["timeframes"]  # type: ignore[index]
+    frames["1d"]["bullish_weakening"] = True  # type: ignore[index]
+    frames["60m"]["ma20_support"] = "broken"  # type: ignore[index]
+    frames["60m"]["market_bias"] = "bearish"  # type: ignore[index]
+    frames["15m"]["price_vs_ma20"] = "below"  # type: ignore[index]
+    frames["15m"]["ma20_direction"] = "falling"  # type: ignore[index]
+    frames["5m"]["price_vs_ma20"] = "below"  # type: ignore[index]
+
+    analysis = build_current_market_analysis(
+        payload, observed_at=datetime(2026, 8, 17, 8, 1, tzinfo=UTC)
+    )
+
+    assert analysis.headline == "日線下降趨勢線確認多方轉弱，空單條件成立"
+    assert "日線下降趨勢線壓制、多方轉弱" in analysis.basis
+    assert analysis.fingerprint
+
+
+def test_daily_rejection_headline_has_priority_when_short_is_confirmed() -> None:
+    payload = _payload()
+    timeframes = payload["analysis_preview"]["timeframes"]  # type: ignore[index]
+    timeframes["1d"]["bullish_weakening"] = True
+    timeframes["60m"].update({"ma20_support": "broken", "market_bias": "bearish"})
+    timeframes["15m"].update({"price_vs_ma20": "below", "ma20_direction": "falling"})
+    timeframes["5m"].update({"price_vs_ma20": "below", "ma20_direction": "falling"})
+
+    analysis = build_current_market_analysis(
+        payload, observed_at=datetime(2026, 8, 17, 8, 1, tzinfo=UTC)
+    )
+
+    assert analysis.headline == "日線下降趨勢線確認多方轉弱，空單條件成立"
+    assert "日線下降趨勢線壓制、多方轉弱" in analysis.basis
+
+
 def test_stale_analysis_fails_closed_and_line_alert_stays_paper_only() -> None:
     payload = _payload()
     payload["analysis_preview"]["timeframes"]["15m"]["status"] = "stale"  # type: ignore[index]
