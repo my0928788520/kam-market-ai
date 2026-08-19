@@ -57,7 +57,7 @@ def test_matching_margin_status_is_visually_emphasized() -> None:
     assert "grid-template-rows: auto auto minmax(0, 1fr) auto" in css
     assert ".matching:has(.performance-sample) .performance-sample { grid-column: 1 / -1; grid-row: 2;" in css
     assert ".matching:has(.performance-sample) > .footer-metrics { grid-column: 2; grid-row: 3;" in css
-    assert ".matching:has(.performance-sample) .matching-status { grid-column: 1; grid-row: 3; grid-template-columns: repeat(3, max-content minmax(0, 1fr));" in css
+    assert ".matching:has(.performance-sample) .matching-status { grid-column: 1; grid-row: 3; grid-template-columns: max-content minmax(48px, .65fr) max-content minmax(156px, 1.65fr) max-content minmax(72px, .8fr);" in css
     assert ".matching:has(.performance-sample) > p { grid-column: 1 / -1; grid-row: 4;" in css
     assert "grid-template-columns: minmax(0, 1.55fr) minmax(250px, .85fr)" in css
     assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in css
@@ -67,11 +67,20 @@ def test_matching_margin_status_is_visually_emphasized() -> None:
     assert ".performance-sample small { font-size: 11.5px; }" in css
     assert ".performance-sample strong { font-size: 14px; line-height: 1.25; }" in css
     assert "padding-left: 14px; font-size: 13px; line-height: 1.35;" in css
-    html = render_operator_html(_view())
+    html = render_operator_html(PaperTradingOperatorView(
+        "<KAM>", "安全", {"instrument": "TEST"},
+        {"目前契約": "TMFI6", "行情更新（台灣）": "2026-08-19 13:53:00", "Paper 持倉": "無持倉"},
+        {"cash": "100"}, (), False,
+    ))
     assert "<KAM>" not in html
     assert "class='matching-status'" in html
     assert "class='performance-sample'" in html
     assert "<small>進度</small>" in html
+    assert "class='market-update-label'" in html
+    assert "class='market-update-value'" in html
+    assert "class='paper-position-label'" in html
+    assert "class='paper-position-value'" in html
+    assert "minmax(156px, 1.65fr)" in css
 
 
 def test_matching_shortens_journal_hash_without_losing_full_tooltip() -> None:

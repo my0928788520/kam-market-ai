@@ -214,6 +214,8 @@ def _rows(values: dict[str, str]) -> str:
     row_classes = {
         "LINE 通知": "line-alert",
         "真單狀態": "live-order-status",
+        "行情更新（台灣）": "market-update",
+        "Paper 持倉": "paper-position",
     }
     return "".join(
         (
