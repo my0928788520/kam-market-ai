@@ -59,6 +59,10 @@ def test_matching_margin_status_is_visually_emphasized() -> None:
     assert "minmax(280px, 1.25fr) minmax(190px, .75fr) minmax(260px, 1fr)" in css
     assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in css
     assert "grid-auto-rows: min-content" in css
+    assert ".performance-sample > b { grid-column: 1 / -1; font-size: 12px; }" in css
+    assert ".performance-sample small { font-size: 11px; }" in css
+    assert ".performance-sample strong { font-size: 13px; line-height: 1.25; }" in css
+    assert "padding-left: 14px; font-size: 13.5px; line-height: 1.45;" in css
     html = render_operator_html(_view())
     assert "<KAM>" not in html
     assert "class='matching-status'" in html
