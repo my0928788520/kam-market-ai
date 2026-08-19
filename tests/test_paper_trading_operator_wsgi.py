@@ -131,6 +131,8 @@ def test_current_analysis_uses_free_matching_space_and_stable_refresh_hash() -> 
     assert all(label in html for label in ("理由", "矛盾", "等待", "風險"))
     assert "class='current-analysis-summary'" in html
     assert ".current-analysis-summary" in css
+    assert ".timeframes > h2, .current-analysis-summary > b { display: none; }" in css
+    assert ".timeframes { grid-template-rows: minmax(0, 1fr); }" in css
     assert "font-size: 14px" in css
     assert "class='current-analysis-details'" not in html
     assert "currentCard.dataset.analysisHash === nextCard.dataset.analysisHash" in refresh
