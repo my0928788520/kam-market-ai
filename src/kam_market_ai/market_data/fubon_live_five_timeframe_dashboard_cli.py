@@ -699,6 +699,8 @@ def main(
                 "paper_take_profit_points": 40 if args.paper_test_armed else None,
                 "paper_live_risk_refresh_seconds": args.refresh_seconds if args.paper_test_armed else None,
                 "paper_trend_hold_enabled": bool(args.paper_test_armed),
+                "paper_profit_lock_enabled": bool(args.paper_test_armed),
+                "paper_profit_lock_trailing_points": 40 if args.paper_test_armed else None,
                 "paper_take_profit_extension_points": 20 if args.paper_test_armed else None,
                 "paper_entry_confirmation_candles": 2 if args.paper_test_armed else None,
                 "paper_max_confirmation_move_points": 20 if args.paper_test_armed else None,

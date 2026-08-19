@@ -450,7 +450,7 @@ def test_take_profit_quote_closes_position_and_records_realized_gain() -> None:
     assert result.journal.ledger.cash_entries[-1].cash_delta == Decimal(35470)
 
 
-def test_aligned_long_extends_take_profit_and_moves_stop_near_break_even() -> None:
+def test_aligned_long_extends_take_profit_and_locks_twenty_points() -> None:
     session = LiveTmfPaperSimulation(config())
     enter(session)
 
@@ -461,7 +461,7 @@ def test_aligned_long_extends_take_profit_and_moves_stop_near_break_even() -> No
     assert extended.action is TmfPaperCycleAction.POSITION_MARKED
     assert extended.reason_codes == ("TREND_HOLD_TAKE_PROFIT_EXTENDED",)
     assert extended.performance_event is not None
-    assert extended.performance_event.stop_loss_price == Decimal("21999")
+    assert extended.performance_event.stop_loss_price == Decimal("22020")
     assert extended.performance_event.take_profit_price == Decimal("22060")
 
 
@@ -475,7 +475,7 @@ def test_aligned_short_extends_take_profit_downward_symmetrically() -> None:
 
     assert extended.action is TmfPaperCycleAction.POSITION_MARKED
     assert extended.performance_event is not None
-    assert extended.performance_event.stop_loss_price == Decimal("22001")
+    assert extended.performance_event.stop_loss_price == Decimal("21980")
     assert extended.performance_event.take_profit_price == Decimal("21940")
 
 
@@ -488,6 +488,7 @@ def test_trend_hold_moves_target_beyond_a_gap_quote() -> None:
     )
 
     assert extended.performance_event is not None
+    assert extended.performance_event.stop_loss_price == Decimal("22060")
     assert extended.performance_event.take_profit_price == Decimal("22100")
 
 

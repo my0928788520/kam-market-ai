@@ -418,8 +418,10 @@ class TmfPaperPerformanceEvent:
         ):
             _decimal(value, field)
         if not (
-            self.stop_loss_price < self.entry_price < self.take_profit_price
-            or self.take_profit_price < self.entry_price < self.stop_loss_price
+            self.entry_price < self.take_profit_price
+            and self.stop_loss_price < self.take_profit_price
+            or self.take_profit_price < self.entry_price
+            and self.take_profit_price < self.stop_loss_price
         ):
             raise ValueError("paper protection prices are invalid.")
         if self.max_favorable_excursion < 0 or self.max_adverse_excursion > 0:
@@ -1489,7 +1491,8 @@ class LiveTmfPaperSimulation:
                 )
                 stop_loss_price = max(
                     stop_loss_price,
-                    entry.entry_price - self.config.tick_size,
+                    take_profit_price
+                    - (self.config.take_profit_extension_points * Decimal(2)),
                 )
             else:
                 extension_count = (
@@ -1501,8 +1504,32 @@ class LiveTmfPaperSimulation:
                 )
                 stop_loss_price = min(
                     stop_loss_price,
-                    entry.entry_price + self.config.tick_size,
+                    take_profit_price
+                    + (self.config.take_profit_extension_points * Decimal(2)),
                 )
+        initial_take_profit_price = entry.entry_price + (
+            self.config.take_profit_points
+            if entry.entry_side is PaperTradingSide.BUY
+            else -self.config.take_profit_points
+        )
+        if (
+            entry.entry_side is PaperTradingSide.BUY
+            and take_profit_price > initial_take_profit_price
+        ):
+            stop_loss_price = max(
+                stop_loss_price,
+                take_profit_price
+                - (self.config.take_profit_extension_points * Decimal(2)),
+            )
+        elif (
+            entry.entry_side is PaperTradingSide.SELL
+            and take_profit_price < initial_take_profit_price
+        ):
+            stop_loss_price = min(
+                stop_loss_price,
+                take_profit_price
+                + (self.config.take_profit_extension_points * Decimal(2)),
+            )
         exit_type: TmfPaperPerformanceEventType | None = None
         ma20_exit = (
             entry.entry_side is PaperTradingSide.BUY
