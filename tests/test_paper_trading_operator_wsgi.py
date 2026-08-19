@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 
 from kam_market_ai.paper_trading.operator_presenter import PaperTradingOperatorView
-from kam_market_ai.paper_trading.operator_wsgi import _cycle, _timeframe_card, build_operator_wsgi, render_account_html, render_help_html, render_operator_html
+from kam_market_ai.paper_trading.operator_wsgi import _cycle, _paper_position_strip, _timeframe_card, build_operator_wsgi, render_account_html, render_help_html, render_operator_html
 from kam_market_ai.paper_trading.demo_proposal import build_demo_session
 from kam_market_ai.paper_trading.demo_snapshot import DEMO_SNAPSHOT
 from kam_market_ai.paper_trading.operator_presenter import build_demo_operator_presenter
@@ -97,6 +97,25 @@ def test_operator_frontend_translates_internal_state_codes_to_chinese() -> None:
 
     assert ">BD<" not in card and "<strong>偏空</strong>" in card
     assert ">U4<" not in cycle and "class='cycle-code'>多方延伸後段<" in cycle
+
+
+def test_paper_position_strip_emphasizes_active_profit_and_flat_waiting_state() -> None:
+    active = _paper_position_strip(
+        {"KAM 方向": "偏空", "模擬成交價": "44815"},
+        {
+            "Paper 持倉": "1 口・TMFI6",
+            "停損／停利": "44535／44495",
+            "目前模擬價": "44500",
+            "未實現損益": "3150",
+        },
+    )
+    flat = _paper_position_strip({"KAM 方向": "觀望"}, {"Paper 持倉": "無持倉"})
+
+    assert "paper-position-profit" in active
+    for value in ("偏空・1 口・TMFI6", "44815", "44500", "44535", "44495", "3150"):
+        assert value in active
+    assert "paper-position-flat" in flat
+    assert "目前無模擬持倉" in flat and "等待 KAM 條件完整" in flat
 
 
 def test_matching_shortens_journal_hash_without_losing_full_tooltip() -> None:

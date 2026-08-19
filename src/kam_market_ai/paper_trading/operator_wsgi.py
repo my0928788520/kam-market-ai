@@ -228,6 +228,7 @@ def _rows(values: dict[str, str]) -> str:
         "阻擋原因": "blocking-reason",
         "停損／停利": "position-risk",
         "目前模擬價": "paper-current-price",
+        "未實現損益": "unrealized-pnl",
         "已實現損益": "realized-pnl",
     }
     return "".join(
@@ -261,6 +262,41 @@ def _proposal_rows(proposal: dict[str, str], matching: dict[str, str]) -> str:
         (key, matching[key]) for key in _SIMULATION_POSITION_KEYS if key in matching
     )
     return _rows(frontend)
+
+
+def _paper_position_strip(proposal: Mapping[str, str], matching: Mapping[str, str]) -> str:
+    position = str(matching.get("Paper 持倉", "無持倉"))
+    direction = str(proposal.get("KAM 方向", "等待"))
+    if "無持倉" in position or position in {"—", "0", "0 口"}:
+        return (
+            "<div class='paper-position-strip paper-position-flat'>"
+            "<strong>目前無模擬持倉</strong>"
+            f"<span>方向參考：{escape(direction)}</span>"
+            "<span>等待 KAM 條件完整</span></div>"
+        )
+
+    stop_loss, separator, take_profit = str(matching.get("停損／停利", "—／—")).partition("／")
+    if not separator:
+        stop_loss, take_profit = "—", "—"
+    raw_pnl = str(matching.get("未實現損益", "0"))
+    try:
+        pnl = Decimal(raw_pnl.replace(",", ""))
+    except Exception:
+        pnl = Decimal("0")
+    state_class = "paper-position-profit" if pnl > 0 else "paper-position-risk" if pnl < 0 else "paper-position-active"
+    metrics = (
+        ("方向／部位", f"{direction}・{position}"),
+        ("進場", str(proposal.get("模擬成交價", "—"))),
+        ("現價", str(matching.get("目前模擬價", "—"))),
+        ("停損", stop_loss),
+        ("目標", take_profit),
+        ("浮動損益", raw_pnl),
+    )
+    items = "".join(
+        f"<span><small>{escape(label)}</small><strong>{escape(value)}</strong></span>"
+        for label, value in metrics
+    )
+    return f"<div class='paper-position-strip {state_class}'>{items}</div>"
 
 
 def _matching_rows(values: dict[str, str]) -> str:
@@ -554,7 +590,8 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
     control_label = _control_label(view, bull)
     audit = "".join(f"<li title='{escape(item['hash'])}'>{escape(item['type'])} · {escape(item['hash'][:10])}</li>" for item in view.audit_events[-3:])
     proposal_title = "自動模擬執行" if demo.get("automation_mode") == "AUTO PAPER" else "模擬委託建議"
-    proposal = f"<section class='proposal'><h2>{proposal_title}</h2><dl>{_proposal_rows(view.proposal, view.matching)}</dl></section>"
+    position_strip = _paper_position_strip(view.proposal, view.matching)
+    proposal = f"<section class='proposal'><h2>{proposal_title}</h2>{position_strip}<dl>{_proposal_rows(view.proposal, view.matching)}</dl></section>"
     line_alert_status = escape(str(view.matching.get("LINE 通知", "狀態待確認")))
     line_alert_chip = (
         f"<span class='line-alert-chip' title='LINE 通知：{line_alert_status}'>"
