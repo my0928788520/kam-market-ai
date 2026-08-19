@@ -293,7 +293,10 @@ class TmfPaperQuote:
             raise ValueError("quote instrument must be canonical.")
         _decimal(self.price, "price", positive=True)
         _utc(self.observed_at, "observed_at")
-        if len(self.source_hash) != 64 or self.price_policy != "LATEST_VERIFIED_5M_CLOSE":
+        if len(self.source_hash) != 64 or self.price_policy not in {
+            "LATEST_VERIFIED_5M_CLOSE",
+            "FUBON_LATEST_VERIFIED_TRADE",
+        }:
             raise ValueError("verified quote identity is required.")
         if self.dry_run is not True or self.live_order_allowed or self.broker_connected:
             raise ValueError("paper quote cannot enable broker execution.")
@@ -344,6 +347,29 @@ def build_tmf_paper_quote(
         Decimal(str(latest.close)),
         latest.end.astimezone(UTC),
         _hash(payload),
+    )
+
+
+def build_live_tmf_paper_quote(
+    *,
+    instrument: str,
+    price: Decimal,
+    observed_at: datetime,
+    source: str = "FUBON_INTRADAY_QUOTE",
+) -> TmfPaperQuote:
+    """Build an auditable quote for open-position risk checks only."""
+    payload = {
+        "instrument": instrument,
+        "price": str(price),
+        "observed_at": _utc(observed_at, "observed_at"),
+        "source": source,
+    }
+    return TmfPaperQuote(
+        instrument,
+        price,
+        observed_at,
+        _hash(payload),
+        "FUBON_LATEST_VERIFIED_TRADE",
     )
 
 
@@ -949,6 +975,26 @@ class LiveTmfPaperSimulation:
         )
         quote = build_tmf_paper_quote(value, instrument=self.config.instrument)
         return self.process_evaluation(preview.paper_direction, quote, evaluated_at=evaluated_at)
+
+    def process_open_position_quote(
+        self,
+        value: CompleteFiveTimeframeCandleResult | FiveTimeframeCandleResult,
+        quote: TmfPaperQuote,
+        *,
+        evaluated_at: datetime,
+    ) -> TmfPaperCycleResult | None:
+        """Apply a live quote only to an existing position; never open a trade."""
+        if self.journal.open_entry is None:
+            return None
+        preview = build_verified_five_timeframe_analysis_preview(
+            value,
+            evaluated_at=evaluated_at,
+        )
+        return self.process_evaluation(
+            preview.paper_direction,
+            quote,
+            evaluated_at=evaluated_at,
+        )
 
     def process_evaluation(
         self,
@@ -1635,5 +1681,6 @@ __all__ = [
     "TmfPaperQuote",
     "TmfPaperSimulationConfig",
     "TmfPaperSimulationJournal",
+    "build_live_tmf_paper_quote",
     "build_tmf_paper_quote",
 ]

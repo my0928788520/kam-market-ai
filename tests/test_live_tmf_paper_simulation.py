@@ -29,6 +29,7 @@ from kam_market_ai.paper_trading.live_tmf_simulation import (
     TmfPaperPerformanceEventType,
     TmfPaperQuote,
     TmfPaperSimulationConfig,
+    build_live_tmf_paper_quote,
 )
 
 NOW = datetime(2026, 8, 14, 5, 0, tzinfo=UTC)
@@ -101,6 +102,18 @@ def test_config_uses_current_taifex_tmf_margin_snapshot() -> None:
     assert value.maintenance_margin == Decimal(26900)
     assert value.margin_effective_at == datetime(2026, 8, 12, 5, 45, tzinfo=UTC)
     assert value.margin_source == "TAIFEX_INDEX_MARGIN_2026-08-12"
+
+
+def test_live_risk_quote_is_auditable() -> None:
+    value = build_live_tmf_paper_quote(
+        instrument="TMFH6",
+        price=Decimal(44779),
+        observed_at=NOW,
+    )
+
+    assert value.price == Decimal(44779)
+    assert value.price_policy == "FUBON_LATEST_VERIFIED_TRADE"
+    assert len(value.quote_hash) == 64
 
 
 def test_default_session_holds_without_kam_entry_condition() -> None:
@@ -927,6 +940,71 @@ def test_candle_entrypoint_uses_natural_kam_result_without_forcing_buy() -> None
     assert result.action is TmfPaperCycleAction.HOLD
     assert result.direction == "HOLD"
     assert result.journal.events == ()
+
+
+def test_open_position_uses_live_quote_for_immediate_stop_without_new_entry() -> None:
+    durations = {
+        FiveTimeframe.M5: timedelta(minutes=5),
+        FiveTimeframe.M15: timedelta(minutes=15),
+        FiveTimeframe.M60: timedelta(hours=1),
+        FiveTimeframe.DAY: timedelta(days=1),
+        FiveTimeframe.WEEK: timedelta(days=7),
+    }
+    candles = CompleteFiveTimeframeCandleResult(
+        Instrument.TMF,
+        None,
+        MappingProxyType(
+            {
+                timeframe: (
+                    Candle(
+                        Instrument.TMF,
+                        NOW - duration,
+                        NOW,
+                        22000,
+                        22010,
+                        21990,
+                        22000,
+                        10,
+                    ),
+                )
+                for timeframe, duration in durations.items()
+            }
+        ),
+        3,
+    )
+    session = LiveTmfPaperSimulation(config())
+    assert (
+        session.process_open_position_quote(
+            candles,
+            build_live_tmf_paper_quote(
+                instrument="TMFH6",
+                price=Decimal(21980),
+                observed_at=NOW + timedelta(seconds=3),
+            ),
+            evaluated_at=NOW + timedelta(seconds=3),
+        )
+        is None
+    )
+
+    enter(session)
+    stopped = session.process_open_position_quote(
+        candles,
+        build_live_tmf_paper_quote(
+            instrument="TMFH6",
+            price=Decimal(21980),
+            observed_at=NOW + timedelta(seconds=3),
+        ),
+        evaluated_at=NOW + timedelta(seconds=3),
+    )
+
+    assert stopped is not None
+    assert stopped.action is TmfPaperCycleAction.EXIT_FILLED
+    assert stopped.performance_event is not None
+    assert (
+        stopped.performance_event.event_type
+        is TmfPaperPerformanceEventType.STOP_LOSS_EXIT
+    )
+    assert stopped.journal.ledger.positions == ()
 
 
 

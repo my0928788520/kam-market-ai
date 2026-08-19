@@ -10,6 +10,7 @@ import webbrowser
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from wsgiref.simple_server import make_server
@@ -44,6 +45,7 @@ from kam_market_ai.paper_trading.live_tmf_simulation import (
     LiveTmfPaperSimulation,
     TmfPaperJournalStore,
     TmfPaperSimulationConfig,
+    build_live_tmf_paper_quote,
 )
 from kam_market_ai.paper_trading.operator_app import create_operator_app
 
@@ -490,7 +492,18 @@ def main(
             return
         paper_runtime["journal_integrity_status"] = "VERIFIED"
         try:
-            result = paper_session.process_candles(
+            live_risk_result = None
+            if latest_quote is not None:
+                live_risk_result = paper_session.process_open_position_quote(
+                    verifier.latest_candle_result,
+                    build_live_tmf_paper_quote(
+                        instrument=symbol,
+                        price=Decimal(str(latest_quote.price)),
+                        observed_at=latest_quote.observed_at,
+                    ),
+                    evaluated_at=now,
+                )
+            result = live_risk_result or paper_session.process_candles(
                 verifier.latest_candle_result,
                 evaluated_at=now,
             )
@@ -684,6 +697,7 @@ def main(
                 "paper_journal": args.paper_journal if args.paper_test_armed else None,
                 "paper_stop_loss_points": 20 if args.paper_test_armed else None,
                 "paper_take_profit_points": 40 if args.paper_test_armed else None,
+                "paper_live_risk_refresh_seconds": args.refresh_seconds if args.paper_test_armed else None,
                 "paper_trend_hold_enabled": bool(args.paper_test_armed),
                 "paper_take_profit_extension_points": 20 if args.paper_test_armed else None,
                 "paper_entry_confirmation_candles": 2 if args.paper_test_armed else None,
