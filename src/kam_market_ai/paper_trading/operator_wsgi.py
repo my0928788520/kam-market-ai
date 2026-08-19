@@ -224,6 +224,11 @@ def _rows(values: dict[str, str]) -> str:
         "日誌驗證": "journal-validation",
         "模擬成交": "paper-fill-count",
         "日誌雜湊": "journal-hash",
+        "狀態": "simulation-status",
+        "阻擋原因": "blocking-reason",
+        "停損／停利": "position-risk",
+        "目前模擬價": "paper-current-price",
+        "已實現損益": "realized-pnl",
     }
     return "".join(
         (
