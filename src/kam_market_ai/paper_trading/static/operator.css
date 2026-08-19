@@ -78,7 +78,7 @@ html.help-page, body.help-page { height: auto; min-height: 100%; overflow-x: hid
   main { padding: 4px 6px; grid-template-rows: 30px 30px minmax(0, 1fr) 44px; gap: 4px; }
   header { gap: 10px; padding: 0 10px; }
   .banner { gap: 7px; padding: 3px 6px 3px 10px; }.line-alert-chip { gap: 5px; padding: 3px 8px; font-size: 10px; }.line-alert-chip b { font-size: 10px; }.line-alert-chip strong { font-size: 11px; }
-  .dashboard { grid-template-rows: 62px 132px 62px minmax(132px, 1fr); gap: 4px; }
+  .dashboard { grid-template-rows: 76px 130px 84px minmax(112px, 1fr); gap: 4px; }
   section { padding: 6px 9px; }
   section h2 { margin-bottom: 4px; font-size: 12px; }
   section p, section small { margin: 3px 0; font-size: 10px; line-height: 1.25; }
@@ -107,7 +107,7 @@ html.help-page, body.help-page { height: auto; min-height: 100%; overflow-x: hid
   .timeframe-card small { margin-top: 1px; font-size: 11.5px; line-height: 14px; }
   .position-card strong, .next-card strong { align-self: center; font-size: 21px; line-height: 1.05; }
   .current-analysis-card { gap: 12px; }.current-analysis-card strong { font-size: 20px; }.current-analysis-card small { font-size: 9px; }
-  .current-analysis-summary { padding-left: 12px; }.current-analysis-summary > b { font-size: 14px; }.current-analysis-summary p { font-size: 12.5px; line-height: 1.25; }
+  .current-analysis-summary { gap: 1px 8px; padding-left: 12px; }.current-analysis-summary > b { margin-bottom: 1px; font-size: 14px; }.current-analysis-summary p { font-size: 12.5px; line-height: 1.2; }
   .proposal, .matching { padding: 6px 9px; }.proposal { padding-bottom: 4px; }.matching { overflow: hidden; }
   .proposal h2 { margin-bottom: 5px; font-size: 15px; }.matching h2 { margin-bottom: 3px; font-size: 16px; line-height: 1.1; }
   .proposal p, .matching p { margin-bottom: 4px; font-size: 13px; line-height: 1.35; }
