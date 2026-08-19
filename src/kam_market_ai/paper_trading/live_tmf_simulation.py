@@ -189,6 +189,8 @@ class TmfPaperSimulationConfig:
     reentry_cooldown_minutes: int = 15
     entry_confirmation_candles: int = 1
     max_entry_confirmation_move_points: Decimal = Decimal(20)
+    structural_stop_confirmation_enabled: bool = True
+    emergency_stop_buffer_points: Decimal = Decimal(20)
     initial_margin: Decimal = Decimal(35050)
     maintenance_margin: Decimal = Decimal(26900)
     margin_effective_at: datetime = datetime(2026, 8, 12, 5, 45, tzinfo=UTC)
@@ -214,6 +216,7 @@ class TmfPaperSimulationConfig:
                 "max_entry_confirmation_move_points",
                 self.max_entry_confirmation_move_points,
             ),
+            ("emergency_stop_buffer_points", self.emergency_stop_buffer_points),
             ("initial_cash", self.initial_cash),
             ("max_order_notional", self.max_order_notional),
             ("max_daily_loss", self.max_daily_loss),
@@ -233,6 +236,7 @@ class TmfPaperSimulationConfig:
             or self.take_profit_points % self.tick_size != 0
             or self.take_profit_extension_points % self.tick_size != 0
             or self.max_entry_confirmation_move_points % self.tick_size != 0
+            or self.emergency_stop_buffer_points % self.tick_size != 0
         ):
             raise ValueError("Protection distances must align to the TMF tick size.")
         if isinstance(self.max_quote_age_seconds, bool) or self.max_quote_age_seconds <= 0:
@@ -1005,7 +1009,12 @@ class LiveTmfPaperSimulation:
             evaluated_at=evaluated_at,
         )
         quote = build_tmf_paper_quote(value, instrument=self.config.instrument)
-        return self.process_evaluation(preview.paper_direction, quote, evaluated_at=evaluated_at)
+        return self.process_evaluation(
+            preview.paper_direction,
+            quote,
+            evaluated_at=evaluated_at,
+            structural_close=quote.price,
+        )
 
     def process_open_position_quote(
         self,
@@ -1021,10 +1030,18 @@ class LiveTmfPaperSimulation:
             value,
             evaluated_at=evaluated_at,
         )
+        latest_five_minute = value.series[FiveTimeframe.M5][-1]
+        structural_close = (
+            Decimal(str(latest_five_minute.close))
+            if latest_five_minute.end.astimezone(UTC) <= evaluated_at
+            else None
+        )
         return self.process_evaluation(
             preview.paper_direction,
             quote,
             evaluated_at=evaluated_at,
+            structural_close=structural_close,
+            require_structural_confirmation=True,
         )
 
     def process_evaluation(
@@ -1033,6 +1050,8 @@ class LiveTmfPaperSimulation:
         quote: TmfPaperQuote,
         *,
         evaluated_at: datetime,
+        structural_close: Decimal | None = None,
+        require_structural_confirmation: bool = False,
     ) -> TmfPaperCycleResult:
         """Apply a canonical direction to a verified quote; no signal is overridden."""
         if not isinstance(direction, FiveTimeframePaperDirection):
@@ -1070,7 +1089,13 @@ class LiveTmfPaperSimulation:
                 reasons=("QUOTE_NOT_ON_TICK",),
             )
         if self.journal.open_entry is not None:
-            return self._mark_or_exit(direction, quote, evaluated_at)
+            return self._mark_or_exit(
+                direction,
+                quote,
+                evaluated_at,
+                structural_close=structural_close,
+                require_structural_confirmation=require_structural_confirmation,
+            )
         entry_side = {
             ("LONG", "PAPER_BUY"): PaperTradingSide.BUY,
             ("SHORT", "PAPER_SELL"): PaperTradingSide.SELL,
@@ -1450,6 +1475,9 @@ class LiveTmfPaperSimulation:
         direction: FiveTimeframePaperDirection,
         quote: TmfPaperQuote,
         evaluated_at: datetime,
+        *,
+        structural_close: Decimal | None = None,
+        require_structural_confirmation: bool = False,
     ) -> TmfPaperCycleResult:
         entry = self.journal.open_entry
         if entry is None:
@@ -1567,7 +1595,35 @@ class LiveTmfPaperSimulation:
             entry.entry_side is PaperTradingSide.SELL
             and direction.m15_ma20_position == "above"
         )
-        if entry.entry_side is PaperTradingSide.BUY and quote.price <= stop_loss_price:
+        stop_touched = (
+            entry.entry_side is PaperTradingSide.BUY and quote.price <= stop_loss_price
+        ) or (
+            entry.entry_side is PaperTradingSide.SELL and quote.price >= stop_loss_price
+        )
+        structural_stop_confirmed = not require_structural_confirmation or (
+            structural_close is not None
+            and (
+                entry.entry_side is PaperTradingSide.BUY
+                and structural_close <= stop_loss_price
+                or entry.entry_side is PaperTradingSide.SELL
+                and structural_close >= stop_loss_price
+            )
+        )
+        emergency_stop_reached = (
+            entry.entry_side is PaperTradingSide.BUY
+            and quote.price
+            <= stop_loss_price - self.config.emergency_stop_buffer_points
+        ) or (
+            entry.entry_side is PaperTradingSide.SELL
+            and quote.price
+            >= stop_loss_price + self.config.emergency_stop_buffer_points
+        )
+        confirmed_stop_exit = stop_touched and (
+            not self.config.structural_stop_confirmation_enabled
+            or structural_stop_confirmed
+            or emergency_stop_reached
+        )
+        if entry.entry_side is PaperTradingSide.BUY and confirmed_stop_exit:
             exit_type = TmfPaperPerformanceEventType.STOP_LOSS_EXIT
         elif ma20_exit:
             exit_type = TmfPaperPerformanceEventType.M15_MA20_RULE_EXIT
@@ -1577,7 +1633,7 @@ class LiveTmfPaperSimulation:
             and not trend_hold_extended
         ):
             exit_type = TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT
-        elif entry.entry_side is PaperTradingSide.SELL and quote.price >= stop_loss_price:
+        elif entry.entry_side is PaperTradingSide.SELL and confirmed_stop_exit:
             exit_type = TmfPaperPerformanceEventType.STOP_LOSS_EXIT
         elif (
             entry.entry_side is PaperTradingSide.SELL
@@ -1654,6 +1710,8 @@ class LiveTmfPaperSimulation:
             if exit_type is TmfPaperPerformanceEventType.M15_MA20_RULE_EXIT
             else ("TREND_HOLD_TAKE_PROFIT_EXTENDED",)
             if trend_hold_extended
+            else ("STRUCTURAL_STOP_TESTED_WAITING_FOR_5M_CLOSE",)
+            if stop_touched and exit_type is None
             else ("MARGIN_MAINTENANCE_WARNING",)
             if exit_type is None
             and self.journal.margin_status is TmfPaperMarginStatus.MAINTENANCE_WARNING

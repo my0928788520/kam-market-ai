@@ -952,7 +952,7 @@ def test_candle_entrypoint_uses_natural_kam_result_without_forcing_buy() -> None
     assert result.journal.events == ()
 
 
-def test_open_position_uses_live_quote_for_immediate_stop_without_new_entry() -> None:
+def test_open_position_waits_for_five_minute_structure_or_emergency_stop() -> None:
     durations = {
         FiveTimeframe.M5: timedelta(minutes=5),
         FiveTimeframe.M15: timedelta(minutes=15),
@@ -997,7 +997,7 @@ def test_open_position_uses_live_quote_for_immediate_stop_without_new_entry() ->
     )
 
     enter(session)
-    stopped = session.process_open_position_quote(
+    tested = session.process_open_position_quote(
         candles,
         build_live_tmf_paper_quote(
             instrument="TMFH6",
@@ -1005,6 +1005,21 @@ def test_open_position_uses_live_quote_for_immediate_stop_without_new_entry() ->
             observed_at=NOW + timedelta(seconds=3),
         ),
         evaluated_at=NOW + timedelta(seconds=3),
+    )
+
+    assert tested is not None
+    assert tested.action is TmfPaperCycleAction.POSITION_MARKED
+    assert tested.reason_codes == ("STRUCTURAL_STOP_TESTED_WAITING_FOR_5M_CLOSE",)
+    assert tested.journal.ledger.positions
+
+    stopped = session.process_open_position_quote(
+        candles,
+        build_live_tmf_paper_quote(
+            instrument="TMFH6",
+            price=Decimal(21959),
+            observed_at=NOW + timedelta(seconds=6),
+        ),
+        evaluated_at=NOW + timedelta(seconds=6),
     )
 
     assert stopped is not None
@@ -1015,6 +1030,42 @@ def test_open_position_uses_live_quote_for_immediate_stop_without_new_entry() ->
         is TmfPaperPerformanceEventType.STOP_LOSS_EXIT
     )
     assert stopped.journal.ledger.positions == ()
+
+    close_confirmed_session = LiveTmfPaperSimulation(config())
+    enter(close_confirmed_session)
+    confirmed_series = dict(candles.series)
+    confirmed_series[FiveTimeframe.M5] = (
+        Candle(
+            Instrument.TMF,
+            NOW,
+            NOW + timedelta(minutes=5),
+            22000,
+            22005,
+            21975,
+            21979,
+            10,
+        ),
+    )
+    confirmed_candles = CompleteFiveTimeframeCandleResult(
+        Instrument.TMF,
+        None,
+        MappingProxyType(confirmed_series),
+        3,
+    )
+    confirmed = close_confirmed_session.process_open_position_quote(
+        confirmed_candles,
+        build_live_tmf_paper_quote(
+            instrument="TMFH6",
+            price=Decimal(21979),
+            observed_at=NOW + timedelta(minutes=5, seconds=3),
+        ),
+        evaluated_at=NOW + timedelta(minutes=5, seconds=3),
+    )
+
+    assert confirmed is not None
+    assert confirmed.action is TmfPaperCycleAction.EXIT_FILLED
+    assert confirmed.performance_event is not None
+    assert confirmed.performance_event.event_type is TmfPaperPerformanceEventType.STOP_LOSS_EXIT
 
 
 

@@ -379,6 +379,8 @@ def main(
                 initial_margin=product.initial_margin,
                 maintenance_margin=product.maintenance_margin,
                 entry_confirmation_candles=2,
+                structural_stop_confirmation_enabled=True,
+                emergency_stop_buffer_points=Decimal(20),
                 paper_trading_enabled=True,
                 manual_approval_granted=True,
             )
@@ -708,6 +710,8 @@ def main(
                 "paper_profit_lock_trailing_points": 40 if args.paper_test_armed else None,
                 "paper_take_profit_extension_points": 20 if args.paper_test_armed else None,
                 "paper_entry_confirmation_candles": 2 if args.paper_test_armed else None,
+                "paper_structural_stop_confirmation": "5m_close" if args.paper_test_armed else None,
+                "paper_emergency_stop_buffer_points": 20 if args.paper_test_armed else None,
                 "paper_max_confirmation_move_points": 20 if args.paper_test_armed else None,
                 "paper_max_consecutive_stop_losses": 2 if args.paper_test_armed else None,
                 "paper_point_value": int(index_futures_product(instrument).point_value) if args.paper_test_armed else None,

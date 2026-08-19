@@ -61,6 +61,7 @@ _PAPER_REASON_LABELS = {
     "ENTRY_PRICE_CONFIRMATION_PENDING": "短線尚未延續・重新等待確認",
     "ENTRY_CONFIRMATION_MOVE_TOO_LARGE": "短線跳動過大・避免追價",
     "TREND_HOLD_TAKE_PROFIT_EXTENDED": "方向持續一致・已順勢延伸停利",
+    "STRUCTURAL_STOP_TESTED_WAITING_FOR_5M_CLOSE": "波浪結構受測・等待五分鐘收盤確認",
     "DAILY_MA60_NOT_BULLISH": "日線尚未站上60MA・不建立多單",
     "DAILY_MA60_NOT_BEARISH": "日線尚未跌破60MA・不建立空單",
     "M15_TREND_WEAKENING_WARNING": "15分趨勢線警示・注意可能轉弱",
