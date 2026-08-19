@@ -596,6 +596,9 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert ".timeframe-resistance" in css and ".timeframe-support" in css
     assert ".chart-overlay-line[hidden] { display: none; }" in css
     assert ".trend-health-card { display: none; }" in css
+    assert ".direction-card { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); row-gap: 4px; }" in css
+    assert ".direction-card strong { align-self: end; font-size: 20px; line-height: 22px; }" in css
+    assert ".direction-card p { align-self: start; margin: 0; font-size: 12px; font-weight: 650; line-height: 16px; }" in css
     assert ".position-card { grid-column: 1; grid-row: 3; display: grid;" in css
     assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in css
     assert ".position-card p { grid-column: 2; grid-row: 2; align-self: center; justify-self: start;" in css
