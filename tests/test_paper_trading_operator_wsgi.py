@@ -54,9 +54,11 @@ def test_matching_margin_status_is_visually_emphasized() -> None:
     assert ".matching:has(.performance-sample):has(> .footer-metrics)" in css
     assert "\\n.matching" not in css
     assert "border: 1px solid #b58a45" in css
-    assert "grid-template-rows: auto auto minmax(0, 1fr)" in css
+    assert "grid-template-rows: auto auto minmax(0, 1fr) auto" in css
     assert ".matching:has(.performance-sample) .performance-sample { grid-column: 1 / -1; grid-row: 2;" in css
     assert ".matching:has(.performance-sample) > .footer-metrics { grid-column: 2; grid-row: 3;" in css
+    assert ".matching:has(.performance-sample) .matching-status { grid-column: 1; grid-row: 3; grid-template-columns: repeat(3, max-content minmax(0, 1fr));" in css
+    assert ".matching:has(.performance-sample) > p { grid-column: 1 / -1; grid-row: 4;" in css
     assert "grid-template-columns: minmax(0, 1.55fr) minmax(250px, .85fr)" in css
     assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in css
     assert "grid-auto-rows: min-content" in css
