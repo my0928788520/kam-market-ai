@@ -191,6 +191,11 @@ def test_current_analysis_uses_free_matching_space_and_stable_refresh_hash() -> 
     assert "minmax(165px, 1.35fr)" in css
     assert ".performance-sample span,\n  .matching:has(.performance-sample) .performance-sample strong" in css
     assert "text-overflow: clip;" in css
+    assert ".stop-quality-sample small { font-size: 14px; line-height: 1.3; }" in css
+    assert ".stop-quality-sample strong { overflow: visible; font-size: 17px;" in css
+    assert ".matching:has(.performance-sample) .matching-status { font-size: 15px;" in css
+    assert ".proposal dl { grid-template-columns: max-content minmax(0, 1fr); column-gap: 10px; }" in css
+    assert ".proposal .realized-pnl-label { margin-left: 0; }" in css
     assert "currentCard.dataset.analysisHash === nextCard.dataset.analysisHash" in refresh
     assert "nextDetails.replaceWith(currentDetails)" not in refresh
 

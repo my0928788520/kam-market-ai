@@ -277,3 +277,19 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
     text-overflow: clip;
   }
 }
+
+/* Final laptop alignment: larger comparison text and a left-aligned Paper status list. */
+@media (max-height: 1000px) and (min-width: 1001px) {
+  .stop-quality-sample { gap: 9px 18px; }
+  .stop-quality-sample small { font-size: 14px; line-height: 1.3; }
+  .stop-quality-sample strong { overflow: visible; font-size: 17px; line-height: 1.3; text-overflow: clip; }
+  .matching:has(.performance-sample) .matching-status { font-size: 15px; line-height: 1.4; }
+  .matching:has(.performance-sample) .matching-status dt,
+  .matching:has(.performance-sample) .matching-status dd { font-size: 15px; }
+  .proposal dl { grid-template-columns: max-content minmax(0, 1fr); column-gap: 10px; }
+  .proposal .simulation-status-label,
+  .proposal .blocking-reason-label,
+  .proposal .position-risk-label,
+  .proposal .paper-current-price-label,
+  .proposal .realized-pnl-label { margin-left: 0; }
+}
