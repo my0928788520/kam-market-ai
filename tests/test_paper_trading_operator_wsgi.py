@@ -173,16 +173,16 @@ def test_current_analysis_uses_free_matching_space_and_stable_refresh_hash() -> 
         "src/kam_market_ai/paper_trading/static/dashboard-refresh.js"
     ).read_text(encoding="utf-8")
 
-    assert "<h2>現況分析</h2>" in html
-    assert "data-analysis-hash='abc123'" in html
-    assert "即時盤勢判讀" in html
-    assert all(label in html for label in ("理由", "矛盾", "等待", "風險"))
-    assert "class='current-analysis-summary'" in html
+    assert "<h2>現況分析</h2>" not in html
+    assert "data-analysis-hash='abc123'" not in html
+    assert "即時盤勢判讀" not in html
     assert ".current-analysis-summary" in css
     assert ".timeframes > h2, .current-analysis-summary > b { display: none; }" in css
     assert ".timeframes { grid-template-rows: minmax(0, 1fr); }" in css
     assert "font-size: 14px" in css
     assert "class='current-analysis-details'" not in html
+    assert ".proposal { grid-column: 1; grid-row: 3 / 5; }" in css
+    assert ".matching { grid-column: 2 / 4; grid-row: 3 / 5; }" in css
     assert "currentCard.dataset.analysisHash === nextCard.dataset.analysisHash" in refresh
     assert "nextDetails.replaceWith(currentDetails)" not in refresh
 

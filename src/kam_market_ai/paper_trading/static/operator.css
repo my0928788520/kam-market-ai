@@ -215,3 +215,9 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
 .proposal dd { min-width: 0; margin: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .paper-position-strip { flex: 0 0 auto; margin-bottom: 5px; }
 .paper-position-flat { padding-block: 6px; }
+
+/* Current analysis duplicates the direction cards; dedicate its row to operations. */
+.proposal { grid-column: 1; grid-row: 3 / 5; }
+.matching { grid-column: 2 / 4; grid-row: 3 / 5; }
+.proposal dl { align-content: start; }
+.matching { overflow: hidden; }
