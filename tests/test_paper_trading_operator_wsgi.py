@@ -584,13 +584,13 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert ".timeframe-card span { display: block; color: #ffffff; font-size: 13px;" in css
     assert ".timeframe-resistance" in css and ".timeframe-support" in css
     assert ".chart-overlay-line[hidden] { display: none; }" in css
-    assert ".trend-health-card { grid-column: 1; grid-row: 3; display: grid;" in css
-    assert ".position-card { grid-column: 2; grid-row: 3; display: grid;" in css
+    assert ".trend-health-card { display: none; }" in css
+    assert ".position-card { grid-column: 1; grid-row: 3; display: grid;" in css
     assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in css
     assert ".position-card p { grid-column: 2; grid-row: 2; align-self: center; justify-self: start;" in css
     assert "color: #ff5d72" in css and "font-weight: 900" in css
     assert "text-shadow: 0 0 12px #ff304f66" in css
-    assert ".next-card { grid-column: 3; grid-row: 3; display: grid;" in css
+    assert ".next-card { grid-column: 2 / 4; grid-row: 3; display: grid;" in css
     assert ".control-cells-unscored" in css
     assert ".control-cell.unconfirmed" in css
     assert "@media (max-height: 650px) and (min-width: 1001px)" in css
