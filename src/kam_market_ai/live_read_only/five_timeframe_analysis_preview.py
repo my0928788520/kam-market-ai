@@ -193,9 +193,9 @@ def _daily_descending_trendline_metrics(
     """Project a daily resistance line from two confirmed wave highs.
 
     Only completed daily bars are supplied at this boundary.  A pivot needs a
-    completed bar on both sides; the most prominent pivot is connected to the
-    first later, lower pivot.  The line is invalidated by a completed close
-    above it, so an intraday wick can only report a rejection, never a breakout.
+    completed bar on both sides.  Candidate lower-high pairs are considered
+    newest-first and any pair already closed through is discarded, preventing
+    an obsolete major high from projecting an unusable line into the present.
     """
     window = candles[-80:]
     insufficient = {
@@ -204,6 +204,10 @@ def _daily_descending_trendline_metrics(
         "descending_trendline_value": None,
         "descending_trendline_anchor_high_1": None,
         "descending_trendline_anchor_high_2": None,
+        "descending_trendline_anchor_1_end": None,
+        "descending_trendline_anchor_2_end": None,
+        "descending_trendline_selection": "none",
+        "descending_trendline_discarded_broken_pairs": 0,
         "bullish_weakening": None,
     }
     if len(window) < 5:
@@ -216,27 +220,32 @@ def _daily_descending_trendline_metrics(
     ]
     if len(pivots) < 2:
         return insufficient
-    bases = sorted(
-        pivots[:-1],
-        key=lambda index: (float(window[index].high), index),
-        reverse=True,
-    )
     anchors: tuple[int, int] | None = None
-    for left in bases:
-        right = next(
-            (
-                index
-                for index in pivots
-                if index > left
-                and float(window[index].high) < float(window[left].high)
-            ),
-            None,
-        )
-        if right is not None:
+    discarded_broken_pairs = 0
+    for right_position in range(len(pivots) - 1, 0, -1):
+        right = pivots[right_position]
+        for left in reversed(pivots[:right_position]):
+            first_high = float(window[left].high)
+            second_high = float(window[right].high)
+            if second_high >= first_high:
+                continue
+            slope = (second_high - first_high) / (right - left)
+
+            if any(
+                float(window[index].close) > first_high + slope * (index - left)
+                for index in range(right + 1, len(window))
+            ):
+                discarded_broken_pairs += 1
+                continue
             anchors = (left, right)
             break
+        if anchors is not None:
+            break
     if anchors is None:
-        return insufficient
+        return {
+            **insufficient,
+            "descending_trendline_discarded_broken_pairs": discarded_broken_pairs,
+        }
     left, right = anchors
     first_high = float(window[left].high)
     second_high = float(window[right].high)
@@ -245,19 +254,11 @@ def _daily_descending_trendline_metrics(
     def line_at(index: int) -> float:
         return first_high + slope * (index - left)
 
-    broken = any(
-        float(window[index].close) > line_at(index)
-        for index in range(right + 1, len(window))
-    )
     projected = line_at(len(window) - 1)
     latest = window[-1]
     close = float(latest.close)
     high = float(latest.high)
-    if broken or close > projected:
-        state = "broken_above"
-        relation = "above"
-        weakening = False
-    elif high >= projected and close <= projected:
+    if high >= projected and close <= projected:
         state = "rejected_below"
         relation = "rejection"
         weakening = True
@@ -274,6 +275,10 @@ def _daily_descending_trendline_metrics(
         "descending_trendline_value": projected,
         "descending_trendline_anchor_high_1": first_high,
         "descending_trendline_anchor_high_2": second_high,
+        "descending_trendline_anchor_1_end": window[left].end.isoformat(),
+        "descending_trendline_anchor_2_end": window[right].end.isoformat(),
+        "descending_trendline_selection": "recent_valid_lower_highs",
+        "descending_trendline_discarded_broken_pairs": discarded_broken_pairs,
         "bullish_weakening": weakening,
     }
 

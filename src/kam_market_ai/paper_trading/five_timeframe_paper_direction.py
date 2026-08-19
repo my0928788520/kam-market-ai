@@ -27,6 +27,7 @@ class FiveTimeframePaperDirection:
     m15_ma20_direction: str | None = None
     m60_ma20_support: str | None = None
     m60_market_bias: str | None = None
+    short_setup_grade: str | None = None
     max_contracts: int = 1
 
     def safe_payload(self) -> dict[str, object]:
@@ -47,6 +48,7 @@ class FiveTimeframePaperDirection:
             "m15_ma20_direction": self.m15_ma20_direction,
             "m60_ma20_support": self.m60_ma20_support,
             "m60_market_bias": self.m60_market_bias,
+            "short_setup_grade": self.short_setup_grade,
             "max_contracts": 1,
             "scale_in_allowed": False,
             "averaging_down_allowed": False,
@@ -124,14 +126,25 @@ def decide_five_timeframe_paper_direction(
         reason_code = "M15_MA20_LONG_TRIGGER_NOT_CONFIRMED"
     elif m60_market_bias == "bearish" and m60_ma20_support == "broken":
         if m15_ma20_position == "below" and m15_ma20_direction == "falling":
+            enhanced = (
+                daily_bullish_weakening is True
+                and daily_descending_trendline_state == "rejected_below"
+            )
             reason = (
                 "D1_DESCENDING_TRENDLINE_WEAKENING_M60_M15_SHORT_TRIGGER"
-                if daily_bullish_weakening is True
-                and daily_descending_trendline_state == "rejected_below"
+                if enhanced
                 else "M60_BEARISH_M15_SHORT_TRIGGER"
+            )
+            setup_grade = (
+                "enhanced_daily_confirmed"
+                if enhanced
+                else "waiting_daily_confirmation"
+                if daily_descending_trendline_state == "active_below"
+                else "general_intraday"
             )
             return FiveTimeframePaperDirection(
                 "SHORT", "PAPER_SELL", reason, codes, True,
+                short_setup_grade=setup_grade,
                 **payload,
             )
         reason_code = "M15_MA20_SHORT_TRIGGER_NOT_CONFIRMED"

@@ -62,6 +62,7 @@ def test_daily_descending_trendline_confirms_existing_m60_m15_paper_short() -> N
         "D1_DESCENDING_TRENDLINE_WEAKENING_M60_M15_SHORT_TRIGGER"
     )
     assert result.safe_payload()["daily_bullish_weakening"] is True
+    assert result.safe_payload()["short_setup_grade"] == "enhanced_daily_confirmed"
     assert result.max_contracts == 1
     assert result.live_order_allowed is False
 
@@ -80,6 +81,22 @@ def test_daily_price_far_below_trendline_does_not_claim_fresh_weakening() -> Non
     assert result.direction == "SHORT"
     assert result.action == "PAPER_SELL"
     assert result.reason_code == "M60_BEARISH_M15_SHORT_TRIGGER"
+    assert result.short_setup_grade == "waiting_daily_confirmation"
+    assert result.live_order_allowed is False
+
+
+def test_short_without_active_daily_line_is_labeled_general_intraday() -> None:
+    result = decide_five_timeframe_paper_direction(
+        states("ND"),
+        daily_descending_trendline_state="insufficient",
+        m15_ma20_position="below",
+        m15_ma20_direction="falling",
+        m60_ma20_support="broken",
+        m60_market_bias="bearish",
+    )
+
+    assert result.action == "PAPER_SELL"
+    assert result.short_setup_grade == "general_intraday"
     assert result.live_order_allowed is False
 
 

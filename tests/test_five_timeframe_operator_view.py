@@ -244,6 +244,34 @@ def test_operator_prioritizes_daily_descending_trendline_weakening() -> None:
     assert view.live_order_allowed is False
 
 
+def test_operator_distinguishes_general_short_waiting_for_daily_confirmation() -> None:
+    payload = {
+        "status": "READY_VERIFIED_FIVE_TIMEFRAMES",
+        "symbol": "TMFH6",
+        "market_data_only": True,
+        "trading_enabled": False,
+        "analysis_preview": {
+            "three_second_summary": {"headline": "五週期分析已更新"},
+            "decision_diagnostics": {"daily_bullish_weakening": False},
+            "kam_rule_decision": {
+                "direction": "SHORT",
+                "primary_next_action": "等待",
+                "states": {},
+                "paper_test_direction": {
+                    "reason_code": "M60_BEARISH_M15_SHORT_TRIGGER",
+                    "short_setup_grade": "waiting_daily_confirmation",
+                },
+            },
+        },
+    }
+
+    view = build_five_timeframe_operator_view(payload)
+
+    assert view.demo is not None
+    assert view.demo["next_step"] == "一般空單成立・等待日線下降趨勢線確認"
+    assert view.live_order_allowed is False
+
+
 
 def test_operator_explains_exact_ma_and_alignment_blockers_in_chinese() -> None:
     payload = {

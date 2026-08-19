@@ -114,9 +114,14 @@ def build_five_timeframe_operator_view(
     trend_warnings = diagnostics.get("trend_warning_codes", ())
     trend_warnings = trend_warnings if isinstance(trend_warnings, (list, tuple)) else ()
     daily_weakening = diagnostics.get("daily_bullish_weakening") is True
+    short_setup_grade = str(paper_test_direction.get("short_setup_grade", ""))
     weakening_message = (
         "日線下降趨勢線壓制・多方轉弱・空方條件加強"
         if daily_weakening
+        else "一般空單成立・等待日線下降趨勢線確認"
+        if short_setup_grade == "waiting_daily_confirmation"
+        else "一般空單成立・日線下降線尚未形成"
+        if short_setup_grade == "general_intraday"
         else "15分上升趨勢線跌破・注意可能轉弱"
         if "M15_ASCENDING_TRENDLINE_BROKEN_WEAKENING" in trend_warnings
         else "15分波浪反彈碰下降趨勢線・注意可能轉弱"

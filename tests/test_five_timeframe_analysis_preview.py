@@ -253,7 +253,7 @@ def _daily_candles_for_highs(
     )
 
 
-def test_daily_descending_trendline_uses_major_high_then_later_lower_high() -> None:
+def test_daily_descending_trendline_uses_most_recent_valid_lower_highs() -> None:
     metrics = _daily_descending_trendline_metrics(
         _daily_candles_for_highs(
             [100, 105, 101, 103, 99, 101, 98],
@@ -261,12 +261,27 @@ def test_daily_descending_trendline_uses_major_high_then_later_lower_high() -> N
         )
     )
 
-    assert metrics["descending_trendline_anchor_high_1"] == 105
-    assert metrics["descending_trendline_anchor_high_2"] == 103
+    assert metrics["descending_trendline_anchor_high_1"] == 103
+    assert metrics["descending_trendline_anchor_high_2"] == 101
     assert metrics["descending_trendline_value"] == 100
     assert metrics["descending_trendline_state"] == "active_below"
     assert metrics["descending_trendline_relation"] == "below"
     assert metrics["bullish_weakening"] is False
+    assert metrics["descending_trendline_selection"] == "recent_valid_lower_highs"
+
+
+def test_daily_descending_trendline_prefers_recent_pair_over_old_major_high() -> None:
+    metrics = _daily_descending_trendline_metrics(
+        _daily_candles_for_highs(
+            [100, 110, 101, 106, 108, 105, 102, 104, 101],
+            [98, 108, 99, 104, 107, 103, 100, 102, 99],
+        )
+    )
+
+    assert metrics["descending_trendline_anchor_high_1"] == 108
+    assert metrics["descending_trendline_anchor_high_2"] == 104
+    assert metrics["descending_trendline_discarded_broken_pairs"] == 0
+    assert metrics["descending_trendline_state"] == "active_below"
 
 
 def test_daily_descending_trendline_rejection_confirms_weakening() -> None:
@@ -282,7 +297,7 @@ def test_daily_descending_trendline_rejection_confirms_weakening() -> None:
     assert metrics["bullish_weakening"] is True
 
 
-def test_daily_close_above_descending_trendline_cancels_weakening() -> None:
+def test_daily_close_above_all_recent_pairs_returns_insufficient() -> None:
     metrics = _daily_descending_trendline_metrics(
         _daily_candles_for_highs(
             [100, 105, 101, 103, 99, 101, 105],
@@ -290,9 +305,10 @@ def test_daily_close_above_descending_trendline_cancels_weakening() -> None:
         )
     )
 
-    assert metrics["descending_trendline_state"] == "broken_above"
-    assert metrics["descending_trendline_relation"] == "above"
-    assert metrics["bullish_weakening"] is False
+    assert metrics["descending_trendline_state"] == "insufficient"
+    assert metrics["descending_trendline_relation"] == "insufficient"
+    assert metrics["descending_trendline_discarded_broken_pairs"] >= 1
+    assert metrics["bullish_weakening"] is None
 
 
 def test_m60_support_uses_closed_candle_and_ignores_forming_break() -> None:
