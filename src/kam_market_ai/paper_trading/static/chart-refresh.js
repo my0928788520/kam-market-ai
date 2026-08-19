@@ -8,7 +8,8 @@
   let refreshInFlight = false;
   let tooltipHideTimer = null;
   let activeDrawingTool = null;
-  let pendingDrawingPoint = null;
+  let draftDrawing = null;
+  let editingAnchor = null;
   const drawingStorageKey = `kam-chart-drawings:${window.location.pathname}:${window.location.search}`;
   let manualDrawings = [];
   try {
@@ -53,21 +54,32 @@
     const layer = document.querySelector(".chart-manual-drawings");
     if (!layer) return;
     const namespace = "http://www.w3.org/2000/svg";
-    const nodes = manualDrawings.map((drawing) => {
+    const nodes = manualDrawings.flatMap((drawing, drawingIndex) => {
       const line = document.createElementNS(namespace, "line");
       line.setAttribute("class", "chart-manual-line");
       for (const attribute of ["x1", "y1", "x2", "y2"]) {
         line.setAttribute(attribute, String(drawing[attribute]));
       }
-      return line;
+      const anchors = ["start", "end"].map((endpoint) => {
+        const anchor = document.createElementNS(namespace, "circle");
+        const isStart = endpoint === "start";
+        anchor.setAttribute("class", "chart-manual-anchor");
+        anchor.setAttribute("cx", String(drawing[isStart ? "x1" : "x2"]));
+        anchor.setAttribute("cy", String(drawing[isStart ? "y1" : "y2"]));
+        anchor.setAttribute("r", "5");
+        anchor.dataset.drawingIndex = String(drawingIndex);
+        anchor.dataset.endpoint = endpoint;
+        return anchor;
+      });
+      return [line, ...anchors];
     });
-    if (pendingDrawingPoint) {
-      const marker = document.createElementNS(namespace, "circle");
-      marker.setAttribute("class", "chart-manual-anchor");
-      marker.setAttribute("cx", String(pendingDrawingPoint.x));
-      marker.setAttribute("cy", String(pendingDrawingPoint.y));
-      marker.setAttribute("r", "4");
-      nodes.push(marker);
+    if (draftDrawing) {
+      const preview = document.createElementNS(namespace, "line");
+      preview.setAttribute("class", "chart-manual-line chart-manual-preview");
+      for (const attribute of ["x1", "y1", "x2", "y2"]) {
+        preview.setAttribute(attribute, String(draftDrawing[attribute]));
+      }
+      nodes.push(preview);
     }
     layer.replaceChildren(...nodes);
     for (const button of document.querySelectorAll("[data-manual-tool]")) {
@@ -91,6 +103,19 @@
       x: Math.min(980, Math.max(66, transformed.x)),
       y: Math.min(270, Math.max(28, transformed.y)),
     };
+  };
+
+  const horizontalDrawing = (drawing) => drawing.type === "horizontal" || drawing.y1 === drawing.y2;
+
+  const updateDraftEndpoint = (point) => {
+    if (!draftDrawing) return;
+    if (activeDrawingTool === "horizontal") {
+      draftDrawing.y1 = point.y;
+      draftDrawing.y2 = point.y;
+    } else {
+      draftDrawing.x2 = point.x;
+      draftDrawing.y2 = point.y;
+    }
   };
 
   const hideChartTooltip = (panel) => {
@@ -216,6 +241,33 @@
   });
 
   document.addEventListener("pointermove", (event) => {
+    if (draftDrawing) {
+      const svg = document.querySelector(".candlestick-chart");
+      const point = svg && chartPoint(event, svg);
+      if (point) {
+        updateDraftEndpoint(point);
+        renderManualDrawings();
+      }
+      return;
+    }
+    if (editingAnchor) {
+      const point = chartPoint(event, editingAnchor.svg);
+      const drawing = manualDrawings[editingAnchor.drawingIndex];
+      if (point && drawing) {
+        if (horizontalDrawing(drawing)) {
+          drawing.y1 = point.y;
+          drawing.y2 = point.y;
+        } else if (editingAnchor.endpoint === "start") {
+          drawing.x1 = point.x;
+          drawing.y1 = point.y;
+        } else {
+          drawing.x2 = point.x;
+          drawing.y2 = point.y;
+        }
+        renderManualDrawings();
+      }
+      return;
+    }
     const zone = event.target.closest?.(".chart-hover-zone");
     if (zone) showChartTooltip(zone, event.clientX, event.clientY);
   });
@@ -237,7 +289,13 @@
   });
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") hideChartTooltip(document.getElementById("chart-panel"));
+    if (event.key === "Escape") {
+      draftDrawing = null;
+      editingAnchor = null;
+      renderManualDrawings();
+      hideChartTooltip(document.getElementById("chart-panel"));
+      setDrawingHelp(activeDrawingTool ? "拖曳以畫線；放開後完成" : "所有線均由手動畫線");
+    }
   });
 
   document.addEventListener("click", (event) => {
@@ -245,12 +303,12 @@
     if (toolButton) {
       const selected = toolButton.dataset.manualTool;
       activeDrawingTool = activeDrawingTool === selected ? null : selected;
-      pendingDrawingPoint = null;
+      draftDrawing = null;
       setDrawingHelp(
         activeDrawingTool === "trend"
-          ? "請在 K 線圖依序點選斜線的起點與終點"
+          ? "在 K 線圖按住並拖曳；虛線對齊後放開完成斜線"
           : activeDrawingTool === "horizontal"
-            ? "請在 K 線圖點選水平線價位"
+            ? "在 K 線圖按住並上下拖曳；虛線對齊價位後放開"
             : "所有線均由手動畫線；已停止畫線",
       );
       renderManualDrawings();
@@ -260,41 +318,75 @@
     if (!actionButton) return;
     if (actionButton.dataset.manualAction === "undo") manualDrawings.pop();
     if (actionButton.dataset.manualAction === "clear") manualDrawings = [];
-    pendingDrawingPoint = null;
+    draftDrawing = null;
     saveManualDrawings();
     renderManualDrawings();
   });
 
   document.addEventListener("pointerdown", (event) => {
+    const anchor = event.target.closest?.(".chart-manual-anchor");
+    if (anchor) {
+      const svg = anchor.closest(".candlestick-chart");
+      if (!svg) return;
+      event.preventDefault();
+      editingAnchor = {
+        drawingIndex: Number(anchor.dataset.drawingIndex),
+        endpoint: anchor.dataset.endpoint,
+        pointerId: event.pointerId,
+        svg,
+      };
+      anchor.setPointerCapture?.(event.pointerId);
+      setDrawingHelp("拖曳端點調整位置；放開後儲存");
+      return;
+    }
     if (!activeDrawingTool) return;
     const svg = event.target.closest?.(".candlestick-chart");
     if (!svg) return;
     const point = chartPoint(event, svg);
     if (!point) return;
     event.preventDefault();
-    if (activeDrawingTool === "horizontal") {
-      manualDrawings.push({ x1: 66, y1: point.y, x2: 980, y2: point.y });
-      saveManualDrawings();
-      setDrawingHelp("水平線已完成；可繼續點選其他價位");
-    } else if (!pendingDrawingPoint) {
-      pendingDrawingPoint = point;
-      setDrawingHelp("起點已選，請再點選終點");
-    } else {
-      manualDrawings.push({
-        x1: pendingDrawingPoint.x,
-        y1: pendingDrawingPoint.y,
-        x2: point.x,
-        y2: point.y,
-      });
-      pendingDrawingPoint = null;
-      saveManualDrawings();
-      setDrawingHelp("斜線已完成；可繼續畫下一條");
-    }
+    draftDrawing = activeDrawingTool === "horizontal"
+      ? { type: "horizontal", x1: 66, y1: point.y, x2: 980, y2: point.y, pointerId: event.pointerId }
+      : { type: "trend", x1: point.x, y1: point.y, x2: point.x, y2: point.y, pointerId: event.pointerId };
+    svg.setPointerCapture?.(event.pointerId);
+    setDrawingHelp("拖曳中：虛線為預覽，對齊後放開完成");
     renderManualDrawings();
   });
 
+  document.addEventListener("pointerup", (event) => {
+    if (editingAnchor && editingAnchor.pointerId === event.pointerId) {
+      editingAnchor = null;
+      saveManualDrawings();
+      setDrawingHelp("端點已更新；可繼續調整或畫線");
+      renderManualDrawings();
+      return;
+    }
+    if (!draftDrawing || draftDrawing.pointerId !== event.pointerId) return;
+    const svg = document.querySelector(".candlestick-chart");
+    const point = svg && chartPoint(event, svg);
+    if (point) updateDraftEndpoint(point);
+    const distance = Math.hypot(draftDrawing.x2 - draftDrawing.x1, draftDrawing.y2 - draftDrawing.y1);
+    if (draftDrawing.type === "horizontal" || distance >= 4) {
+      const { pointerId: _pointerId, ...completedDrawing } = draftDrawing;
+      manualDrawings.push(completedDrawing);
+      saveManualDrawings();
+      setDrawingHelp("線條已完成；拖曳端點可再調整");
+    } else {
+      setDrawingHelp("拖曳距離太短，未建立線條");
+    }
+    draftDrawing = null;
+    renderManualDrawings();
+  });
+
+  document.addEventListener("pointercancel", () => {
+    draftDrawing = null;
+    editingAnchor = null;
+    renderManualDrawings();
+    setDrawingHelp(activeDrawingTool ? "拖曳以畫線；放開後完成" : "所有線均由手動畫線");
+  });
+
   async function refreshChart() {
-    if (refreshInFlight || document.hidden || isChartTooltipVisible()) {
+    if (refreshInFlight || document.hidden || isChartTooltipVisible() || draftDrawing || editingAnchor) {
       scheduleNext();
       return;
     }

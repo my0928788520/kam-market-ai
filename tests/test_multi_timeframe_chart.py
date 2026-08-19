@@ -34,6 +34,11 @@ def test_chart_tooltip_stays_visible_long_enough_to_read() -> None:
     assert 'window.location.assign(response.url || "/charts")' in script
     assert "window.localStorage.setItem(drawingStorageKey" in script
     assert 'activeDrawingTool === "horizontal"' in script
+    assert 'document.addEventListener("pointerup"' in script
+    assert "chart-manual-preview" in script
+    assert "setPointerCapture?.(event.pointerId)" in script
+    assert "拖曳中：虛線為預覽" in script
+    assert "drawing.y1 = point.y" in script and "drawing.y2 = point.y" in script
 
 
 class FixtureChartSource:
