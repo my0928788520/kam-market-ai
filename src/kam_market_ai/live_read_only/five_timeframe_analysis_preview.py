@@ -490,6 +490,11 @@ def build_verified_five_timeframe_analysis_preview(
         m15_ma20_direction=str(analysis["15m"].get("ma20_direction", "insufficient")),
         m60_ma20_support=str(analysis["60m"].get("ma20_support", "insufficient")),
         m60_market_bias=str(analysis["60m"].get("market_bias", "insufficient")),
+        m15_ma20_value=(
+            float(analysis["15m"]["ma20"])
+            if analysis["15m"].get("ma20") is not None
+            else None
+        ),
         daily_descending_trendline_state=str(
             analysis["1d"].get("descending_trendline_state", "insufficient")
         ),

@@ -298,6 +298,14 @@ def build_five_timeframe_operator_view(
         "阻擋原因": "、".join(
             _PAPER_REASON_LABELS.get(str(item), str(item)) for item in paper_reasons
         ) or "—",
+        "機會等級": (
+            f"{paper_test_direction.get('opportunity_grade')}級"
+            if paper_test_direction.get("opportunity_grade")
+            else "等待"
+        ),
+        "尚差條件": str(paper_test_direction.get("missing_condition") or "已完成"),
+        "提前觸發": str(paper_test_direction.get("early_trigger") or "尚未形成"),
+        "回踩位置": str(paper_test_direction.get("pullback_reference") or "—"),
         "模擬成交價": str(performance.get("entry_price", "—")),
     }
     stop_value = performance.get("stop_loss_price")

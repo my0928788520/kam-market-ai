@@ -28,6 +28,11 @@ class FiveTimeframePaperDirection:
     m60_ma20_support: str | None = None
     m60_market_bias: str | None = None
     short_setup_grade: str | None = None
+    opportunity_grade: str | None = None
+    opportunity_mode: str = "WAIT"
+    missing_condition: str | None = None
+    early_trigger: str | None = None
+    pullback_reference: float | None = None
     max_contracts: int = 1
 
     def safe_payload(self) -> dict[str, object]:
@@ -49,6 +54,11 @@ class FiveTimeframePaperDirection:
             "m60_ma20_support": self.m60_ma20_support,
             "m60_market_bias": self.m60_market_bias,
             "short_setup_grade": self.short_setup_grade,
+            "opportunity_grade": self.opportunity_grade,
+            "opportunity_mode": self.opportunity_mode,
+            "missing_condition": self.missing_condition,
+            "early_trigger": self.early_trigger,
+            "pullback_reference": self.pullback_reference,
             "max_contracts": 1,
             "scale_in_allowed": False,
             "averaging_down_allowed": False,
@@ -66,6 +76,7 @@ def decide_five_timeframe_paper_direction(
     m15_ma20_direction: str | None = None,
     m60_ma20_support: str | None = None,
     m60_market_bias: str | None = None,
+    m15_ma20_value: float | None = None,
 ) -> FiveTimeframePaperDirection:
     """Select a paper direction from M60 location and an M15 trigger.
 
@@ -116,11 +127,18 @@ def decide_five_timeframe_paper_direction(
         "m15_ma20_direction": m15_ma20_direction,
         "m60_ma20_support": m60_ma20_support,
         "m60_market_bias": m60_market_bias,
+        "pullback_reference": m15_ma20_value,
     }
     if m60_market_bias == "bullish" and m60_ma20_support in {"held", "retest_held"}:
         if m15_ma20_position == "above" and m15_ma20_direction == "rising":
             return FiveTimeframePaperDirection(
                 "LONG", "PAPER_BUY", "M60_BULLISH_M15_LONG_TRIGGER", codes, True,
+                opportunity_grade="A" if daily_ma60_position == "above" else "B",
+                opportunity_mode="PAPER_CANDIDATE",
+                missing_condition=(
+                    None if daily_ma60_position == "above" else "日線多方確認"
+                ),
+                early_trigger="60分偏多且15分站上上彎20MA",
                 **payload,
             )
         reason_code = "M15_MA20_LONG_TRIGGER_NOT_CONFIRMED"
@@ -145,6 +163,10 @@ def decide_five_timeframe_paper_direction(
             return FiveTimeframePaperDirection(
                 "SHORT", "PAPER_SELL", reason, codes, True,
                 short_setup_grade=setup_grade,
+                opportunity_grade="A" if enhanced else "B",
+                opportunity_mode="PAPER_CANDIDATE",
+                missing_condition=None if enhanced else "日線空方確認",
+                early_trigger="60分偏空且15分跌破下彎20MA",
                 **payload,
             )
         reason_code = "M15_MA20_SHORT_TRIGGER_NOT_CONFIRMED"
@@ -156,8 +178,38 @@ def decide_five_timeframe_paper_direction(
     else:
         reason_code = "M60_LOCATION_NOT_DIRECTIONAL"
 
+    shadow_directional = (
+        m60_market_bias == "bullish" and m60_ma20_support in {"held", "retest_held"}
+    ) or (m60_market_bias == "bearish" and m60_ma20_support == "broken")
+    if shadow_directional:
+        long_side = m60_market_bias == "bullish"
+        position_ready = m15_ma20_position == ("above" if long_side else "below")
+        slope_ready = m15_ma20_direction == ("rising" if long_side else "falling")
+        missing = (
+            "15分20MA方向確認"
+            if position_ready and not slope_ready
+            else "15分價格穿越20MA"
+            if slope_ready and not position_ready
+            else "15分價格與20MA方向確認"
+        )
+        trigger = (
+            f"15分已{'站上' if long_side else '跌破'}20MA"
+            if position_ready
+            else f"60分已形成{'偏多' if long_side else '偏空'}位置"
+        )
+        return FiveTimeframePaperDirection(
+            "HOLD", "NO_PAPER_ORDER", reason_code, codes, False,
+            opportunity_grade="C",
+            opportunity_mode="SHADOW_ONLY",
+            missing_condition=missing,
+            early_trigger=trigger,
+            **payload,
+        )
+
     return FiveTimeframePaperDirection(
-        "HOLD", "NO_PAPER_ORDER", reason_code, codes, False, **payload,
+        "HOLD", "NO_PAPER_ORDER", reason_code, codes, False,
+        opportunity_mode="WAIT",
+        **payload,
     )
 
 

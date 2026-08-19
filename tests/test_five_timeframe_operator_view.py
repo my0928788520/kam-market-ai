@@ -375,6 +375,42 @@ def test_operator_distinguishes_general_short_waiting_for_daily_confirmation() -
     assert view.live_order_allowed is False
 
 
+def test_operator_exposes_compact_opportunity_funnel_without_live_permissions() -> None:
+    payload = {
+        "status": "READY_VERIFIED_FIVE_TIMEFRAMES",
+        "symbol": "TMFI6",
+        "market_data_only": True,
+        "trading_enabled": False,
+        "analysis_preview": {
+            "three_second_summary": {"headline": "五週期分析已更新"},
+            "kam_rule_decision": {
+                "direction": "HOLD",
+                "primary_next_action": "等待15分確認",
+                "states": {},
+                "paper_test_direction": {
+                    "reason_code": "M15_MA20_SHORT_TRIGGER_NOT_CONFIRMED",
+                    "opportunity_grade": "C",
+                    "opportunity_mode": "SHADOW_ONLY",
+                    "missing_condition": "15分20MA方向確認",
+                    "early_trigger": "15分已跌破20MA",
+                    "pullback_reference": 44820.0,
+                },
+            },
+        },
+    }
+
+    view = build_five_timeframe_operator_view(payload)
+    page = render_operator_html(view)
+
+    assert view.proposal["機會等級"] == "C級"
+    assert view.proposal["尚差條件"] == "15分20MA方向確認"
+    assert view.proposal["提前觸發"] == "15分已跌破20MA"
+    assert view.proposal["回踩位置"] == "44820.0"
+    for text in ("機會等級", "C級", "尚差條件", "提前觸發", "回踩位置"):
+        assert text in page
+    assert view.live_order_allowed is False
+
+
 
 def test_operator_explains_exact_ma_and_alignment_blockers_in_chinese() -> None:
     payload = {

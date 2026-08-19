@@ -27,6 +27,8 @@ def test_m60_bullish_location_and_m15_trigger_select_one_contract_paper_long() -
     assert result.broker_connected is False
     assert result.safe_payload()["scale_in_allowed"] is False
     assert result.safe_payload()["averaging_down_allowed"] is False
+    assert result.opportunity_grade == "B"
+    assert result.opportunity_mode == "PAPER_CANDIDATE"
 
 
 def test_m60_bearish_location_and_m15_trigger_select_one_contract_paper_short() -> None:
@@ -63,7 +65,29 @@ def test_daily_descending_trendline_confirms_existing_m60_m15_paper_short() -> N
     )
     assert result.safe_payload()["daily_bullish_weakening"] is True
     assert result.safe_payload()["short_setup_grade"] == "enhanced_daily_confirmed"
+    assert result.safe_payload()["opportunity_grade"] == "A"
     assert result.max_contracts == 1
+    assert result.live_order_allowed is False
+
+
+def test_directional_m60_with_partial_m15_is_c_grade_shadow_only() -> None:
+    result = decide_five_timeframe_paper_direction(
+        states("ND"),
+        m15_ma20_position="below",
+        m15_ma20_direction="flat",
+        m15_ma20_value=44820.0,
+        m60_ma20_support="broken",
+        m60_market_bias="bearish",
+    )
+
+    assert (result.direction, result.action, result.eligible) == (
+        "HOLD", "NO_PAPER_ORDER", False
+    )
+    assert result.opportunity_grade == "C"
+    assert result.opportunity_mode == "SHADOW_ONLY"
+    assert result.missing_condition == "15分20MA方向確認"
+    assert result.early_trigger == "15分已跌破20MA"
+    assert result.pullback_reference == 44820.0
     assert result.live_order_allowed is False
 
 
