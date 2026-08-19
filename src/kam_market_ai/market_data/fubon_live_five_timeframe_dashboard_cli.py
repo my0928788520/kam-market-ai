@@ -61,8 +61,8 @@ from .fubon_neo import (
 )
 from .fubon_tmf_contract_probe import FubonTmfContractProbe
 from .index_futures_product import index_futures_product, infer_index_futures_instrument
+from .taiex_weekly_cycle import TaiexWeeklyCycleSource
 from .taifex_official_history import TaifexOfficialHistorySource
-
 
 _SAFE_DIAGNOSTIC_CODE = re.compile(r"[A-Z][A-Z0-9_]{2,79}")
 
@@ -194,6 +194,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--taifex-history-cache",
         default="debug/five_timeframe/taifex_official_history.json",
         help="TAIFEX 官方已收盤歷史資料的本機雜湊快取",
+    )
+    parser.add_argument(
+        "--taiex-weekly-cache",
+        default="debug/five_timeframe/taiex_official_weekly.json",
     )
     parser.add_argument(
         "--paper-test-armed",
@@ -328,7 +332,21 @@ def main(
     current_analysis_bucket: str | None = None
     current_analysis_fingerprint: str | None = None
     pending_current_analysis_alert = None
-    paper_runtime: dict[str, object] = {"armed": False, "action": "DISARMED"}
+    taiex_weekly_cycle: dict[str, object]
+    try:
+        taiex_weekly_cycle = TaiexWeeklyCycleSource(
+            args.taiex_weekly_cache
+        ).load(datetime.now(UTC)).safe_payload()
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        taiex_weekly_cycle = {
+            "stage": "U0", "label": "週線資料不足", "source": "TWSE_TAIEX_OFFICIAL_WEEKLY",
+            "market": "台灣加權指數", "timeframe": "週線", "live_order_allowed": False,
+        }
+    paper_runtime: dict[str, object] = {
+        "armed": False,
+        "action": "DISARMED",
+        "taiex_weekly_cycle": taiex_weekly_cycle,
+    }
     if args.line_alerts:
         if not args.paper_test_armed:
             print(json.dumps({"success": False, "failure_stage": "LINE_ALERTS_REQUIRE_PAPER_MODE"}))
@@ -372,6 +390,7 @@ def main(
             paper_runtime = {
                 "armed": True,
                 "action": "WAITING_FOR_KAM",
+                "taiex_weekly_cycle": taiex_weekly_cycle,
                 "line_alert_status": (
                     "ARMED_WAITING_FOR_PAPER_PROPOSAL" if line_notifier is not None else "DISABLED"
                 ),
@@ -654,6 +673,8 @@ def main(
                 "night_session_history_warmup_enabled": args.after_hours,
                 "forming_day_week_chart_only": True,
                 "taifex_history_cache": args.taifex_history_cache,
+                "taiex_weekly_cycle_enabled": True,
+                "taiex_weekly_cache": args.taiex_weekly_cache,
                 "paper_simulation_enabled": args.paper_test_armed,
                 "paper_manual_approval_granted": args.paper_test_armed,
                 "line_alerts_enabled": line_notifier is not None,

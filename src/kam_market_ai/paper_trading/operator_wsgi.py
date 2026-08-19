@@ -217,6 +217,7 @@ def _cycle(view: PaperTradingOperatorView) -> str:
         </div>
         <dl class='cycle-info'>
           {market_references}
+          <div><dt>判斷依據</dt><dd>{escape(str(demo.get('cycle_source', '台灣加權指數 TAIEX 週線')))}</dd></div>
           <div><dt>目前位置</dt><dd>{escape(stage)}</dd></div>
           <div><dt>循環狀態</dt><dd>{escape(state)}</dd></div>
           <div><dt>上一階段</dt><dd>{escape(previous)}</dd></div>

@@ -105,6 +105,14 @@ def test_market_dashboard_exposes_armed_auto_paper_runtime_without_live_executio
     }
     runtime = {
         "armed": True,
+        "taiex_weekly_cycle": {
+            "stage": "U6",
+            "label": "起跌形成",
+            "source": "TWSE_TAIEX_OFFICIAL_WEEKLY",
+            "week_end": "2026-08-14",
+            "last_close": "22900",
+            "ma20": "23100",
+        },
         "action": "hold",
         "direction": "HOLD",
         "reason_codes": ["KAM_BUY_CONDITION_NOT_MET"],
@@ -148,6 +156,8 @@ def test_market_dashboard_exposes_armed_auto_paper_runtime_without_live_executio
     page = render_operator_html(view)
 
     assert "自動模擬已啟用" in page
+    assert "台灣加權指數 TAIEX 週線" in page
+    assert "起跌形成" in page
     assert "自動模擬執行" in page
     assert "KAM 買進條件尚未成立" in page
     assert "1000000" in page

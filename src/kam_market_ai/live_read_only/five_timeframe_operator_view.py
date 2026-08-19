@@ -183,6 +183,8 @@ def build_five_timeframe_operator_view(
         or str(decision.get("primary_next_action", summary.get("next_step", "等待資料完整")))
     )
     paper = paper_runtime if isinstance(paper_runtime, Mapping) else {}
+    taiex_cycle = paper.get("taiex_weekly_cycle")
+    taiex_cycle = taiex_cycle if isinstance(taiex_cycle, Mapping) else {}
     paper_armed = paper.get("armed") is True
     paper_action = str(paper.get("action", "WAITING_FOR_KAM" if paper_armed else "DISARMED"))
     paper_action_label = _PAPER_ACTION_LABELS.get(paper_action, paper_action)
@@ -212,10 +214,14 @@ def build_five_timeframe_operator_view(
         "instrument": str(payload.get("symbol", "TMF")),
         "snapshot_time": payload.get("snapshot_written_at", "—"),
         "current_price": five_minute.get("last_price", "—"),
-        "u_stage": "U0",
-        "cycle_label": (
+        "u_stage": str(taiex_cycle.get("stage", "U0")),
+        "cycle_label": str(taiex_cycle.get("label")) if taiex_cycle else (
             "等待有效週期資料" if status != "READY_VERIFIED_FIVE_TIMEFRAMES" else "等待循環位置判讀"
         ),
+        "cycle_source": "台灣加權指數 TAIEX 週線",
+        "cycle_week_end": taiex_cycle.get("week_end", "—"),
+        "cycle_last_close": taiex_cycle.get("last_close", "—"),
+        "cycle_ma20": taiex_cycle.get("ma20", "—"),
         "timeframes": tuple(timeframes),
         "timeframe_details": {
             label: dict(analysis.get(key, {}))
