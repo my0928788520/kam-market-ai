@@ -191,6 +191,9 @@ class TmfPaperSimulationConfig:
     max_entry_confirmation_move_points: Decimal = Decimal(20)
     structural_stop_confirmation_enabled: bool = True
     emergency_stop_buffer_points: Decimal = Decimal(20)
+    structural_swing_lookback_candles: int = 24
+    structural_swing_pivot_span: int = 2
+    max_structural_stop_distance_points: Decimal = Decimal(120)
     initial_margin: Decimal = Decimal(35050)
     maintenance_margin: Decimal = Decimal(26900)
     margin_effective_at: datetime = datetime(2026, 8, 12, 5, 45, tzinfo=UTC)
@@ -217,6 +220,10 @@ class TmfPaperSimulationConfig:
                 self.max_entry_confirmation_move_points,
             ),
             ("emergency_stop_buffer_points", self.emergency_stop_buffer_points),
+            (
+                "max_structural_stop_distance_points",
+                self.max_structural_stop_distance_points,
+            ),
             ("initial_cash", self.initial_cash),
             ("max_order_notional", self.max_order_notional),
             ("max_daily_loss", self.max_daily_loss),
@@ -237,6 +244,7 @@ class TmfPaperSimulationConfig:
             or self.take_profit_extension_points % self.tick_size != 0
             or self.max_entry_confirmation_move_points % self.tick_size != 0
             or self.emergency_stop_buffer_points % self.tick_size != 0
+            or self.max_structural_stop_distance_points % self.tick_size != 0
         ):
             raise ValueError("Protection distances must align to the TMF tick size.")
         if isinstance(self.max_quote_age_seconds, bool) or self.max_quote_age_seconds <= 0:
@@ -263,6 +271,18 @@ class TmfPaperSimulationConfig:
             or self.entry_confirmation_candles <= 0
         ):
             raise ValueError("entry_confirmation_candles must be positive.")
+        if (
+            isinstance(self.structural_swing_lookback_candles, bool)
+            or self.structural_swing_lookback_candles < 5
+        ):
+            raise ValueError("structural_swing_lookback_candles must be at least five.")
+        if (
+            isinstance(self.structural_swing_pivot_span, bool)
+            or self.structural_swing_pivot_span < 1
+            or self.structural_swing_pivot_span * 2 + 1
+            > self.structural_swing_lookback_candles
+        ):
+            raise ValueError("structural_swing_pivot_span is invalid.")
         if (
             self.dry_run is not True
             or self.live_order_allowed is not False
@@ -1036,13 +1056,56 @@ class LiveTmfPaperSimulation:
             if latest_five_minute.end.astimezone(UTC) <= evaluated_at
             else None
         )
+        structural_stop_price = self._latest_confirmed_swing_stop(
+            value.series[FiveTimeframe.M5],
+            quote=quote,
+            evaluated_at=evaluated_at,
+        )
         return self.process_evaluation(
             preview.paper_direction,
             quote,
             evaluated_at=evaluated_at,
             structural_close=structural_close,
+            structural_stop_price=structural_stop_price,
             require_structural_confirmation=True,
         )
+
+    def _latest_confirmed_swing_stop(
+        self,
+        candles: tuple[Any, ...],
+        *,
+        quote: TmfPaperQuote,
+        evaluated_at: datetime,
+    ) -> Decimal | None:
+        """Return the latest two-sided 5m pivot on the protective side of price."""
+        entry = self.journal.open_entry
+        if entry is None:
+            return None
+        completed = [
+            candle
+            for candle in candles
+            if candle.end.astimezone(UTC) <= evaluated_at
+        ][-self.config.structural_swing_lookback_candles :]
+        span = self.config.structural_swing_pivot_span
+        if len(completed) < span * 2 + 1:
+            return None
+        for index in range(len(completed) - span - 1, span - 1, -1):
+            center = completed[index]
+            neighbours = completed[index - span : index] + completed[index + 1 : index + span + 1]
+            if entry.entry_side is PaperTradingSide.BUY:
+                candidate = Decimal(str(center.low))
+                confirmed = all(candidate <= Decimal(str(item.low)) for item in neighbours)
+                protective_side = candidate < quote.price
+            else:
+                candidate = Decimal(str(center.high))
+                confirmed = all(candidate >= Decimal(str(item.high)) for item in neighbours)
+                protective_side = candidate > quote.price
+            if not confirmed or not protective_side:
+                continue
+            if abs(quote.price - candidate) > self.config.max_structural_stop_distance_points:
+                continue
+            return candidate
+        return None
 
     def process_evaluation(
         self,
@@ -1051,6 +1114,7 @@ class LiveTmfPaperSimulation:
         *,
         evaluated_at: datetime,
         structural_close: Decimal | None = None,
+        structural_stop_price: Decimal | None = None,
         require_structural_confirmation: bool = False,
     ) -> TmfPaperCycleResult:
         """Apply a canonical direction to a verified quote; no signal is overridden."""
@@ -1094,6 +1158,7 @@ class LiveTmfPaperSimulation:
                 quote,
                 evaluated_at,
                 structural_close=structural_close,
+                structural_stop_price=structural_stop_price,
                 require_structural_confirmation=require_structural_confirmation,
             )
         entry_side = {
@@ -1477,6 +1542,7 @@ class LiveTmfPaperSimulation:
         evaluated_at: datetime,
         *,
         structural_close: Decimal | None = None,
+        structural_stop_price: Decimal | None = None,
         require_structural_confirmation: bool = False,
     ) -> TmfPaperCycleResult:
         entry = self.journal.open_entry
@@ -1513,6 +1579,18 @@ class LiveTmfPaperSimulation:
         mfe = max(previous.max_favorable_excursion, pnl, Decimal(0))
         mae = min(previous.max_adverse_excursion, pnl, Decimal(0))
         stop_loss_price = previous.stop_loss_price
+        initial_stop_loss_price = entry.entry_price + (
+            -self.config.stop_loss_points
+            if entry.entry_side is PaperTradingSide.BUY
+            else self.config.stop_loss_points
+        )
+        if structural_stop_price is not None:
+            if stop_loss_price == initial_stop_loss_price:
+                stop_loss_price = structural_stop_price
+            elif entry.entry_side is PaperTradingSide.BUY:
+                stop_loss_price = max(stop_loss_price, structural_stop_price)
+            else:
+                stop_loss_price = min(stop_loss_price, structural_stop_price)
         take_profit_price = previous.take_profit_price
         trend_still_aligned = (
             entry.entry_side is PaperTradingSide.BUY

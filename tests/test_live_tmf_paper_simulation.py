@@ -1068,6 +1068,111 @@ def test_open_position_waits_for_five_minute_structure_or_emergency_stop() -> No
     assert confirmed.performance_event.event_type is TmfPaperPerformanceEventType.STOP_LOSS_EXIT
 
 
+def test_open_position_uses_latest_confirmed_equal_wave_pivot_before_exit() -> None:
+    session = LiveTmfPaperSimulation(config())
+    enter(session)
+    five_minute = tuple(
+        Candle(
+            Instrument.TMF,
+            NOW + timedelta(minutes=index * 5),
+            NOW + timedelta(minutes=(index + 1) * 5),
+            21980,
+            high,
+            low,
+            21975,
+            10,
+        )
+        for index, (high, low) in enumerate(
+            ((22000, 21980), (21990, 21960), (21985, 21940), (21988, 21955), (21992, 21970))
+        )
+    )
+    durations = {
+        FiveTimeframe.M15: timedelta(minutes=15),
+        FiveTimeframe.M60: timedelta(hours=1),
+        FiveTimeframe.DAY: timedelta(days=1),
+        FiveTimeframe.WEEK: timedelta(days=7),
+    }
+    series = {FiveTimeframe.M5: five_minute}
+    series.update({
+        timeframe: (
+            Candle(Instrument.TMF, NOW - duration, NOW, 22000, 22010, 21990, 22000, 10),
+        )
+        for timeframe, duration in durations.items()
+    })
+    candles = CompleteFiveTimeframeCandleResult(
+        Instrument.TMF,
+        None,
+        MappingProxyType(series),
+        3,
+    )
+    evaluated_at = NOW + timedelta(minutes=25, seconds=3)
+
+    held = session.process_open_position_quote(
+        candles,
+        build_live_tmf_paper_quote(
+            instrument="TMFH6",
+            price=Decimal(21955),
+            observed_at=evaluated_at,
+        ),
+        evaluated_at=evaluated_at,
+    )
+
+    assert held is not None
+    assert held.action is TmfPaperCycleAction.POSITION_MARKED
+    assert held.performance_event is not None
+    assert held.performance_event.stop_loss_price == Decimal(21940)
+    assert held.journal.ledger.positions
+
+
+def test_short_position_uses_confirmed_equal_wave_high_symmetrically() -> None:
+    session = LiveTmfPaperSimulation(config())
+    entered = session.process_evaluation(direction("BU"), quote("22000"), evaluated_at=NOW)
+    assert entered.action is TmfPaperCycleAction.ENTRY_FILLED
+    five_minute = tuple(
+        Candle(
+            Instrument.TMF,
+            NOW + timedelta(minutes=index * 5),
+            NOW + timedelta(minutes=(index + 1) * 5),
+            22020,
+            high,
+            low,
+            22025,
+            10,
+        )
+        for index, (high, low) in enumerate(
+            ((22020, 22000), (22040, 22005), (22060, 22010), (22045, 22008), (22035, 22000))
+        )
+    )
+    series = {FiveTimeframe.M5: five_minute}
+    for timeframe, duration in (
+        (FiveTimeframe.M15, timedelta(minutes=15)),
+        (FiveTimeframe.M60, timedelta(hours=1)),
+        (FiveTimeframe.DAY, timedelta(days=1)),
+        (FiveTimeframe.WEEK, timedelta(days=7)),
+    ):
+        series[timeframe] = (
+            Candle(Instrument.TMF, NOW - duration, NOW, 22000, 22010, 21990, 22000, 10),
+        )
+    candles = CompleteFiveTimeframeCandleResult(
+        Instrument.TMF, None, MappingProxyType(series), 3
+    )
+    evaluated_at = NOW + timedelta(minutes=25, seconds=3)
+
+    held = session.process_open_position_quote(
+        candles,
+        build_live_tmf_paper_quote(
+            instrument="TMFH6", price=Decimal(22045), observed_at=evaluated_at
+        ),
+        evaluated_at=evaluated_at,
+    )
+
+    assert held is not None
+    assert held.action is TmfPaperCycleAction.POSITION_MARKED
+    assert held.performance_event is not None
+    assert held.performance_event.stop_loss_price == Decimal(22060)
+    assert held.journal.ledger.positions
+
+
 
 @pytest.mark.parametrize(
     ("entry_code", "invalid_position", "invalid_slope", "exit_price"),
