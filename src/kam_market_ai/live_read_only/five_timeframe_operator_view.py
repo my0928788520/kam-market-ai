@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime
+from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from kam_market_ai.paper_trading.operator_presenter import PaperTradingOperatorView
@@ -208,6 +209,17 @@ def build_five_timeframe_operator_view(
     open_positions = int(paper.get("open_positions", 0) or 0)
     performance = paper.get("performance_event")
     performance = performance if isinstance(performance, Mapping) else {}
+    if paper_action == "exit_filled":
+        exit_type = str(performance.get("event_type", ""))
+        realized = Decimal(str(performance.get("realized_pnl", "0") or "0"))
+        if exit_type == "stop_loss_exit" and realized > 0:
+            paper_action_label = "移動停損鎖利出場"
+        elif exit_type == "stop_loss_exit":
+            paper_action_label = "風險停損出場"
+        elif exit_type == "take_profit_exit":
+            paper_action_label = "目標停利出場"
+        elif exit_type == "m15_ma20_rule_exit":
+            paper_action_label = "趨勢規則出場"
     margin_state = paper.get("margin_state")
     margin_state = margin_state if isinstance(margin_state, Mapping) else {}
     performance_summary = paper.get("performance_summary")
@@ -333,16 +345,24 @@ def build_five_timeframe_operator_view(
             f"{performance_summary.get('sample_size', 0)}／"
             f"{performance_summary.get('minimum_sample_size', 30)}"
         ),
-        "模擬勝率": (
+        "累計損益": str(performance_summary.get("net_pnl", "0")),
+        "勝敗／勝率": (
             "—"
             if performance_summary.get("win_rate") is None
-            else f"{performance_summary['win_rate']}%"
+            else (
+                f"{performance_summary.get('wins', 0)}勝"
+                f"{performance_summary.get('losses', 0)}敗・"
+                f"{performance_summary['win_rate']}%"
+            )
         ),
-        "期望／獲利因子": (
-            f"{performance_summary.get('expectancy', '—') if performance_summary.get('expectancy') is not None else '—'}／"
-            f"{performance_summary.get('profit_factor', '—') if performance_summary.get('profit_factor') is not None else '—'}"
+        "均賺／均賠": (
+            f"{performance_summary.get('average_win', '—') if performance_summary.get('average_win') is not None else '—'}／"
+            f"{performance_summary.get('average_loss', '—') if performance_summary.get('average_loss') is not None else '—'}"
         ),
-        "最大回撤": str(performance_summary.get("maximum_drawdown", "0")),
+        "獲利因子／回撤": (
+            f"{performance_summary.get('profit_factor', '—') if performance_summary.get('profit_factor') is not None else '—'}／"
+            f"{performance_summary.get('maximum_drawdown', '0')}"
+        ),
     }
     ledger = {
         "cash": str(paper.get("cash_balance", "—")),

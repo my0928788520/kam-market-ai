@@ -608,6 +608,26 @@ class TmfPaperSimulationJournal:
         net = sum(outcomes, Decimal(0))
         gross_profit = sum(wins, Decimal(0))
         gross_loss = abs(sum(losses, Decimal(0)))
+        average_win = None if not wins else (gross_profit / Decimal(len(wins))).quantize(Decimal("0.01"))
+        average_loss = None if not losses else (gross_loss / Decimal(len(losses))).quantize(Decimal("0.01"))
+        profitable_stop_exits = [
+            event for event in exits
+            if event.event_type is TmfPaperPerformanceEventType.STOP_LOSS_EXIT
+            and event.realized_pnl > 0
+        ]
+        losing_stop_exits = [
+            event for event in exits
+            if event.event_type is TmfPaperPerformanceEventType.STOP_LOSS_EXIT
+            and event.realized_pnl < 0
+        ]
+        winning_mfe = sum(
+            (event.max_favorable_excursion for event in exits if event.realized_pnl > 0),
+            Decimal(0),
+        )
+        profit_retention = (
+            None if winning_mfe <= 0
+            else (gross_profit / winning_mfe * Decimal(100)).quantize(Decimal("0.01"))
+        )
         cumulative = Decimal(0)
         peak = Decimal(0)
         maximum_drawdown = Decimal(0)
@@ -654,12 +674,21 @@ class TmfPaperSimulationJournal:
             "expectancy": None if not outcomes else str((net / Decimal(sample_size)).quantize(Decimal("0.01"))),
             "gross_profit": str(gross_profit),
             "gross_loss": str(gross_loss),
+            "average_win": None if average_win is None else str(average_win),
+            "average_loss": None if average_loss is None else str(average_loss),
             "profit_factor": (
                 None
                 if gross_loss == 0
                 else str((gross_profit / gross_loss).quantize(Decimal("0.01")))
             ),
             "maximum_drawdown": str(maximum_drawdown),
+            "profit_retention_rate": None if profit_retention is None else str(profit_retention),
+            "exit_breakdown": {
+                "profit_lock": len(profitable_stop_exits),
+                "loss_stop": len(losing_stop_exits),
+                "take_profit": sum(event.event_type is TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT for event in exits),
+                "rule_exit": sum(event.event_type is TmfPaperPerformanceEventType.M15_MA20_RULE_EXIT for event in exits),
+            },
             "long": direction_summary(PaperTradingSide.BUY),
             "short": direction_summary(PaperTradingSide.SELL),
             "adjustment_allowed": sample_size >= MINIMUM_PERFORMANCE_SAMPLE_SIZE,

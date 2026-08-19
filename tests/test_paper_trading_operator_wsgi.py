@@ -49,6 +49,7 @@ def test_matching_margin_status_is_visually_emphasized() -> None:
     assert ".matching dl dd:last-child { font-size: 10.5px; }" in css
     assert ".matching dl { gap: 2px 10px; align-content: start; padding-block: 0; font-size: 10.5px; line-height: 1.2; }" in css
     assert ".performance-sample" in css
+    assert "repeat(5, minmax(88px, 1fr))" in css
     assert "minmax(150px, 1.4fr)" in css
     assert ".performance-sample span" in css and "white-space: nowrap" in css
     assert ".matching:has(.performance-sample):has(> .footer-metrics)" in css

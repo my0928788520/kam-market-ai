@@ -184,3 +184,6 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
 .cycle-weekly-pill text { font-size: 13.5px; }
 .cycle-card-body { grid-template-columns: minmax(0, 1.18fr) minmax(260px, 1.22fr); gap: 5px; }
 .cycle-info .cycle-next-step dd { overflow: visible; line-height: 1.18; overflow-wrap: anywhere; white-space: normal; text-overflow: clip; }
+
+/* Keep the five operator-facing performance metrics on one readable row. */
+.performance-sample { grid-template-columns: auto repeat(5, minmax(88px, 1fr)); }

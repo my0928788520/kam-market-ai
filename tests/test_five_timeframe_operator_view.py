@@ -133,7 +133,12 @@ def test_market_dashboard_exposes_armed_auto_paper_runtime_without_live_executio
         "performance_summary": {
             "sample_size": 12,
             "minimum_sample_size": 30,
+            "wins": 7,
+            "losses": 5,
+            "net_pnl": "510",
             "win_rate": "58.33",
+            "average_win": "130.00",
+            "average_loss": "80.00",
             "expectancy": "42.50",
             "profit_factor": "1.70",
             "maximum_drawdown": "440",
@@ -181,15 +186,16 @@ def test_market_dashboard_exposes_armed_auto_paper_runtime_without_live_executio
     assert "class='line-alert-label'" not in page and "class='line-alert-value'" not in page
     assert "<div class='performance-sample'><b>績效樣本</b>" in page
     assert "<small>進度</small><strong>12／30</strong>" in page
-    assert "<small>模擬勝率</small><strong>58.33%</strong>" in page
-    assert "<small>期望／獲利因子</small><strong>42.50／1.70</strong>" in page
-    assert "<small>最大回撤</small><strong>440</strong>" in page
+    assert "<small>累計損益</small><strong>510</strong>" in page
+    assert "<small>勝敗／勝率</small><strong>7勝5敗・58.33%</strong>" in page
+    assert "<small>均賺／均賠</small><strong>130.00／80.00</strong>" in page
+    assert "<small>獲利因子／回撤</small><strong>1.70／440</strong>" in page
     assert "class='live-order-status-label'>真單狀態</dt><dd class='live-order-status-value' title='必須本人於券商端操作'>必須本人於券商端操作" in page
     assert ">HOLD<" not in page and ">stale<" not in page
     assert view.live_order_allowed is False and view.broker_connected is False
 
 
-def test_paper_performance_keeps_zero_expectancy_visible() -> None:
+def test_paper_performance_keeps_zero_profit_factor_visible() -> None:
     payload = {
         "status": "READY_VERIFIED_FIVE_TIMEFRAMES",
         "symbol": "TMFH6",
@@ -206,7 +212,7 @@ def test_paper_performance_keeps_zero_expectancy_visible() -> None:
         build_five_timeframe_operator_view(payload, runtime)
     )
 
-    assert "<small>期望／獲利因子</small><strong>0.0／0.0</strong>" in page
+    assert "<small>獲利因子／回撤</small><strong>0.0／0</strong>" in page
 
 
 def test_operator_shows_self_contained_paper_runtime_diagnostics() -> None:

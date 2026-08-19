@@ -534,6 +534,15 @@ def test_performance_summary_separates_long_short_and_requires_evidence() -> Non
     assert summary["expectancy"] == "100.00"
     assert summary["profit_factor"] == "1.91"
     assert summary["maximum_drawdown"] == "220"
+    assert summary["average_win"] == "420.00"
+    assert summary["average_loss"] == "220.00"
+    assert summary["profit_retention_rate"] == "100.00"
+    assert summary["exit_breakdown"] == {
+        "profit_lock": 0,
+        "loss_stop": 1,
+        "take_profit": 1,
+        "rule_exit": 0,
+    }
     assert summary["long"]["net_pnl"] == "420"
     assert summary["short"]["net_pnl"] == "-220"
     assert summary["adjustment_allowed"] is False

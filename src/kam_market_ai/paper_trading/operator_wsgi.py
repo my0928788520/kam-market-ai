@@ -244,7 +244,7 @@ def _rows(values: dict[str, str]) -> str:
     )
 
 
-_PERFORMANCE_KEYS = ("績效樣本", "模擬勝率", "期望／獲利因子", "最大回撤")
+_PERFORMANCE_KEYS = ("績效樣本", "累計損益", "勝敗／勝率", "均賺／均賠", "獲利因子／回撤")
 _SIMULATION_POSITION_KEYS = (
     "Paper 持倉",
     "停損／停利",
