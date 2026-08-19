@@ -113,6 +113,9 @@ def test_paper_position_strip_emphasizes_active_profit_and_flat_waiting_state() 
     flat = _paper_position_strip({"KAM 方向": "觀望"}, {"Paper 持倉": "無持倉"})
 
     assert "paper-position-profit" in active
+    css = Path("src/kam_market_ai/paper_trading/static/operator.css").read_text(encoding="utf-8")
+    assert ".paper-position-profit strong { color: #ffadbd; }" in css
+    assert ".paper-position-risk strong { color: #8ff0c9; }" in css
     for value in ("偏空・1 口・TMFI6", "44815", "44500", "44535", "44495", "3150"):
         assert value in active
     assert "paper-position-flat" in flat

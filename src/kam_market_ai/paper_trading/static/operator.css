@@ -187,3 +187,9 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
 
 /* Keep the five operator-facing performance metrics on one readable row. */
 .performance-sample { grid-template-columns: auto repeat(5, minmax(88px, 1fr)); }
+
+/* Taiwan market convention: paper profit is red, paper loss is green. */
+.paper-position-profit { border-color: #b74760; background: linear-gradient(135deg, #3a1721, #140d12); box-shadow: inset 3px 0 #f05a78; }
+.paper-position-profit strong { color: #ffadbd; }
+.paper-position-risk { border-color: #25866b; background: linear-gradient(135deg, #103128, #0a1316); box-shadow: inset 3px 0 #3fd6a7; }
+.paper-position-risk strong { color: #8ff0c9; }
