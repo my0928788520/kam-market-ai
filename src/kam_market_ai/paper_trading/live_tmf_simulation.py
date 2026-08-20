@@ -129,6 +129,7 @@ class TmfPaperPerformanceEventType(StrEnum):
     ENTRY = "entry"
     MARK = "mark"
     STOP_LOSS_EXIT = "stop_loss_exit"
+    PROFIT_LOCK_EXIT = "profit_lock_exit"
     TAKE_PROFIT_EXIT = "take_profit_exit"
     M15_MA20_RULE_EXIT = "m15_ma20_rule_exit"
 
@@ -189,6 +190,8 @@ class TmfPaperSimulationConfig:
     max_consecutive_stop_losses_per_risk_day: int = 2
     max_quote_age_seconds: int = 360
     reentry_cooldown_minutes: int = 15
+    same_direction_profit_reentry_enabled: bool = False
+    profit_reentry_pullback_points: Decimal = Decimal(10)
     entry_confirmation_candles: int = 1
     max_entry_confirmation_move_points: Decimal = Decimal(20)
     dynamic_entry_confirmation_enabled: bool = False
@@ -237,6 +240,7 @@ class TmfPaperSimulationConfig:
             ("initial_cash", self.initial_cash),
             ("max_order_notional", self.max_order_notional),
             ("max_daily_loss", self.max_daily_loss),
+            ("profit_reentry_pullback_points", self.profit_reentry_pullback_points),
             ("initial_margin", self.initial_margin),
             ("maintenance_margin", self.maintenance_margin),
         ):
@@ -277,6 +281,8 @@ class TmfPaperSimulationConfig:
             or self.reentry_cooldown_minutes < 0
         ):
             raise ValueError("reentry_cooldown_minutes must be zero or positive.")
+        if not isinstance(self.same_direction_profit_reentry_enabled, bool):
+            raise TypeError("same_direction_profit_reentry_enabled must be a boolean.")
         if (
             isinstance(self.entry_confirmation_candles, bool)
             or self.entry_confirmation_candles <= 0
@@ -561,6 +567,7 @@ class TmfPaperSimulationJournal:
                 open_trade = event.trade_id
             elif event.event_type in {
                 TmfPaperPerformanceEventType.STOP_LOSS_EXIT,
+                TmfPaperPerformanceEventType.PROFIT_LOCK_EXIT,
                 TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT,
                 TmfPaperPerformanceEventType.M15_MA20_RULE_EXIT,
             }:
@@ -641,6 +648,7 @@ class TmfPaperSimulationJournal:
             if event.event_type
             in {
                 TmfPaperPerformanceEventType.STOP_LOSS_EXIT,
+                TmfPaperPerformanceEventType.PROFIT_LOCK_EXIT,
                 TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT,
                 TmfPaperPerformanceEventType.M15_MA20_RULE_EXIT,
             }
@@ -656,8 +664,11 @@ class TmfPaperSimulationJournal:
         average_loss = None if not losses else (gross_loss / Decimal(len(losses))).quantize(Decimal("0.01"))
         profitable_stop_exits = [
             event for event in exits
-            if event.event_type is TmfPaperPerformanceEventType.STOP_LOSS_EXIT
-            and event.realized_pnl > 0
+            if event.event_type is TmfPaperPerformanceEventType.PROFIT_LOCK_EXIT
+            or (
+                event.event_type is TmfPaperPerformanceEventType.STOP_LOSS_EXIT
+                and event.realized_pnl > 0
+            )
         ]
         losing_stop_exits = [
             event for event in exits
@@ -820,6 +831,7 @@ class TmfPaperSimulationJournal:
                 entry = event
             elif event.event_type in {
                 TmfPaperPerformanceEventType.STOP_LOSS_EXIT,
+                TmfPaperPerformanceEventType.PROFIT_LOCK_EXIT,
                 TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT,
                 TmfPaperPerformanceEventType.M15_MA20_RULE_EXIT,
             }:
@@ -1091,6 +1103,9 @@ class LiveTmfPaperSimulation:
         self.journal = journal or TmfPaperSimulationJournal.empty(config)
         self._pending_entry_direction: str | None = None
         self._pending_entry_candles: list[tuple[datetime, Decimal]] = []
+        self._profit_reentry_direction: str | None = None
+        self._profit_reentry_exit_price: Decimal | None = None
+        self._profit_reentry_pullback_seen = False
         opportunity_path = (
             None
             if store is None
@@ -1359,6 +1374,7 @@ class LiveTmfPaperSimulation:
                 if event.event_type
                 in {
                     TmfPaperPerformanceEventType.STOP_LOSS_EXIT,
+                    TmfPaperPerformanceEventType.PROFIT_LOCK_EXIT,
                     TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT,
                 }
             ),
@@ -1374,6 +1390,45 @@ class LiveTmfPaperSimulation:
                 quote,
                 reasons=("REENTRY_COOLDOWN_ACTIVE",),
             )
+
+        if (
+            self.config.same_direction_profit_reentry_enabled
+            and self._profit_reentry_direction == direction.direction
+            and self._profit_reentry_exit_price is not None
+        ):
+            pullback = self.config.profit_reentry_pullback_points
+            if not self._profit_reentry_pullback_seen:
+                self._profit_reentry_pullback_seen = (
+                    direction.direction == "LONG"
+                    and quote.price <= self._profit_reentry_exit_price - pullback
+                ) or (
+                    direction.direction == "SHORT"
+                    and quote.price >= self._profit_reentry_exit_price + pullback
+                )
+                return self._result(
+                    TmfPaperCycleAction.HOLD,
+                    direction.direction,
+                    quote,
+                    reasons=((
+                        "PROFIT_REENTRY_WAITING_FOR_RECLAIM"
+                        if self._profit_reentry_pullback_seen
+                        else "PROFIT_REENTRY_WAITING_FOR_PULLBACK"
+                    ),),
+                )
+            reclaimed = (
+                direction.direction == "LONG"
+                and quote.price >= self._profit_reentry_exit_price
+            ) or (
+                direction.direction == "SHORT"
+                and quote.price <= self._profit_reentry_exit_price
+            )
+            if not reclaimed:
+                return self._result(
+                    TmfPaperCycleAction.HOLD,
+                    direction.direction,
+                    quote,
+                    reasons=("PROFIT_REENTRY_WAITING_FOR_RECLAIM",),
+                )
 
         current_risk_day = _taiwan_risk_day(evaluated_at)
         entries_today = sum(
@@ -1395,9 +1450,13 @@ class LiveTmfPaperSimulation:
             if _taiwan_risk_day(event.observed_at) != current_risk_day:
                 continue
             if event.event_type is TmfPaperPerformanceEventType.STOP_LOSS_EXIT:
-                consecutive_stop_losses += 1
+                if event.realized_pnl < 0:
+                    consecutive_stop_losses += 1
                 continue
-            if event.event_type is TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT:
+            if event.event_type in {
+                TmfPaperPerformanceEventType.PROFIT_LOCK_EXIT,
+                TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT,
+            }:
                 break
         if (
             consecutive_stop_losses
@@ -1513,6 +1572,10 @@ class LiveTmfPaperSimulation:
         )
         margin_ledger = self._reserve_margin(matched.ledger, fill)
         self._publish(self.journal.with_event(event, margin_ledger))
+        if self._profit_reentry_direction == direction.direction:
+            self._profit_reentry_direction = None
+            self._profit_reentry_exit_price = None
+            self._profit_reentry_pullback_seen = False
         self._wave_stop_tracker.start(
             trade_id=event.trade_id,
             side=entry_side.name,
@@ -1633,6 +1696,7 @@ class LiveTmfPaperSimulation:
                 if event.event_type
                 in {
                     TmfPaperPerformanceEventType.STOP_LOSS_EXIT,
+                    TmfPaperPerformanceEventType.PROFIT_LOCK_EXIT,
                     TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT,
                 }
                 and _taiwan_risk_day(event.observed_at) == current_risk_day
@@ -1857,8 +1921,18 @@ class LiveTmfPaperSimulation:
             or structural_stop_confirmed
             or emergency_stop_reached
         )
+        profit_lock_exit = confirmed_stop_exit and pnl > 0 and (
+            entry.entry_side is PaperTradingSide.BUY
+            and stop_loss_price > entry.entry_price
+            or entry.entry_side is PaperTradingSide.SELL
+            and stop_loss_price < entry.entry_price
+        )
         if entry.entry_side is PaperTradingSide.BUY and confirmed_stop_exit:
-            exit_type = TmfPaperPerformanceEventType.STOP_LOSS_EXIT
+            exit_type = (
+                TmfPaperPerformanceEventType.PROFIT_LOCK_EXIT
+                if profit_lock_exit
+                else TmfPaperPerformanceEventType.STOP_LOSS_EXIT
+            )
         elif ma20_exit:
             exit_type = TmfPaperPerformanceEventType.M15_MA20_RULE_EXIT
         elif (
@@ -1868,7 +1942,11 @@ class LiveTmfPaperSimulation:
         ):
             exit_type = TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT
         elif entry.entry_side is PaperTradingSide.SELL and confirmed_stop_exit:
-            exit_type = TmfPaperPerformanceEventType.STOP_LOSS_EXIT
+            exit_type = (
+                TmfPaperPerformanceEventType.PROFIT_LOCK_EXIT
+                if profit_lock_exit
+                else TmfPaperPerformanceEventType.STOP_LOSS_EXIT
+            )
         elif (
             entry.entry_side is PaperTradingSide.SELL
             and quote.price <= take_profit_price
@@ -1944,9 +2022,20 @@ class LiveTmfPaperSimulation:
                 observed_at=quote.observed_at,
                 actual_exit_price=quote.price,
             )
+            if (
+                exit_type is TmfPaperPerformanceEventType.PROFIT_LOCK_EXIT
+                and self.config.same_direction_profit_reentry_enabled
+            ):
+                self._profit_reentry_direction = (
+                    "LONG" if entry.entry_side is PaperTradingSide.BUY else "SHORT"
+                )
+                self._profit_reentry_exit_price = quote.price
+                self._profit_reentry_pullback_seen = False
         reasons = (
             ("M15_MA20_RULE_EXIT",)
             if exit_type is TmfPaperPerformanceEventType.M15_MA20_RULE_EXIT
+            else ("PROFIT_LOCK_EXIT",)
+            if exit_type is TmfPaperPerformanceEventType.PROFIT_LOCK_EXIT
             else ("TREND_HOLD_TAKE_PROFIT_EXTENDED",)
             if trend_hold_extended
             else ("STRUCTURAL_STOP_TESTED_WAITING_FOR_5M_CLOSE",)

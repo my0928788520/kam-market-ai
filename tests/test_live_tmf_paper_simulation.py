@@ -549,6 +549,78 @@ def test_aligned_long_extends_take_profit_and_locks_twenty_points() -> None:
     assert extended.performance_event.take_profit_price == Decimal("22060")
 
 
+def test_profitable_trailing_stop_is_named_profit_lock_and_not_counted_as_loss() -> None:
+    session = LiveTmfPaperSimulation(
+        config(
+            reentry_cooldown_minutes=0,
+            max_consecutive_stop_losses_per_risk_day=1,
+        )
+    )
+    enter(session)
+    session.process_evaluation(
+        direction("AU"), quote("22040", 1), evaluated_at=NOW + timedelta(minutes=1)
+    )
+
+    exited = session.process_evaluation(
+        direction("AU"), quote("22018", 2), evaluated_at=NOW + timedelta(minutes=2)
+    )
+    reopened = session.process_evaluation(
+        direction("AU"), quote("22019", 3), evaluated_at=NOW + timedelta(minutes=3)
+    )
+
+    assert exited.action is TmfPaperCycleAction.EXIT_FILLED
+    assert exited.performance_event is not None
+    assert (
+        exited.performance_event.event_type
+        is TmfPaperPerformanceEventType.PROFIT_LOCK_EXIT
+    )
+    assert exited.performance_event.realized_pnl == Decimal("180")
+    assert exited.reason_codes == ("PROFIT_LOCK_EXIT",)
+    assert reopened.action is TmfPaperCycleAction.ENTRY_FILLED
+    assert reopened.safe_payload()["performance_summary"]["exit_breakdown"] == {
+        "profit_lock": 1,
+        "loss_stop": 0,
+        "take_profit": 0,
+        "rule_exit": 0,
+    }
+
+
+def test_profit_reentry_requires_pullback_then_reclaim_in_same_direction() -> None:
+    session = LiveTmfPaperSimulation(
+        config(
+            reentry_cooldown_minutes=0,
+            same_direction_profit_reentry_enabled=True,
+            profit_reentry_pullback_points=Decimal(10),
+        )
+    )
+    enter(session)
+    session.process_evaluation(
+        direction("AU"), quote("22040", 1), evaluated_at=NOW + timedelta(minutes=1)
+    )
+    session.process_evaluation(
+        direction("AU"), quote("22018", 2), evaluated_at=NOW + timedelta(minutes=2)
+    )
+
+    waiting_pullback = session.process_evaluation(
+        direction("AU"), quote("22017", 3), evaluated_at=NOW + timedelta(minutes=3)
+    )
+    waiting_reclaim = session.process_evaluation(
+        direction("AU"), quote("22008", 4), evaluated_at=NOW + timedelta(minutes=4)
+    )
+    reopened = session.process_evaluation(
+        direction("AU"), quote("22018", 5), evaluated_at=NOW + timedelta(minutes=5)
+    )
+
+    assert waiting_pullback.action is TmfPaperCycleAction.HOLD
+    assert waiting_pullback.reason_codes == ("PROFIT_REENTRY_WAITING_FOR_PULLBACK",)
+    assert waiting_reclaim.action is TmfPaperCycleAction.HOLD
+    assert waiting_reclaim.reason_codes == ("PROFIT_REENTRY_WAITING_FOR_RECLAIM",)
+    assert reopened.action is TmfPaperCycleAction.ENTRY_FILLED
+    assert reopened.journal.open_entry is not None
+    assert reopened.journal.open_entry.entry_price == Decimal("22018")
+    assert reopened.journal.ledger.live_order_allowed is False
+
+
 def test_aligned_short_extends_take_profit_downward_symmetrically() -> None:
     session = LiveTmfPaperSimulation(config())
     session.process_evaluation(direction("BU"), quote("22000"), evaluated_at=NOW)

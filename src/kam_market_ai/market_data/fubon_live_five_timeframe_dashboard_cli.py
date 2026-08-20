@@ -384,6 +384,8 @@ def main(
                 entry_volatility_multiplier=Decimal(2),
                 structural_stop_confirmation_enabled=True,
                 emergency_stop_buffer_points=Decimal(20),
+                same_direction_profit_reentry_enabled=True,
+                profit_reentry_pullback_points=Decimal(10),
                 paper_trading_enabled=True,
                 manual_approval_granted=True,
             )
@@ -711,6 +713,8 @@ def main(
                 "paper_trend_hold_enabled": bool(args.paper_test_armed),
                 "paper_profit_lock_enabled": bool(args.paper_test_armed),
                 "paper_profit_lock_trailing_points": 40 if args.paper_test_armed else None,
+                "paper_same_direction_profit_reentry_enabled": bool(args.paper_test_armed),
+                "paper_profit_reentry_pullback_points": 10 if args.paper_test_armed else None,
                 "paper_take_profit_extension_points": 20 if args.paper_test_armed else None,
                 "paper_entry_confirmation_candles": 2 if args.paper_test_armed else None,
                 "paper_dynamic_confirmation_enabled": bool(args.paper_test_armed),
