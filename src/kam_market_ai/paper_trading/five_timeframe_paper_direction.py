@@ -187,6 +187,8 @@ def decide_five_timeframe_paper_direction(
         long_side = m60_market_bias == "bullish"
         position_ready = m15_ma20_position == ("above" if long_side else "below")
         slope_ready = m15_ma20_direction == ("rising" if long_side else "falling")
+        position_conflicts = m15_ma20_position == ("below" if long_side else "above")
+        slope_conflicts = m15_ma20_direction == ("falling" if long_side else "rising")
         missing = (
             "15分20MA方向確認"
             if position_ready and not slope_ready
@@ -199,6 +201,24 @@ def decide_five_timeframe_paper_direction(
             if position_ready
             else f"60分已形成{'偏多' if long_side else '偏空'}位置"
         )
+        if (position_ready or slope_ready) and not (
+            position_conflicts or slope_conflicts
+        ):
+            return FiveTimeframePaperDirection(
+                "LONG" if long_side else "SHORT",
+                "PAPER_BUY" if long_side else "PAPER_SELL",
+                "M60_DIRECTIONAL_M15_EARLY_LONG_TRIGGER"
+                if long_side
+                else "M60_DIRECTIONAL_M15_EARLY_SHORT_TRIGGER",
+                codes,
+                True,
+                opportunity_grade="B",
+                opportunity_mode="PAPER_EARLY_CANDIDATE",
+                opportunity_direction="LONG" if long_side else "SHORT",
+                missing_condition=missing,
+                early_trigger=trigger,
+                **payload,
+            )
         return FiveTimeframePaperDirection(
             "HOLD", "NO_PAPER_ORDER", reason_code, codes, False,
             opportunity_grade="C",

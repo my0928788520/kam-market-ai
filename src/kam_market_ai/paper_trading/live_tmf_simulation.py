@@ -191,6 +191,9 @@ class TmfPaperSimulationConfig:
     reentry_cooldown_minutes: int = 15
     entry_confirmation_candles: int = 1
     max_entry_confirmation_move_points: Decimal = Decimal(20)
+    dynamic_entry_confirmation_enabled: bool = False
+    volatile_entry_confirmation_move_points: Decimal = Decimal(40)
+    entry_volatility_multiplier: Decimal = Decimal(2)
     structural_stop_confirmation_enabled: bool = True
     emergency_stop_buffer_points: Decimal = Decimal(20)
     structural_swing_lookback_candles: int = 24
@@ -221,6 +224,11 @@ class TmfPaperSimulationConfig:
                 "max_entry_confirmation_move_points",
                 self.max_entry_confirmation_move_points,
             ),
+            (
+                "volatile_entry_confirmation_move_points",
+                self.volatile_entry_confirmation_move_points,
+            ),
+            ("entry_volatility_multiplier", self.entry_volatility_multiplier),
             ("emergency_stop_buffer_points", self.emergency_stop_buffer_points),
             (
                 "max_structural_stop_distance_points",
@@ -245,6 +253,7 @@ class TmfPaperSimulationConfig:
             or self.take_profit_points % self.tick_size != 0
             or self.take_profit_extension_points % self.tick_size != 0
             or self.max_entry_confirmation_move_points % self.tick_size != 0
+            or self.volatile_entry_confirmation_move_points % self.tick_size != 0
             or self.emergency_stop_buffer_points % self.tick_size != 0
             or self.max_structural_stop_distance_points % self.tick_size != 0
         ):
@@ -273,6 +282,15 @@ class TmfPaperSimulationConfig:
             or self.entry_confirmation_candles <= 0
         ):
             raise ValueError("entry_confirmation_candles must be positive.")
+        if not isinstance(self.dynamic_entry_confirmation_enabled, bool):
+            raise TypeError("dynamic_entry_confirmation_enabled must be a boolean.")
+        if (
+            self.volatile_entry_confirmation_move_points
+            < self.max_entry_confirmation_move_points
+        ):
+            raise ValueError(
+                "volatile entry distance must cover the normal entry distance."
+            )
         if (
             isinstance(self.structural_swing_lookback_candles, bool)
             or self.structural_swing_lookback_candles < 5
@@ -1104,11 +1122,25 @@ class LiveTmfPaperSimulation:
             evaluated_at=evaluated_at,
         )
         quote = build_tmf_paper_quote(value, instrument=self.config.instrument)
+        completed_m5 = tuple(
+            candle
+            for candle in value.series[FiveTimeframe.M5]
+            if candle.end.astimezone(UTC) <= evaluated_at
+        )[-6:]
+        entry_volatility_points = (
+            sum(
+                (Decimal(str(candle.high)) - Decimal(str(candle.low)))
+                for candle in completed_m5
+            ) / Decimal(len(completed_m5))
+            if len(completed_m5) >= 3
+            else None
+        )
         return self.process_evaluation(
             preview.paper_direction,
             quote,
             evaluated_at=evaluated_at,
             structural_close=quote.price,
+            entry_volatility_points=entry_volatility_points,
         )
 
     def process_open_position_quote(
@@ -1191,6 +1223,7 @@ class LiveTmfPaperSimulation:
         structural_close: Decimal | None = None,
         structural_stop_price: Decimal | None = None,
         require_structural_confirmation: bool = False,
+        entry_volatility_points: Decimal | None = None,
     ) -> TmfPaperCycleResult:
         """Apply a canonical direction to a verified quote; no signal is overridden."""
         if not isinstance(direction, FiveTimeframePaperDirection):
@@ -1255,7 +1288,28 @@ class LiveTmfPaperSimulation:
                 reasons=("KAM_ENTRY_CONDITION_NOT_MET",),
             )
 
-        if self.config.entry_confirmation_candles > 1:
+        required_confirmation_candles = self.config.entry_confirmation_candles
+        maximum_confirmation_move = self.config.max_entry_confirmation_move_points
+        if self.config.dynamic_entry_confirmation_enabled:
+            required_confirmation_candles = (
+                2 if direction.opportunity_mode == "PAPER_EARLY_CANDIDATE" else 1
+            )
+            if entry_volatility_points is not None:
+                _decimal(
+                    entry_volatility_points,
+                    "entry_volatility_points",
+                    positive=True,
+                )
+                maximum_confirmation_move = min(
+                    self.config.volatile_entry_confirmation_move_points,
+                    max(
+                        self.config.max_entry_confirmation_move_points,
+                        entry_volatility_points
+                        * self.config.entry_volatility_multiplier,
+                    ),
+                )
+
+        if required_confirmation_candles > 1:
             if self._pending_entry_direction != direction.direction:
                 self._pending_entry_direction = direction.direction
                 self._pending_entry_candles = []
@@ -1280,7 +1334,7 @@ class LiveTmfPaperSimulation:
                         )
                     if (
                         abs(quote.price - previous_price)
-                        > self.config.max_entry_confirmation_move_points
+                        > maximum_confirmation_move
                     ):
                         self._pending_entry_candles = [(quote.observed_at, quote.price)]
                         return self._result(
@@ -1290,7 +1344,7 @@ class LiveTmfPaperSimulation:
                             reasons=("ENTRY_CONFIRMATION_MOVE_TOO_LARGE",),
                         )
                 self._pending_entry_candles.append((quote.observed_at, quote.price))
-            if len(self._pending_entry_candles) < self.config.entry_confirmation_candles:
+            if len(self._pending_entry_candles) < required_confirmation_candles:
                 return self._result(
                     TmfPaperCycleAction.HOLD,
                     direction.direction,

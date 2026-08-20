@@ -72,6 +72,12 @@ _PAPER_REASON_LABELS = {
     "M60_MA20_SUPPORT_BROKEN": "60分K收破20MA支撐・多方轉弱・不建立多單",
     "M60_BULLISH_M15_LONG_TRIGGER": "60分位置偏多・15分多單條件成立",
     "M60_BEARISH_M15_SHORT_TRIGGER": "60分位置偏空・15分空單條件成立",
+    "M60_DIRECTIONAL_M15_EARLY_LONG_TRIGGER": (
+        "B級早期多單・60分偏多且15分已完成部分條件"
+    ),
+    "M60_DIRECTIONAL_M15_EARLY_SHORT_TRIGGER": (
+        "B級早期空單・60分偏空且15分已完成部分條件"
+    ),
     "D1_DESCENDING_TRENDLINE_WEAKENING_M60_M15_SHORT_TRIGGER": (
         "日線下降趨勢線確認多方轉弱・60分與15分空單條件成立"
     ),

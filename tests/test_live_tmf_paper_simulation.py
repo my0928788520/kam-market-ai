@@ -267,6 +267,90 @@ def test_entry_confirmation_config_rejects_invalid_values() -> None:
         config(max_entry_confirmation_move_points=Decimal(0))
     with pytest.raises(ValueError, match="Protection distances"):
         config(max_entry_confirmation_move_points=Decimal("20.5"))
+    with pytest.raises(ValueError, match="volatile entry distance"):
+        config(
+            max_entry_confirmation_move_points=Decimal(20),
+            volatile_entry_confirmation_move_points=Decimal(10),
+        )
+
+
+def test_dynamic_confirmation_enters_complete_signal_without_second_candle() -> None:
+    session = LiveTmfPaperSimulation(
+        config(
+            entry_confirmation_candles=2,
+            dynamic_entry_confirmation_enabled=True,
+        )
+    )
+
+    result = session.process_evaluation(direction("AU"), quote("22000"), evaluated_at=NOW)
+
+    assert result.action is TmfPaperCycleAction.ENTRY_FILLED
+    assert result.live_order_allowed is False
+
+
+def test_b_early_entry_requires_two_continuing_candles() -> None:
+    early = decide_five_timeframe_paper_direction(
+        tuple(
+            MappedKamTimeframeState(timeframe, "ND", "N", "D", ())
+            for timeframe in ("1w", "1d", "60m", "15m", "5m")
+        ),
+        m15_ma20_position="below",
+        m15_ma20_direction="flat",
+        m60_ma20_support="broken",
+        m60_market_bias="bearish",
+    )
+    session = LiveTmfPaperSimulation(
+        config(
+            entry_confirmation_candles=2,
+            dynamic_entry_confirmation_enabled=True,
+        )
+    )
+
+    first = session.process_evaluation(early, quote("22000"), evaluated_at=NOW)
+    confirmed = session.process_evaluation(
+        early,
+        quote("21999", 5),
+        evaluated_at=NOW + timedelta(minutes=5),
+    )
+
+    assert first.action is TmfPaperCycleAction.HOLD
+    assert confirmed.action is TmfPaperCycleAction.ENTRY_FILLED
+    assert confirmed.live_order_allowed is False
+
+
+def test_high_volatility_expands_confirmation_move_but_caps_at_40_points() -> None:
+    early = decide_five_timeframe_paper_direction(
+        tuple(
+            MappedKamTimeframeState(timeframe, "ND", "N", "D", ())
+            for timeframe in ("1w", "1d", "60m", "15m", "5m")
+        ),
+        m15_ma20_position="below",
+        m15_ma20_direction="flat",
+        m60_ma20_support="broken",
+        m60_market_bias="bearish",
+    )
+    session = LiveTmfPaperSimulation(
+        config(
+            entry_confirmation_candles=2,
+            dynamic_entry_confirmation_enabled=True,
+        )
+    )
+
+    session.process_evaluation(
+        early,
+        quote("22000"),
+        evaluated_at=NOW,
+        entry_volatility_points=Decimal(18),
+    )
+    result = session.process_evaluation(
+        early,
+        quote("21965", 5),
+        evaluated_at=NOW + timedelta(minutes=5),
+        entry_volatility_points=Decimal(18),
+    )
+
+    assert result.action is TmfPaperCycleAction.ENTRY_FILLED
+    assert result.live_order_allowed is False
 
 
 def test_confirmed_short_direction_opens_a_paper_short() -> None:

@@ -440,6 +440,41 @@ def test_operator_exposes_compact_opportunity_funnel_without_live_permissions() 
     assert view.live_order_allowed is False
 
 
+def test_operator_translates_b_grade_early_entry_reason() -> None:
+    payload = {
+        "status": "READY_VERIFIED_FIVE_TIMEFRAMES",
+        "symbol": "TMFI6",
+        "market_data_only": True,
+        "trading_enabled": False,
+        "analysis_preview": {
+            "three_second_summary": {"headline": "五週期分析已更新"},
+            "kam_rule_decision": {
+                "direction": "SHORT",
+                "primary_next_action": "B級早期空單",
+                "states": {},
+                "paper_test_direction": {
+                    "direction": "SHORT",
+                    "action": "PAPER_SELL",
+                    "reason_code": "M60_DIRECTIONAL_M15_EARLY_SHORT_TRIGGER",
+                    "opportunity_grade": "B",
+                    "opportunity_mode": "PAPER_EARLY_CANDIDATE",
+                    "eligible": True,
+                    "dry_run": True,
+                    "live_order_allowed": False,
+                },
+            },
+        },
+    }
+
+    view = build_five_timeframe_operator_view(payload)
+
+    assert view.demo is not None
+    assert view.demo["direction_reason"] == (
+        "B級早期空單・60分偏空且15分已完成部分條件"
+    )
+    assert view.live_order_allowed is False
+
+
 
 def test_operator_explains_exact_ma_and_alignment_blockers_in_chinese() -> None:
     payload = {

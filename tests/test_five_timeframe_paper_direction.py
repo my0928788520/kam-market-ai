@@ -70,7 +70,7 @@ def test_daily_descending_trendline_confirms_existing_m60_m15_paper_short() -> N
     assert result.live_order_allowed is False
 
 
-def test_directional_m60_with_partial_m15_is_c_grade_shadow_only() -> None:
+def test_directional_m60_with_partial_m15_is_b_grade_early_paper_candidate() -> None:
     result = decide_five_timeframe_paper_direction(
         states("ND"),
         m15_ma20_position="below",
@@ -81,14 +81,31 @@ def test_directional_m60_with_partial_m15_is_c_grade_shadow_only() -> None:
     )
 
     assert (result.direction, result.action, result.eligible) == (
-        "HOLD", "NO_PAPER_ORDER", False
+        "SHORT", "PAPER_SELL", True
     )
-    assert result.opportunity_grade == "C"
-    assert result.opportunity_mode == "SHADOW_ONLY"
+    assert result.opportunity_grade == "B"
+    assert result.opportunity_mode == "PAPER_EARLY_CANDIDATE"
     assert result.opportunity_direction == "SHORT"
     assert result.missing_condition == "15分20MA方向確認"
     assert result.early_trigger == "15分已跌破20MA"
     assert result.pullback_reference == 44820.0
+    assert result.live_order_allowed is False
+
+
+def test_directional_m60_without_any_m15_progress_remains_shadow_only() -> None:
+    result = decide_five_timeframe_paper_direction(
+        states("ND"),
+        m15_ma20_position="above",
+        m15_ma20_direction="flat",
+        m60_ma20_support="broken",
+        m60_market_bias="bearish",
+    )
+
+    assert (result.direction, result.action, result.eligible) == (
+        "HOLD", "NO_PAPER_ORDER", False
+    )
+    assert result.opportunity_grade == "C"
+    assert result.opportunity_mode == "SHADOW_ONLY"
     assert result.live_order_allowed is False
 
 
