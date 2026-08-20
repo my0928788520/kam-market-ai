@@ -195,6 +195,10 @@ def test_market_dashboard_exposes_armed_auto_paper_runtime_without_live_executio
     for label in ("風控狀態", "五分鐘確認", "緊急停損"):
         assert label in proposal_section
         assert label not in matching_section
+    for backend_only_label in (
+        "模式", "KAM 方向", "機會等級", "尚差條件", "提前觸發", "回踩位置", "影子統計",
+    ):
+        assert backend_only_label not in proposal_section
     for label in ("目前契約", "行情更新（台灣）"):
         assert label in matching_section
     for hidden_label in ("提案雜湊", "日誌雜湊", "日誌驗證", "實盤狀態", "保證金狀態"):

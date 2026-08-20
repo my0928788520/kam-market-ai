@@ -215,6 +215,17 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
 .proposal dd { min-width: 0; margin: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .paper-position-strip { flex: 0 0 auto; margin-bottom: 5px; }
 .paper-position-flat { padding-block: 6px; }
+.proposal:has(.paper-position-strip:not(.paper-position-flat)) dl {
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 7px 12px;
+  align-content: start;
+  overflow: visible;
+}
+.proposal:has(.paper-position-strip:not(.paper-position-flat)) dt,
+.proposal:has(.paper-position-strip:not(.paper-position-flat)) dd {
+  font-size: 13px;
+  line-height: 1.3;
+}
 
 /* Current analysis duplicates the direction cards; dedicate its row to operations. */
 .proposal { grid-column: 1; grid-row: 3 / 5; }
@@ -243,6 +254,11 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
   .timeframe-card small { font-size: 12.5px; line-height: 15px; }
   .proposal h2, .matching h2 { font-size: 17px; }
   .proposal dt, .proposal dd, .matching dl { font-size: 14px; line-height: 1.35; }
+  .proposal:has(.paper-position-strip:not(.paper-position-flat)) dt,
+  .proposal:has(.paper-position-strip:not(.paper-position-flat)) dd {
+    font-size: 14px;
+    line-height: 1.35;
+  }
   .paper-position-flat > strong { font-size: 14px; }
   .paper-position-flat > span { font-size: 12px; }
   .paper-position-strip small { font-size: 11px; }
