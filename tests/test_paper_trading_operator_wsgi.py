@@ -200,6 +200,17 @@ def test_current_analysis_uses_free_matching_space_and_stable_refresh_hash() -> 
     assert "nextDetails.replaceWith(currentDetails)" not in refresh
 
 
+def test_stop_quality_metrics_keep_labels_and_long_values_separated() -> None:
+    css = Path("src/kam_market_ai/paper_trading/static/operator.css").read_text(
+        encoding="utf-8"
+    )
+
+    assert "grid-template-columns: minmax(190px, .85fr) minmax(145px, .65fr) minmax(260px, 1.5fr)" in css
+    assert ".stop-quality-sample span { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 10px;" in css
+    assert ".stop-quality-sample span:nth-child(4) { grid-column: 1 / -1; }" in css
+    assert '.stop-quality-sample small::after { content: "："; }' in css
+
+
 def test_local_session_switch_post_is_explicit_and_redirects_to_charts() -> None:
     calls = []
     app = build_operator_wsgi(
