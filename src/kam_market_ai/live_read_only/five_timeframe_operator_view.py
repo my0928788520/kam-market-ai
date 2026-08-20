@@ -227,6 +227,10 @@ def build_five_timeframe_operator_view(
     performance_summary = performance_summary if isinstance(performance_summary, Mapping) else {}
     opportunity_summary = paper.get("opportunity_summary")
     opportunity_summary = opportunity_summary if isinstance(opportunity_summary, Mapping) else {}
+    wave_stop_comparison = paper.get("wave_stop_comparison")
+    wave_stop_comparison = (
+        wave_stop_comparison if isinstance(wave_stop_comparison, Mapping) else {}
+    )
     execution_boundary = paper.get("execution_boundary")
     execution_boundary = execution_boundary if isinstance(execution_boundary, Mapping) else {}
     current_analysis = paper.get("current_analysis")
@@ -421,6 +425,12 @@ def build_five_timeframe_operator_view(
                 f"避免 {performance_summary['shadow_avoided_premature_exits']} 次過早出場・"
                 f"改善 {performance_summary.get('shadow_incremental_pnl', '0')}"
             )
+        ),
+        "影子停損比較": (
+            f"{wave_stop_comparison.get('verdict', '樣本不足')}・"
+            f"固定 {wave_stop_comparison.get('fixed_stop_exits', 0)}／"
+            f"波浪 {wave_stop_comparison.get('wave_stop_exits', 0)}／"
+            f"避開誤洗 {wave_stop_comparison.get('saved_by_wave_stop', 0)}"
         ),
     }
     ledger = {

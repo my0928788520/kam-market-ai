@@ -245,7 +245,7 @@ def _rows(values: dict[str, str]) -> str:
 
 
 _PERFORMANCE_KEYS = ("績效樣本", "累計損益", "勝敗／勝率", "均賺／均賠", "獲利因子／回撤")
-_STOP_QUALITY_KEYS = ("停損品質", "獲利保留", "固定停損比較")
+_STOP_QUALITY_KEYS = ("停損品質", "獲利保留", "固定停損比較", "影子停損比較")
 _SIMULATION_POSITION_KEYS = (
     "Paper 持倉",
     "停損／停利",

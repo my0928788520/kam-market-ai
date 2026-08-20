@@ -58,6 +58,7 @@ from .order_proposal import (
     build_paper_order_proposal,
 )
 from .paper_opportunity_tracker import PaperOpportunityTracker
+from .paper_wave_stop_comparison import PaperWaveStopComparisonTracker
 from .proposal_runner import (
     PaperOrderProposalRunnerState,
     confirm_paper_order_proposal,
@@ -999,6 +1000,7 @@ class TmfPaperCycleResult:
     journal: TmfPaperSimulationJournal
     performance_event: TmfPaperPerformanceEvent | None = None
     opportunity_summary: dict[str, object] | None = None
+    wave_stop_comparison: dict[str, object] | None = None
     dry_run: bool = True
     live_order_allowed: bool = False
     broker_connected: bool = False
@@ -1037,6 +1039,7 @@ class TmfPaperCycleResult:
                 else self.performance_event.canonical_payload()
             ),
             "opportunity_summary": dict(self.opportunity_summary or {}),
+            "wave_stop_comparison": dict(self.wave_stop_comparison or {}),
             "dry_run": True,
             "live_order_allowed": False,
             "broker_connected": False,
@@ -1076,6 +1079,12 @@ class LiveTmfPaperSimulation:
             else store.path.with_name(f"{store.path.stem}_opportunities.json")
         )
         self._opportunity_tracker = PaperOpportunityTracker(opportunity_path)
+        wave_comparison_path = (
+            None
+            if store is None
+            else store.path.with_name(f"{store.path.stem}_wave_stop_comparison.json")
+        )
+        self._wave_stop_tracker = PaperWaveStopComparisonTracker(wave_comparison_path)
         if (
             self.journal.instrument != config.instrument
             or self.journal.point_value != config.point_value
@@ -1450,6 +1459,13 @@ class LiveTmfPaperSimulation:
         )
         margin_ledger = self._reserve_margin(matched.ledger, fill)
         self._publish(self.journal.with_event(event, margin_ledger))
+        self._wave_stop_tracker.start(
+            trade_id=event.trade_id,
+            side=entry_side.name,
+            entry_price=event.entry_price,
+            fixed_stop_price=event.stop_loss_price,
+            observed_at=event.observed_at,
+        )
         self._reset_entry_confirmation()
         return self._result(
             TmfPaperCycleAction.ENTRY_FILLED,
@@ -1656,6 +1672,20 @@ class LiveTmfPaperSimulation:
             if entry.entry_side is PaperTradingSide.BUY
             else self.config.stop_loss_points
         )
+        self._wave_stop_tracker.start(
+            trade_id=entry.trade_id,
+            side=entry.entry_side.name,
+            entry_price=entry.entry_price,
+            fixed_stop_price=initial_stop_loss_price,
+            observed_at=entry.observed_at,
+        )
+        self._wave_stop_tracker.observe(
+            trade_id=entry.trade_id,
+            price=quote.price,
+            observed_at=quote.observed_at,
+            wave_pivot_price=structural_stop_price,
+            buffer_points=self.config.emergency_stop_buffer_points,
+        )
         if structural_stop_price is not None:
             if stop_loss_price == initial_stop_loss_price:
                 stop_loss_price = structural_stop_price
@@ -1855,6 +1885,11 @@ class LiveTmfPaperSimulation:
             self.config.point_value,
         )
         self._publish(self.journal.with_event(event, ledger))
+        if exit_type is not None:
+            self._wave_stop_tracker.finish(
+                observed_at=quote.observed_at,
+                actual_exit_price=quote.price,
+            )
         reasons = (
             ("M15_MA20_RULE_EXIT",)
             if exit_type is TmfPaperPerformanceEventType.M15_MA20_RULE_EXIT
@@ -1927,6 +1962,7 @@ class LiveTmfPaperSimulation:
             self.journal,
             event,
             self._opportunity_tracker.safe_payload(),
+            self._wave_stop_tracker.safe_payload(),
         )
 
 
