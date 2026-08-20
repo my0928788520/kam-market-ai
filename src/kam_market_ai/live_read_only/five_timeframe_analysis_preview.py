@@ -136,8 +136,15 @@ def _m60_ma20_support_metrics(candles: tuple[Candle, ...]) -> dict[str, object]:
     excluded so a temporary intrabar dip cannot flip the control bias.
     """
     closed = candles[:-1]
+    progress = {
+        "candle_count": len(candles),
+        "closed_candle_count": len(closed),
+        "required_candle_count": 20,
+        "history_backfill_status": "ready" if len(closed) >= 20 else "backfilling",
+    }
     if len(closed) < 20:
         return {
+            **progress,
             "ma20_support": "insufficient",
             "market_bias": "insufficient",
             "support_close": None,
@@ -157,6 +164,7 @@ def _m60_ma20_support_metrics(candles: tuple[Candle, ...]) -> dict[str, object]:
         support = "held"
         bias = "bullish"
     return {
+        **progress,
         "ma20_support": support,
         "market_bias": bias,
         "support_close": close,

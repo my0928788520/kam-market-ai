@@ -241,13 +241,20 @@ def _merge_official_intraday_history(
     local_date = observed_at.astimezone(ZoneInfo("Asia/Taipei")).date()
     series = {}
     for timeframe in (FiveTimeframe.M5, FiveTimeframe.M15, FiveTimeframe.M60):
+        live = partial.series[timeframe]
         closed_live = tuple(
-            candle for candle in partial.series[timeframe]
+            candle for candle in live
             if candle.end <= observed_at
         )
-        if not closed_live:
-            raise ValueError("LIVE_VERIFIER_CLOSED_INTRADAY_CANDLE_REQUIRED")
-        combined = (*official.intraday_series[timeframe], *closed_live)
+        forming_live = tuple(candle for candle in live if candle.end > observed_at)
+        # At session start there may be no closed Fubon bar yet.  Official
+        # regular-session history is still a verified warm-up source, so do
+        # not discard it merely because the current live bar is still forming.
+        combined = (
+            *official.intraday_series[timeframe],
+            *closed_live,
+            *forming_live,
+        )
         if any(candle.start.astimezone(ZoneInfo("Asia/Taipei")).date() >= local_date
                for candle in official.intraday_series[timeframe]):
             raise ValueError("LIVE_VERIFIER_OFFICIAL_HISTORY_CONTAINS_CURRENT_DATE")

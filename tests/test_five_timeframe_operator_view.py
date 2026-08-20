@@ -507,3 +507,42 @@ def test_operator_assigns_one_control_vote_to_intact_m60_ma20_support() -> None:
     assert view.demo["unconfirmed_score"] == "40"
     assert "多方 6｜空方 0｜未確認 4" in page
     assert view.live_order_allowed is False
+
+
+def test_operator_shows_m60_official_history_backfill_progress() -> None:
+    payload = {
+        "status": "READY_VERIFIED_FIVE_TIMEFRAMES",
+        "symbol": "TMFI6",
+        "market_data_only": True,
+        "trading_enabled": False,
+        "analysis_preview": {
+            "three_second_summary": {"headline": "五週期分析已更新"},
+            "timeframes": {
+                "60m": {
+                    "closed_candle_count": 7,
+                    "required_candle_count": 20,
+                    "history_backfill_status": "backfilling",
+                },
+                "5m": {"last_price": 44820},
+            },
+            "kam_rule_decision": {
+                "direction": "HOLD",
+                "primary_next_action": "等待",
+                "states": {},
+                "paper_test_direction": {
+                    "direction": "HOLD",
+                    "reason_code": "M60_LOCATION_INSUFFICIENT",
+                    "eligible": False,
+                },
+            },
+        },
+    }
+
+    view = build_five_timeframe_operator_view(payload)
+    page = render_operator_html(view)
+
+    message = "60分官方歷史補足中・已完成 7／20 根"
+    assert view.demo is not None
+    assert view.demo["direction_reason"] == message
+    assert message in page
+    assert view.live_order_allowed is False

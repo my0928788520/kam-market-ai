@@ -242,10 +242,40 @@ def test_live_verifier_reaches_ready_with_official_closed_history(tmp_path) -> N
     assert payload["taifex_history"]["market_data_only"] is True
     assert payload["live_order_allowed"] is False
     assert verifier.latest_candle_result.series
-    assert all(
-        values[-1].end <= datetime(2026, 8, 20, 2, tzinfo=UTC)
-        for values in tuple(verifier.latest_candle_result.series.values())[:3]
+    assert all(verifier.latest_candle_result.series.values())
+
+
+def test_live_verifier_uses_official_m60_history_before_first_live_close(
+    tmp_path,
+) -> None:
+    source, _ = _source(tmp_path, date(2026, 8, 20))
+    clients = AuthorizedMarketDataClients(WebSocket(), Rest(), WebSocket(), Rest())
+    resolver = VerifiedContractResolver((
+        ResolvedFuturesContract(Instrument.TMF, "TMFH6", False),
+    ))
+    pipeline = FubonFiveTimeframeCandlePipeline(
+        FubonIntradayCandlesAdapter(clients, resolver)
     )
+    verifier = FubonLiveFiveTimeframeVerifier(pipeline, source)
+
+    payload = verifier.run(
+        symbol="TMFH6",
+        session=None,
+        verified_at=datetime(2026, 8, 20, 1, 30, tzinfo=UTC),
+    )
+    m60 = payload["analysis_preview"]["timeframes"]["60m"]
+
+    assert payload["status"] == "READY_VERIFIED_FIVE_TIMEFRAMES"
+    assert payload["source_kind"] == (
+        "FUBON_LIVE_INTRADAY_PLUS_TAIFEX_OFFICIAL_HISTORY"
+    )
+    assert m60["closed_candle_count"] >= 20
+    assert m60["required_candle_count"] == 20
+    assert m60["history_backfill_status"] == "ready"
+    assert m60["ma20"] is not None
+    assert m60["ma20_support"] != "insufficient"
+    assert payload["trading_enabled"] is False
+    assert payload["live_order_allowed"] is False
 
 
 def test_live_verifier_after_hours_warms_from_closed_regular_history(tmp_path) -> None:

@@ -150,6 +150,14 @@ def build_five_timeframe_operator_view(
     analysis = analysis if isinstance(analysis, Mapping) else {}
     five_minute = analysis.get("5m")
     five_minute = five_minute if isinstance(five_minute, Mapping) else {}
+    sixty_minute = analysis.get("60m")
+    sixty_minute = sixty_minute if isinstance(sixty_minute, Mapping) else {}
+    if decision_reason_code == "M60_LOCATION_INSUFFICIENT":
+        closed_count = int(sixty_minute.get("closed_candle_count", 0) or 0)
+        required_count = int(sixty_minute.get("required_candle_count", 20) or 20)
+        decision_blocker = (
+            f"60分官方歷史補足中・已完成 {closed_count}／{required_count} 根"
+        )
 
     m60_bias = str(diagnostics.get("m60_market_bias", "insufficient"))
     m60_bias_message = (

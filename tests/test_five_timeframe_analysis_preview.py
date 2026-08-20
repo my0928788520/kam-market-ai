@@ -340,6 +340,33 @@ def test_m60_support_uses_closed_candle_and_ignores_forming_break() -> None:
 
     assert payload["timeframes"]["60m"]["ma20_support"] == "held"
     assert payload["timeframes"]["60m"]["market_bias"] == "bullish"
+    assert payload["timeframes"]["60m"]["candle_count"] == 21
+    assert payload["timeframes"]["60m"]["closed_candle_count"] == 20
+    assert payload["timeframes"]["60m"]["required_candle_count"] == 20
+    assert payload["timeframes"]["60m"]["history_backfill_status"] == "ready"
     assert payload["decision_diagnostics"]["m60_market_bias"] == "bullish"
     assert payload["kam_rule_decision"]["paper_test_direction"]["m60_market_bias"] == "bullish"
+    assert payload["live_order_allowed"] is False
+
+
+def test_m60_progress_reports_official_history_backfill_requirement() -> None:
+    base = complete_result_with_ma_history()
+    series = dict(base.series)
+    series[FiveTimeframe.M60] = series[FiveTimeframe.M60][-8:]
+    result = CompleteFiveTimeframeCandleResult(
+        instrument=Instrument.TMF,
+        session=None,
+        series=MappingProxyType(series),
+        endpoint_call_count=3,
+    )
+
+    payload = build_verified_five_timeframe_analysis_preview(
+        result, evaluated_at=NOW
+    ).safe_payload()
+    m60 = payload["timeframes"]["60m"]
+
+    assert m60["closed_candle_count"] == 7
+    assert m60["required_candle_count"] == 20
+    assert m60["history_backfill_status"] == "backfilling"
+    assert m60["ma20_support"] == "insufficient"
     assert payload["live_order_allowed"] is False
