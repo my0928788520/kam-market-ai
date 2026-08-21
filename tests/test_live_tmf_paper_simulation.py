@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from hashlib import sha256
@@ -122,6 +123,52 @@ def test_config_uses_current_taifex_tmf_margin_snapshot() -> None:
     assert value.maintenance_margin == Decimal(26900)
     assert value.margin_effective_at == datetime(2026, 8, 12, 5, 45, tzinfo=UTC)
     assert value.margin_source == "TAIFEX_INDEX_MARGIN_2026-08-12"
+
+
+def test_weak_paper_performance_requires_three_b_grade_confirmations() -> None:
+    session = LiveTmfPaperSimulation(
+        config(
+            reentry_cooldown_minutes=0,
+            max_entries_per_risk_day=20,
+            max_consecutive_stop_losses_per_risk_day=20,
+            max_daily_loss=Decimal(100000),
+            entry_confirmation_candles=1,
+            dynamic_entry_confirmation_enabled=False,
+        )
+    )
+    minute = 0
+    for _ in range(6):
+        opened = session.process_evaluation(
+            direction("AU"), quote("22000", minute),
+            evaluated_at=NOW + timedelta(minutes=minute),
+        )
+        assert opened.action is TmfPaperCycleAction.ENTRY_FILLED
+        minute += 1
+        closed = session.process_evaluation(
+            direction("AF"), quote("21978", minute),
+            evaluated_at=NOW + timedelta(minutes=minute),
+        )
+        assert closed.action is TmfPaperCycleAction.EXIT_FILLED
+        minute += 1
+
+    b_grade = replace(direction("AU"), opportunity_grade="B")
+    first = session.process_evaluation(
+        b_grade, quote("21980", minute),
+        evaluated_at=NOW + timedelta(minutes=minute),
+    )
+    second = session.process_evaluation(
+        b_grade, quote("21981", minute + 1),
+        evaluated_at=NOW + timedelta(minutes=minute + 1),
+    )
+    third = session.process_evaluation(
+        b_grade, quote("21982", minute + 2),
+        evaluated_at=NOW + timedelta(minutes=minute + 2),
+    )
+
+    assert first.reason_codes == ("ENTRY_CONFIRMATION_PENDING",)
+    assert second.reason_codes == ("ENTRY_CONFIRMATION_PENDING",)
+    assert third.action is TmfPaperCycleAction.ENTRY_FILLED
+    assert third.live_order_allowed is False
 
 
 def test_live_risk_quote_is_auditable() -> None:

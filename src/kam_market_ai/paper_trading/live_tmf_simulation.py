@@ -205,6 +205,9 @@ class TmfPaperSimulationConfig:
     structural_swing_lookback_candles: int = 24
     structural_swing_pivot_span: int = 2
     max_structural_stop_distance_points: Decimal = Decimal(120)
+    performance_recovery_minimum_trades: int = 6
+    performance_recovery_confirmation_candles: int = 3
+    performance_recovery_profit_factor_floor: Decimal = Decimal(1)
     initial_margin: Decimal = Decimal(35050)
     maintenance_margin: Decimal = Decimal(26900)
     margin_effective_at: datetime = datetime(2026, 8, 12, 5, 45, tzinfo=UTC)
@@ -239,6 +242,10 @@ class TmfPaperSimulationConfig:
             (
                 "max_structural_stop_distance_points",
                 self.max_structural_stop_distance_points,
+            ),
+            (
+                "performance_recovery_profit_factor_floor",
+                self.performance_recovery_profit_factor_floor,
             ),
             ("initial_cash", self.initial_cash),
             ("max_order_notional", self.max_order_notional),
@@ -297,6 +304,16 @@ class TmfPaperSimulationConfig:
             raise ValueError("entry_confirmation_candles must be positive.")
         if not isinstance(self.dynamic_entry_confirmation_enabled, bool):
             raise TypeError("dynamic_entry_confirmation_enabled must be a boolean.")
+        if (
+            isinstance(self.performance_recovery_minimum_trades, bool)
+            or self.performance_recovery_minimum_trades < 2
+        ):
+            raise ValueError("performance recovery minimum trades must be at least two.")
+        if (
+            isinstance(self.performance_recovery_confirmation_candles, bool)
+            or self.performance_recovery_confirmation_candles < 2
+        ):
+            raise ValueError("performance recovery confirmation candles must be at least two.")
         if (
             self.volatile_entry_confirmation_move_points
             < self.max_entry_confirmation_move_points
@@ -1346,6 +1363,36 @@ class LiveTmfPaperSimulation:
                         * self.config.entry_volatility_multiplier,
                     ),
                 )
+
+        closed_outcomes = [
+            event.realized_pnl
+            for event in self.journal.events
+            if event.event_type
+            in {
+                TmfPaperPerformanceEventType.STOP_LOSS_EXIT,
+                TmfPaperPerformanceEventType.PROFIT_LOCK_EXIT,
+                TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT,
+                TmfPaperPerformanceEventType.M15_MA20_RULE_EXIT,
+            }
+        ]
+        gross_profit = sum(
+            (value for value in closed_outcomes if value > 0), Decimal(0)
+        )
+        gross_loss = abs(
+            sum((value for value in closed_outcomes if value < 0), Decimal(0))
+        )
+        recovery_mode = (
+            direction.opportunity_grade == "B"
+            and len(closed_outcomes) >= self.config.performance_recovery_minimum_trades
+            and gross_loss > 0
+            and gross_profit / gross_loss
+            < self.config.performance_recovery_profit_factor_floor
+        )
+        if recovery_mode:
+            required_confirmation_candles = max(
+                required_confirmation_candles,
+                self.config.performance_recovery_confirmation_candles,
+            )
 
         if required_confirmation_candles > 1:
             if self._pending_entry_direction != direction.direction:
