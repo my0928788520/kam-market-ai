@@ -472,6 +472,8 @@ class TmfPaperPerformanceEvent:
     broker_connected: bool = False
     account_credentials_allowed: bool = False
     strategy_mode: str = "TREND"
+    stop_trigger_price: Decimal | None = None
+    exit_slippage_points: Decimal | None = None
 
     def __post_init__(self) -> None:
         if not self.trade_id or not self.instrument or self.instrument != self.instrument.upper():
@@ -515,6 +517,12 @@ class TmfPaperPerformanceEvent:
             raise ValueError("performance records are permanently paper-only.")
         if self.strategy_mode not in {"TREND", "RANGE"}:
             raise ValueError("strategy_mode must be TREND or RANGE.")
+        if self.stop_trigger_price is not None:
+            _decimal(self.stop_trigger_price, "stop_trigger_price", positive=True)
+        if self.exit_slippage_points is not None:
+            _decimal(self.exit_slippage_points, "exit_slippage_points")
+            if self.exit_slippage_points < 0:
+                raise ValueError("exit_slippage_points cannot be negative.")
 
     def canonical_payload(self) -> dict[str, object]:
         payload = {
@@ -551,6 +559,14 @@ class TmfPaperPerformanceEvent:
         }
         if self.strategy_mode != "TREND":
             payload["strategy_mode"] = self.strategy_mode
+        if self.stop_trigger_price is not None:
+            payload["stop_trigger_price"] = _decimal(
+                self.stop_trigger_price, "stop_trigger_price", positive=True
+            )
+        if self.exit_slippage_points is not None:
+            payload["exit_slippage_points"] = _decimal(
+                self.exit_slippage_points, "exit_slippage_points"
+            )
         return payload
 
     @property
@@ -1047,6 +1063,16 @@ class TmfPaperJournalStore:
             else str(item["previous_event_hash"]),
             Decimal(str(item["point_value"])),
             strategy_mode=str(item.get("strategy_mode", "TREND")),
+            stop_trigger_price=(
+                None
+                if item.get("stop_trigger_price") is None
+                else Decimal(str(item["stop_trigger_price"]))
+            ),
+            exit_slippage_points=(
+                None
+                if item.get("exit_slippage_points") is None
+                else Decimal(str(item["exit_slippage_points"]))
+            ),
         )
 
 
@@ -1905,12 +1931,22 @@ class LiveTmfPaperSimulation:
             buffer_points=self.config.emergency_stop_buffer_points,
         )
         if structural_stop_price is not None and not range_trade:
-            if stop_loss_price == initial_stop_loss_price:
-                stop_loss_price = structural_stop_price
-            elif entry.entry_side is PaperTradingSide.BUY:
-                stop_loss_price = max(stop_loss_price, structural_stop_price)
+            if entry.entry_side is PaperTradingSide.BUY:
+                entry_anchored_floor = (
+                    entry.entry_price - self.config.max_structural_stop_distance_points
+                )
+                bounded_structural_stop = max(
+                    structural_stop_price, entry_anchored_floor
+                )
+                stop_loss_price = max(stop_loss_price, bounded_structural_stop)
             else:
-                stop_loss_price = min(stop_loss_price, structural_stop_price)
+                entry_anchored_ceiling = (
+                    entry.entry_price + self.config.max_structural_stop_distance_points
+                )
+                bounded_structural_stop = min(
+                    structural_stop_price, entry_anchored_ceiling
+                )
+                stop_loss_price = min(stop_loss_price, bounded_structural_stop)
         take_profit_price = previous.take_profit_price
         trend_still_aligned = (
             entry.entry_side is PaperTradingSide.BUY
@@ -2100,6 +2136,18 @@ class LiveTmfPaperSimulation:
             ledger = self._release_margin(matched.ledger, fill, pnl)
             action = TmfPaperCycleAction.EXIT_FILLED
 
+        stop_exit = exit_type in {
+            TmfPaperPerformanceEventType.STOP_LOSS_EXIT,
+            TmfPaperPerformanceEventType.PROFIT_LOCK_EXIT,
+        }
+        exit_slippage_points = None
+        if stop_exit:
+            exit_slippage_points = max(
+                Decimal(0),
+                stop_loss_price - quote.price
+                if entry.entry_side is PaperTradingSide.BUY
+                else quote.price - stop_loss_price,
+            )
         event = TmfPaperPerformanceEvent(
             exit_type or TmfPaperPerformanceEventType.MARK,
             entry.trade_id,
@@ -2120,6 +2168,8 @@ class LiveTmfPaperSimulation:
             self.journal.events[-1].event_hash,
             self.config.point_value,
             strategy_mode=entry.strategy_mode,
+            stop_trigger_price=stop_loss_price if stop_exit else None,
+            exit_slippage_points=exit_slippage_points,
         )
         self._publish(self.journal.with_event(event, ledger))
         if exit_type is not None:

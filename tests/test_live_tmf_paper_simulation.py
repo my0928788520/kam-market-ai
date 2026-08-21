@@ -1337,7 +1337,7 @@ def test_open_position_waits_for_five_minute_structure_or_emergency_stop() -> No
     assert confirmed.performance_event.event_type is TmfPaperPerformanceEventType.STOP_LOSS_EXIT
 
 
-def test_open_position_uses_latest_confirmed_equal_wave_pivot_before_exit() -> None:
+def test_long_wave_pivot_never_widens_stop_beyond_initial_risk() -> None:
     session = LiveTmfPaperSimulation(config())
     enter(session)
     five_minute = tuple(
@@ -1387,25 +1387,44 @@ def test_open_position_uses_latest_confirmed_equal_wave_pivot_before_exit() -> N
     )
 
     assert held is not None
-    assert held.action is TmfPaperCycleAction.POSITION_MARKED
+    assert held.action is TmfPaperCycleAction.EXIT_FILLED
     assert held.performance_event is not None
-    assert held.performance_event.stop_loss_price == Decimal(21940)
-    assert held.journal.ledger.positions
+    assert held.performance_event.stop_loss_price == Decimal(21980)
+    assert held.performance_event.stop_trigger_price == Decimal(21980)
+    assert held.performance_event.exit_slippage_points == Decimal(25)
+    assert held.journal.ledger.positions == ()
+    payload = held.performance_event.canonical_payload()
+    assert payload["stop_trigger_price"] == "21980"
+    assert payload["exit_slippage_points"] == "25"
 
-    recovered = session.process_evaluation(
-        direction("AF"),
-        quote("22040", 26),
-        evaluated_at=NOW + timedelta(minutes=26),
+
+def test_entry_anchored_structural_limit_is_symmetric_and_stop_only_tightens() -> None:
+    long_session = LiveTmfPaperSimulation(
+        config(max_structural_stop_distance_points=Decimal(40))
     )
-    shadow = recovered.safe_payload()["performance_summary"]
-    assert recovered.action is TmfPaperCycleAction.EXIT_FILLED
-    assert shadow["stop_quality"] == "波浪保護有效"
-    assert shadow["shadow_fixed_stop_touches"] == 1
-    assert shadow["shadow_avoided_premature_exits"] == 1
-    assert shadow["shadow_incremental_pnl"] == "600"
+    enter(long_session)
+    long_mark = long_session.process_evaluation(
+        direction("AU"), quote("22010", 1),
+        evaluated_at=NOW + timedelta(minutes=1),
+        structural_stop_price=Decimal(21940),
+    )
+    assert long_mark.performance_event is not None
+    assert long_mark.performance_event.stop_loss_price == Decimal(21980)
+
+    short_session = LiveTmfPaperSimulation(
+        config(max_structural_stop_distance_points=Decimal(40))
+    )
+    short_session.process_evaluation(direction("BU"), quote("22000"), evaluated_at=NOW)
+    short_mark = short_session.process_evaluation(
+        direction("BU"), quote("21990", 1),
+        evaluated_at=NOW + timedelta(minutes=1),
+        structural_stop_price=Decimal(22060),
+    )
+    assert short_mark.performance_event is not None
+    assert short_mark.performance_event.stop_loss_price == Decimal(22020)
 
 
-def test_short_position_uses_confirmed_equal_wave_high_symmetrically() -> None:
+def test_short_wave_pivot_never_widens_stop_beyond_initial_risk() -> None:
     session = LiveTmfPaperSimulation(config())
     entered = session.process_evaluation(direction("BU"), quote("22000"), evaluated_at=NOW)
     assert entered.action is TmfPaperCycleAction.ENTRY_FILLED
@@ -1448,10 +1467,12 @@ def test_short_position_uses_confirmed_equal_wave_high_symmetrically() -> None:
     )
 
     assert held is not None
-    assert held.action is TmfPaperCycleAction.POSITION_MARKED
+    assert held.action is TmfPaperCycleAction.EXIT_FILLED
     assert held.performance_event is not None
-    assert held.performance_event.stop_loss_price == Decimal(22060)
-    assert held.journal.ledger.positions
+    assert held.performance_event.stop_loss_price == Decimal(22020)
+    assert held.performance_event.stop_trigger_price == Decimal(22020)
+    assert held.performance_event.exit_slippage_points == Decimal(25)
+    assert held.journal.ledger.positions == ()
 
 
 
