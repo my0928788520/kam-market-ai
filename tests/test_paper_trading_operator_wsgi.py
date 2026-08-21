@@ -566,8 +566,10 @@ def test_dashboard_renders_real_control_cells_and_coloured_cycle_structure() -> 
     assert "class='cycle-current-label'" in html and ">目前位置</text>" in html
     assert "class='cycle-position-pending'" not in html
     assert "preserveAspectRatio='xMidYMid meet'" in html
-    for field in ("目前位置", "循環狀態", "上一階段", "下一階段", "下一步", "風險"):
+    for field in ("週線現價", "週線20MA", "週線上壓", "週線下撐", "目前位置", "操作重點"):
         assert field in html
+    for hidden_detail in ("判斷依據", "循環狀態", "上一階段", "下一階段"):
+        assert hidden_detail not in html
     assert html.count("class='timeframe-card'") == 3
     assert "<strong>ND</strong>" not in html
     assert "三週期狀態" in html

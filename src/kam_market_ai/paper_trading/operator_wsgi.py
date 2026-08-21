@@ -126,14 +126,10 @@ def _cycle(view: PaperTradingOperatorView) -> str:
     raw = str(demo.get("u_stage", "U0"))
     index = _stage_index(raw)
     x, y = _POINTS[index]
-    stage, state = _STAGES[index]
+    stage = _STAGES[index][0]
     if demo.get("cycle_label") is not None:
         stage = str(demo["cycle_label"])
-        state = str(demo["cycle_label"])
-    previous = "資料恢復後判讀" if index == 0 else _STAGES[index - 1][0]
-    following = "資料恢復後判讀" if index == 0 else _STAGES[min(8, index + 1)][0]
     next_step = str(demo.get("next_step", "等待資料完整"))
-    risk = "不可判讀" if index == 0 else "偏高" if index >= 5 else "風險受控"
     market_references = _cycle_market_references(demo)
     details = demo.get("timeframe_details")
     details = details if isinstance(details, Mapping) else {}
@@ -198,13 +194,8 @@ def _cycle(view: PaperTradingOperatorView) -> str:
         </div>
         <dl class='cycle-info'>
           {market_references}
-          <div><dt>判斷依據</dt><dd>{escape(str(demo.get('cycle_source', '台灣加權指數 TAIEX 週線')))}</dd></div>
           <div><dt>目前位置</dt><dd>{escape(stage)}</dd></div>
-          <div><dt>循環狀態</dt><dd>{escape(state)}</dd></div>
-          <div><dt>上一階段</dt><dd>{escape(previous)}</dd></div>
-          <div><dt>下一階段</dt><dd>{escape(following)}</dd></div>
-          <div class='cycle-next-step'><dt>下一步</dt><dd>{escape(next_step)}</dd></div>
-          <div><dt>風險</dt><dd>{risk}</dd></div>
+          <div class='cycle-next-step'><dt>操作重點</dt><dd>{escape(next_step)}</dd></div>
         </dl>
       </div>
       <p class='cycle-note'>倒 U 以週線現價、20MA、20 棒壓力與支撐作位置參考；不是買賣訊號。</p>

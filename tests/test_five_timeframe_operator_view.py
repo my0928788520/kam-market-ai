@@ -179,7 +179,8 @@ def test_market_dashboard_exposes_armed_auto_paper_runtime_without_live_executio
     page = render_operator_html(view)
 
     assert "自動模擬已啟用" in page
-    assert "台灣加權指數 TAIEX 週線" in page
+    assert view.demo["cycle_source"] == "台灣加權指數 TAIEX 週線"
+    assert "判斷依據" not in page
     assert "起跌形成" in page
     assert "自動模擬執行" in page
     assert "KAM 買進條件尚未成立" in page
