@@ -89,9 +89,12 @@ def test_preview_runs_all_five_timeframes_and_remains_fail_closed() -> None:
         "ma20",
         "price_vs_ma20",
         "ma20_direction",
-        "range_resistance",
-        "range_support",
-        "range_window_bars",
+            "range_resistance",
+            "range_support",
+            "range_width",
+            "range_support_touches",
+            "range_resistance_touches",
+            "range_window_bars",
         "range_excludes_latest",
     }
     assert payload["timeframes"]["5m"]["last_price"] == 102

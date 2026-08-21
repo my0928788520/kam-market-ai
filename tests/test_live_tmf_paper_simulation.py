@@ -81,6 +81,8 @@ def range_direction(price: float):
         m15_range_support=22000.0,
         m15_range_resistance=22100.0,
         m15_range_window_bars=20,
+        m15_range_support_touches=3,
+        m15_range_resistance_touches=3,
         m60_ma20_support="held",
         m60_market_bias="neutral",
     )

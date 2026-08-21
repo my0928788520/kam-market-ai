@@ -90,6 +90,8 @@ _PAPER_REASON_LABELS = {
     "M15_RANGE_RESISTANCE_SHORT_TRIGGER": "盤整上緣遇壓・建立模擬空單",
     "M15_RANGE_MIDDLE_NO_CHASE": "位於盤整中央・不追價",
     "M15_RANGE_BREAKOUT_WAITING_RETEST": "價格離開盤整區・等待回測確認",
+    "M15_RANGE_QUALITY_INSUFFICIENT": "盤整上下緣確認不足・暫不進場",
+    "M15_RANGE_REWARD_RISK_INSUFFICIENT": "盤整進場風險報酬不足・等待更佳位置",
     "RANGE_PAPER_TRADING_DISABLED": "盤整模擬策略尚未啟用",
     "RANGE_BOUNDARIES_MISSING": "盤整上下緣資料不足",
     "RANGE_RISK_REWARD_INVALID": "盤整進場位置風險報酬不合格",

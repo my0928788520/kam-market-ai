@@ -38,6 +38,8 @@ class FiveTimeframePaperDirection:
     range_support: float | None = None
     range_resistance: float | None = None
     range_position: str | None = None
+    range_quality_score: int | None = None
+    range_reward_risk_ratio: float | None = None
     max_contracts: int = 1
 
     def safe_payload(self) -> dict[str, object]:
@@ -69,6 +71,8 @@ class FiveTimeframePaperDirection:
             "range_support": self.range_support,
             "range_resistance": self.range_resistance,
             "range_position": self.range_position,
+            "range_quality_score": self.range_quality_score,
+            "range_reward_risk_ratio": self.range_reward_risk_ratio,
             "max_contracts": 1,
             "scale_in_allowed": False,
             "averaging_down_allowed": False,
@@ -91,6 +95,8 @@ def decide_five_timeframe_paper_direction(
     m15_range_support: float | None = None,
     m15_range_resistance: float | None = None,
     m15_range_window_bars: int | None = None,
+    m15_range_support_touches: int | None = None,
+    m15_range_resistance_touches: int | None = None,
 ) -> FiveTimeframePaperDirection:
     """Select a paper direction from M60 location and an M15 trigger.
 
@@ -209,11 +215,28 @@ def decide_five_timeframe_paper_direction(
         assert m15_range_resistance is not None
         width = m15_range_resistance - m15_range_support
         edge = min(30.0, max(10.0, width * 0.20))
+        support_touches = m15_range_support_touches or 0
+        resistance_touches = m15_range_resistance_touches or 0
+        quality_score = (
+            (20 if width >= 40.0 else 0)
+            + (25 if support_touches >= 2 else 0)
+            + (25 if resistance_touches >= 2 else 0)
+            + 15
+            + 15
+        )
         range_payload = {
             "strategy_mode": "RANGE",
             "range_support": m15_range_support,
             "range_resistance": m15_range_resistance,
+            "range_quality_score": quality_score,
         }
+        if quality_score < 100:
+            return FiveTimeframePaperDirection(
+                "HOLD", "NO_PAPER_ORDER", "M15_RANGE_QUALITY_INSUFFICIENT",
+                codes, False, opportunity_grade="C", opportunity_mode="RANGE_WAIT",
+                missing_condition="等待盤整上下緣再次確認", range_position="unqualified",
+                **range_payload, **payload,
+            )
         if current_price < m15_range_support or current_price > m15_range_resistance:
             return FiveTimeframePaperDirection(
                 "HOLD", "NO_PAPER_ORDER", "M15_RANGE_BREAKOUT_WAITING_RETEST",
@@ -222,18 +245,40 @@ def decide_five_timeframe_paper_direction(
                 **range_payload, **payload,
             )
         if current_price <= m15_range_support + edge:
+            risk = current_price - m15_range_support + 5.0
+            reward = m15_range_resistance - current_price - 5.0
+            ratio = reward / risk if risk > 0 else 0.0
+            if ratio < 2.0:
+                return FiveTimeframePaperDirection(
+                    "HOLD", "NO_PAPER_ORDER", "M15_RANGE_REWARD_RISK_INSUFFICIENT",
+                    codes, False, opportunity_grade="C", opportunity_mode="RANGE_WAIT",
+                    missing_condition="等待更接近盤整下緣", range_position="lower_edge",
+                    range_reward_risk_ratio=round(ratio, 2), **range_payload, **payload,
+                )
             return FiveTimeframePaperDirection(
                 "LONG", "PAPER_BUY", "M15_RANGE_SUPPORT_LONG_TRIGGER", codes, True,
                 opportunity_grade="B", opportunity_mode="PAPER_RANGE_CANDIDATE",
                 opportunity_direction="LONG", early_trigger="15分盤整下緣承接",
-                range_position="lower_edge", **range_payload, **payload,
+                range_position="lower_edge", range_reward_risk_ratio=round(ratio, 2),
+                **range_payload, **payload,
             )
         if current_price >= m15_range_resistance - edge:
+            risk = m15_range_resistance - current_price + 5.0
+            reward = current_price - m15_range_support - 5.0
+            ratio = reward / risk if risk > 0 else 0.0
+            if ratio < 2.0:
+                return FiveTimeframePaperDirection(
+                    "HOLD", "NO_PAPER_ORDER", "M15_RANGE_REWARD_RISK_INSUFFICIENT",
+                    codes, False, opportunity_grade="C", opportunity_mode="RANGE_WAIT",
+                    missing_condition="等待更接近盤整上緣", range_position="upper_edge",
+                    range_reward_risk_ratio=round(ratio, 2), **range_payload, **payload,
+                )
             return FiveTimeframePaperDirection(
                 "SHORT", "PAPER_SELL", "M15_RANGE_RESISTANCE_SHORT_TRIGGER", codes, True,
                 opportunity_grade="B", opportunity_mode="PAPER_RANGE_CANDIDATE",
                 opportunity_direction="SHORT", early_trigger="15分盤整上緣遇壓",
-                range_position="upper_edge", **range_payload, **payload,
+                range_position="upper_edge", range_reward_risk_ratio=round(ratio, 2),
+                **range_payload, **payload,
             )
         return FiveTimeframePaperDirection(
             "HOLD", "NO_PAPER_ORDER", "M15_RANGE_MIDDLE_NO_CHASE", codes, False,

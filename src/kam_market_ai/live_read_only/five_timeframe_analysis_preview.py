@@ -331,9 +331,24 @@ def _range_reference_metrics(
     reference = candles[:-1] if exclude_latest else candles
     window = reference[-_REFERENCE_WINDOW_BARS:]
     enough = len(window) >= _REFERENCE_MINIMUM_BARS
+    resistance = max(float(item.high) for item in window) if enough else None
+    support = min(float(item.low) for item in window) if enough else None
+    width = resistance - support if resistance is not None and support is not None else None
+    touch_tolerance = max(5.0, width * 0.08) if width is not None else None
     return {
-        "range_resistance": max(float(item.high) for item in window) if enough else None,
-        "range_support": min(float(item.low) for item in window) if enough else None,
+        "range_resistance": resistance,
+        "range_support": support,
+        "range_width": width,
+        "range_support_touches": (
+            sum(float(item.low) <= support + touch_tolerance for item in window)
+            if support is not None and touch_tolerance is not None
+            else 0
+        ),
+        "range_resistance_touches": (
+            sum(float(item.high) >= resistance - touch_tolerance for item in window)
+            if resistance is not None and touch_tolerance is not None
+            else 0
+        ),
         "range_window_bars": len(window),
         "range_excludes_latest": exclude_latest,
     }
@@ -511,6 +526,8 @@ def build_verified_five_timeframe_analysis_preview(
         m15_range_support=analysis["15m"].get("range_support"),
         m15_range_resistance=analysis["15m"].get("range_resistance"),
         m15_range_window_bars=analysis["15m"].get("range_window_bars"),
+        m15_range_support_touches=analysis["15m"].get("range_support_touches"),
+        m15_range_resistance_touches=analysis["15m"].get("range_resistance_touches"),
         daily_descending_trendline_state=str(
             analysis["1d"].get("descending_trendline_state", "insufficient")
         ),

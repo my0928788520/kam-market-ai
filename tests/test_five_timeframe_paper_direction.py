@@ -242,6 +242,8 @@ def test_neutral_m60_flat_m15_uses_range_edges_without_live_orders(
         m15_range_support=44000.0,
         m15_range_resistance=44100.0,
         m15_range_window_bars=20,
+        m15_range_support_touches=3,
+        m15_range_resistance_touches=3,
         m60_ma20_support="held",
         m60_market_bias="neutral",
     )
@@ -261,11 +263,44 @@ def test_range_breakout_waits_for_retest_instead_of_chasing() -> None:
         states("ND"), current_price=44110.0,
         m15_ma20_position="above", m15_ma20_direction="flat",
         m15_range_support=44000.0, m15_range_resistance=44100.0,
-        m15_range_window_bars=20, m60_ma20_support="held",
+        m15_range_window_bars=20, m15_range_support_touches=3,
+        m15_range_resistance_touches=3, m60_ma20_support="held",
         m60_market_bias="neutral",
     )
 
     assert result.reason_code == "M15_RANGE_BREAKOUT_WAITING_RETEST"
+    assert result.eligible is False
+    assert result.live_order_allowed is False
+
+
+def test_range_requires_two_confirmations_at_each_edge() -> None:
+    result = decide_five_timeframe_paper_direction(
+        states("ND"), current_price=44005.0,
+        m15_ma20_position="equal", m15_ma20_direction="flat",
+        m15_range_support=44000.0, m15_range_resistance=44100.0,
+        m15_range_window_bars=20, m15_range_support_touches=1,
+        m15_range_resistance_touches=3, m60_ma20_support="held",
+        m60_market_bias="neutral",
+    )
+
+    assert result.reason_code == "M15_RANGE_QUALITY_INSUFFICIENT"
+    assert result.range_quality_score == 75
+    assert result.eligible is False
+    assert result.live_order_allowed is False
+
+
+def test_range_rejects_edge_entry_below_two_to_one_reward_risk() -> None:
+    result = decide_five_timeframe_paper_direction(
+        states("ND"), current_price=44010.0,
+        m15_ma20_position="equal", m15_ma20_direction="flat",
+        m15_range_support=44000.0, m15_range_resistance=44040.0,
+        m15_range_window_bars=20, m15_range_support_touches=3,
+        m15_range_resistance_touches=3, m60_ma20_support="held",
+        m60_market_bias="neutral",
+    )
+
+    assert result.reason_code == "M15_RANGE_REWARD_RISK_INSUFFICIENT"
+    assert result.range_reward_risk_ratio == 1.67
     assert result.eligible is False
     assert result.live_order_allowed is False
 
