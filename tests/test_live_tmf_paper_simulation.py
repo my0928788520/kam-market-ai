@@ -68,6 +68,24 @@ def direction(code: str):
     )
 
 
+def range_direction(price: float):
+    states = tuple(
+        MappedKamTimeframeState(timeframe, "ND", "N", "D", ())
+        for timeframe in ("1w", "1d", "60m", "15m", "5m")
+    )
+    return decide_five_timeframe_paper_direction(
+        states,
+        current_price=price,
+        m15_ma20_position="equal",
+        m15_ma20_direction="flat",
+        m15_range_support=22000.0,
+        m15_range_resistance=22100.0,
+        m15_range_window_bars=20,
+        m60_ma20_support="held",
+        m60_market_bias="neutral",
+    )
+
+
 def quote(price: str, minute: int = 0) -> TmfPaperQuote:
     return TmfPaperQuote(
         "TMFH6",
@@ -114,6 +132,48 @@ def test_live_risk_quote_is_auditable() -> None:
     assert value.price == Decimal(44779)
     assert value.price_policy == "FUBON_LATEST_VERIFIED_TRADE"
     assert len(value.quote_hash) == 64
+
+
+def test_range_entry_uses_boundaries_and_exits_at_opposite_edge() -> None:
+    session = LiveTmfPaperSimulation(
+        config(range_paper_trading_enabled=True, trend_hold_enabled=True)
+    )
+
+    entered = session.process_evaluation(
+        range_direction(22010.0), quote("22010"), evaluated_at=NOW
+    )
+    entry = entered.performance_event
+
+    assert entered.action is TmfPaperCycleAction.ENTRY_FILLED
+    assert entry is not None
+    assert entry.strategy_mode == "RANGE"
+    assert entry.stop_loss_price == Decimal(21995)
+    assert entry.take_profit_price == Decimal(22095)
+    assert entry.live_order_allowed is False
+
+    exited = session.process_evaluation(
+        range_direction(22090.0), quote("22095", 1),
+        evaluated_at=NOW + timedelta(minutes=1),
+    )
+
+    assert exited.action is TmfPaperCycleAction.EXIT_FILLED
+    assert exited.performance_event is not None
+    assert exited.performance_event.event_type is TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT
+    assert exited.performance_event.strategy_mode == "RANGE"
+    assert exited.reason_codes == ("RANGE_TARGET_EXIT",)
+    assert exited.live_order_allowed is False
+
+
+def test_range_entry_is_disabled_by_default() -> None:
+    session = LiveTmfPaperSimulation(config())
+
+    result = session.process_evaluation(
+        range_direction(22010.0), quote("22010"), evaluated_at=NOW
+    )
+
+    assert result.action is TmfPaperCycleAction.HOLD
+    assert result.reason_codes == ("RANGE_PAPER_TRADING_DISABLED",)
+    assert result.live_order_allowed is False
 
 
 def test_default_session_holds_without_kam_entry_condition() -> None:

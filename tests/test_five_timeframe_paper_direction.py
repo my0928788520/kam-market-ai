@@ -220,6 +220,56 @@ def test_gate_still_requires_exactly_five_mapped_states_for_diagnostics() -> Non
         decide_five_timeframe_paper_direction(states("AU")[:4])
 
 
+@pytest.mark.parametrize(
+    "price,expected_direction,expected_action,expected_position",
+    [
+        (44010.0, "LONG", "PAPER_BUY", "lower_edge"),
+        (44090.0, "SHORT", "PAPER_SELL", "upper_edge"),
+        (44050.0, "HOLD", "NO_PAPER_ORDER", "middle"),
+    ],
+)
+def test_neutral_m60_flat_m15_uses_range_edges_without_live_orders(
+    price: float,
+    expected_direction: str,
+    expected_action: str,
+    expected_position: str,
+) -> None:
+    result = decide_five_timeframe_paper_direction(
+        states("ND"),
+        current_price=price,
+        m15_ma20_position="equal",
+        m15_ma20_direction="flat",
+        m15_range_support=44000.0,
+        m15_range_resistance=44100.0,
+        m15_range_window_bars=20,
+        m60_ma20_support="held",
+        m60_market_bias="neutral",
+    )
+
+    assert (result.direction, result.action) == (expected_direction, expected_action)
+    assert result.eligible is (expected_direction != "HOLD")
+    assert result.strategy_mode == "RANGE"
+    assert result.range_position == expected_position
+    assert result.range_support == 44000.0
+    assert result.range_resistance == 44100.0
+    assert result.dry_run is True
+    assert result.live_order_allowed is False
+
+
+def test_range_breakout_waits_for_retest_instead_of_chasing() -> None:
+    result = decide_five_timeframe_paper_direction(
+        states("ND"), current_price=44110.0,
+        m15_ma20_position="above", m15_ma20_direction="flat",
+        m15_range_support=44000.0, m15_range_resistance=44100.0,
+        m15_range_window_bars=20, m60_ma20_support="held",
+        m60_market_bias="neutral",
+    )
+
+    assert result.reason_code == "M15_RANGE_BREAKOUT_WAITING_RETEST"
+    assert result.eligible is False
+    assert result.live_order_allowed is False
+
+
 def test_normalized_inputs_are_still_validated() -> None:
     with pytest.raises(ValueError, match="m60_market_bias"):
         decide_five_timeframe_paper_direction(states("AU"), m60_market_bias="up")

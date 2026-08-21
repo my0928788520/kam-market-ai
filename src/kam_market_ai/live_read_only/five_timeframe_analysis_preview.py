@@ -503,6 +503,14 @@ def build_verified_five_timeframe_analysis_preview(
             if analysis["15m"].get("ma20") is not None
             else None
         ),
+        current_price=(
+            float(analysis["5m"]["last_price"])
+            if analysis["5m"].get("last_price") is not None
+            else None
+        ),
+        m15_range_support=analysis["15m"].get("range_support"),
+        m15_range_resistance=analysis["15m"].get("range_resistance"),
+        m15_range_window_bars=analysis["15m"].get("range_window_bars"),
         daily_descending_trendline_state=str(
             analysis["1d"].get("descending_trendline_state", "insufficient")
         ),

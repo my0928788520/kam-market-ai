@@ -86,6 +86,15 @@ _PAPER_REASON_LABELS = {
     ),
     "M60_LOCATION_INSUFFICIENT": "60分位置資料不足・暫不進場",
     "M60_LOCATION_NOT_DIRECTIONAL": "60分位置尚未形成明確多空方向",
+    "M15_RANGE_SUPPORT_LONG_TRIGGER": "盤整下緣承接・建立模擬多單",
+    "M15_RANGE_RESISTANCE_SHORT_TRIGGER": "盤整上緣遇壓・建立模擬空單",
+    "M15_RANGE_MIDDLE_NO_CHASE": "位於盤整中央・不追價",
+    "M15_RANGE_BREAKOUT_WAITING_RETEST": "價格離開盤整區・等待回測確認",
+    "RANGE_PAPER_TRADING_DISABLED": "盤整模擬策略尚未啟用",
+    "RANGE_BOUNDARIES_MISSING": "盤整上下緣資料不足",
+    "RANGE_RISK_REWARD_INVALID": "盤整進場位置風險報酬不合格",
+    "RANGE_TARGET_EXIT": "抵達盤整另一側・模擬獲利平倉",
+    "RANGE_BREAKOUT_EXIT": "盤整結構失效・模擬停損平倉",
     "FIVE_TIMEFRAME_NOT_FULLY_ALIGNED": "五週期方向尚未一致・維持觀望",
 }
 _LINE_ALERT_STATUS_LABELS = {

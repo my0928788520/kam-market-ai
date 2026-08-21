@@ -34,6 +34,10 @@ class FiveTimeframePaperDirection:
     missing_condition: str | None = None
     early_trigger: str | None = None
     pullback_reference: float | None = None
+    strategy_mode: str = "TREND"
+    range_support: float | None = None
+    range_resistance: float | None = None
+    range_position: str | None = None
     max_contracts: int = 1
 
     def safe_payload(self) -> dict[str, object]:
@@ -61,6 +65,10 @@ class FiveTimeframePaperDirection:
             "missing_condition": self.missing_condition,
             "early_trigger": self.early_trigger,
             "pullback_reference": self.pullback_reference,
+            "strategy_mode": self.strategy_mode,
+            "range_support": self.range_support,
+            "range_resistance": self.range_resistance,
+            "range_position": self.range_position,
             "max_contracts": 1,
             "scale_in_allowed": False,
             "averaging_down_allowed": False,
@@ -79,6 +87,10 @@ def decide_five_timeframe_paper_direction(
     m60_ma20_support: str | None = None,
     m60_market_bias: str | None = None,
     m15_ma20_value: float | None = None,
+    current_price: float | None = None,
+    m15_range_support: float | None = None,
+    m15_range_resistance: float | None = None,
+    m15_range_window_bars: int | None = None,
 ) -> FiveTimeframePaperDirection:
     """Select a paper direction from M60 location and an M15 trigger.
 
@@ -179,6 +191,56 @@ def decide_five_timeframe_paper_direction(
         reason_code = "M60_LOCATION_INSUFFICIENT"
     else:
         reason_code = "M60_LOCATION_NOT_DIRECTIONAL"
+
+    range_values_ready = (
+        current_price is not None
+        and m15_range_support is not None
+        and m15_range_resistance is not None
+        and m15_range_resistance > m15_range_support
+        and (m15_range_window_bars or 0) >= 10
+    )
+    if (
+        range_values_ready
+        and m60_market_bias == "neutral"
+        and m15_ma20_direction == "flat"
+    ):
+        assert current_price is not None
+        assert m15_range_support is not None
+        assert m15_range_resistance is not None
+        width = m15_range_resistance - m15_range_support
+        edge = min(30.0, max(10.0, width * 0.20))
+        range_payload = {
+            "strategy_mode": "RANGE",
+            "range_support": m15_range_support,
+            "range_resistance": m15_range_resistance,
+        }
+        if current_price < m15_range_support or current_price > m15_range_resistance:
+            return FiveTimeframePaperDirection(
+                "HOLD", "NO_PAPER_ORDER", "M15_RANGE_BREAKOUT_WAITING_RETEST",
+                codes, False, opportunity_grade="C", opportunity_mode="RANGE_WAIT",
+                missing_condition="等待突破後回測確認", range_position="outside",
+                **range_payload, **payload,
+            )
+        if current_price <= m15_range_support + edge:
+            return FiveTimeframePaperDirection(
+                "LONG", "PAPER_BUY", "M15_RANGE_SUPPORT_LONG_TRIGGER", codes, True,
+                opportunity_grade="B", opportunity_mode="PAPER_RANGE_CANDIDATE",
+                opportunity_direction="LONG", early_trigger="15分盤整下緣承接",
+                range_position="lower_edge", **range_payload, **payload,
+            )
+        if current_price >= m15_range_resistance - edge:
+            return FiveTimeframePaperDirection(
+                "SHORT", "PAPER_SELL", "M15_RANGE_RESISTANCE_SHORT_TRIGGER", codes, True,
+                opportunity_grade="B", opportunity_mode="PAPER_RANGE_CANDIDATE",
+                opportunity_direction="SHORT", early_trigger="15分盤整上緣遇壓",
+                range_position="upper_edge", **range_payload, **payload,
+            )
+        return FiveTimeframePaperDirection(
+            "HOLD", "NO_PAPER_ORDER", "M15_RANGE_MIDDLE_NO_CHASE", codes, False,
+            opportunity_grade="C", opportunity_mode="RANGE_WAIT",
+            missing_condition="等待接近盤整上緣或下緣", range_position="middle",
+            **range_payload, **payload,
+        )
 
     shadow_directional = (
         m60_market_bias == "bullish" and m60_ma20_support in {"held", "retest_held"}

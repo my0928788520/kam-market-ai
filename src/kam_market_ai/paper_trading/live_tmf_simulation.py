@@ -192,6 +192,9 @@ class TmfPaperSimulationConfig:
     reentry_cooldown_minutes: int = 15
     same_direction_profit_reentry_enabled: bool = False
     profit_reentry_pullback_points: Decimal = Decimal(10)
+    range_paper_trading_enabled: bool = False
+    range_stop_buffer_points: Decimal = Decimal(5)
+    range_target_buffer_points: Decimal = Decimal(5)
     entry_confirmation_candles: int = 1
     max_entry_confirmation_move_points: Decimal = Decimal(20)
     dynamic_entry_confirmation_enabled: bool = False
@@ -241,6 +244,8 @@ class TmfPaperSimulationConfig:
             ("max_order_notional", self.max_order_notional),
             ("max_daily_loss", self.max_daily_loss),
             ("profit_reentry_pullback_points", self.profit_reentry_pullback_points),
+            ("range_stop_buffer_points", self.range_stop_buffer_points),
+            ("range_target_buffer_points", self.range_target_buffer_points),
             ("initial_margin", self.initial_margin),
             ("maintenance_margin", self.maintenance_margin),
         ):
@@ -283,6 +288,8 @@ class TmfPaperSimulationConfig:
             raise ValueError("reentry_cooldown_minutes must be zero or positive.")
         if not isinstance(self.same_direction_profit_reentry_enabled, bool):
             raise TypeError("same_direction_profit_reentry_enabled must be a boolean.")
+        if not isinstance(self.range_paper_trading_enabled, bool):
+            raise TypeError("range_paper_trading_enabled must be a boolean.")
         if (
             isinstance(self.entry_confirmation_candles, bool)
             or self.entry_confirmation_candles <= 0
@@ -447,6 +454,7 @@ class TmfPaperPerformanceEvent:
     live_order_allowed: bool = False
     broker_connected: bool = False
     account_credentials_allowed: bool = False
+    strategy_mode: str = "TREND"
 
     def __post_init__(self) -> None:
         if not self.trade_id or not self.instrument or self.instrument != self.instrument.upper():
@@ -488,9 +496,11 @@ class TmfPaperPerformanceEvent:
             or self.account_credentials_allowed
         ):
             raise ValueError("performance records are permanently paper-only.")
+        if self.strategy_mode not in {"TREND", "RANGE"}:
+            raise ValueError("strategy_mode must be TREND or RANGE.")
 
     def canonical_payload(self) -> dict[str, object]:
-        return {
+        payload = {
             "event_type": self.event_type.value,
             "trade_id": self.trade_id,
             "instrument": self.instrument,
@@ -522,6 +532,9 @@ class TmfPaperPerformanceEvent:
             "broker_connected": False,
             "account_credentials_allowed": False,
         }
+        if self.strategy_mode != "TREND":
+            payload["strategy_mode"] = self.strategy_mode
+        return payload
 
     @property
     def event_hash(self) -> str:
@@ -1016,6 +1029,7 @@ class TmfPaperJournalStore:
             if item["previous_event_hash"] is None
             else str(item["previous_event_hash"]),
             Decimal(str(item["point_value"])),
+            strategy_mode=str(item.get("strategy_mode", "TREND")),
         )
 
 
@@ -1302,6 +1316,15 @@ class LiveTmfPaperSimulation:
                 quote,
                 reasons=("KAM_ENTRY_CONDITION_NOT_MET",),
             )
+        is_range_entry = direction.strategy_mode == "RANGE"
+        if is_range_entry and not self.config.range_paper_trading_enabled:
+            self._reset_entry_confirmation()
+            return self._result(
+                TmfPaperCycleAction.HOLD,
+                direction.direction,
+                quote,
+                reasons=("RANGE_PAPER_TRADING_DISABLED",),
+            )
 
         required_confirmation_candles = self.config.entry_confirmation_candles
         maximum_confirmation_move = self.config.max_entry_confirmation_move_points
@@ -1540,16 +1563,44 @@ class LiveTmfPaperSimulation:
                 reasons=matched.reason_codes or ("PAPER_FILL_NOT_COMPLETED",),
             )
         fill = matched.fills[0]
-        stop = quote.price + (
-            -self.config.stop_loss_points
-            if entry_side is PaperTradingSide.BUY
-            else self.config.stop_loss_points
-        )
-        take = quote.price + (
-            self.config.take_profit_points
-            if entry_side is PaperTradingSide.BUY
-            else -self.config.take_profit_points
-        )
+        if is_range_entry:
+            if direction.range_support is None or direction.range_resistance is None:
+                return self._result(
+                    TmfPaperCycleAction.REJECTED,
+                    direction.direction,
+                    quote,
+                    proposal_hash=proposal.proposal_hash,
+                    reasons=("RANGE_BOUNDARIES_MISSING",),
+                )
+            support = Decimal(str(direction.range_support))
+            resistance = Decimal(str(direction.range_resistance))
+            if entry_side is PaperTradingSide.BUY:
+                stop = support - self.config.range_stop_buffer_points
+                take = resistance - self.config.range_target_buffer_points
+                valid_range_order = stop < quote.price < take
+            else:
+                stop = resistance + self.config.range_stop_buffer_points
+                take = support + self.config.range_target_buffer_points
+                valid_range_order = take < quote.price < stop
+            if not valid_range_order:
+                return self._result(
+                    TmfPaperCycleAction.REJECTED,
+                    direction.direction,
+                    quote,
+                    proposal_hash=proposal.proposal_hash,
+                    reasons=("RANGE_RISK_REWARD_INVALID",),
+                )
+        else:
+            stop = quote.price + (
+                -self.config.stop_loss_points
+                if entry_side is PaperTradingSide.BUY
+                else self.config.stop_loss_points
+            )
+            take = quote.price + (
+                self.config.take_profit_points
+                if entry_side is PaperTradingSide.BUY
+                else -self.config.take_profit_points
+            )
         event = TmfPaperPerformanceEvent(
             TmfPaperPerformanceEventType.ENTRY,
             request.idempotency_key,
@@ -1569,6 +1620,7 @@ class LiveTmfPaperSimulation:
             fill.fill_hash,
             self.journal.events[-1].event_hash if self.journal.events else None,
             self.config.point_value,
+            strategy_mode="RANGE" if is_range_entry else "TREND",
         )
         margin_ledger = self._reserve_margin(matched.ledger, fill)
         self._publish(self.journal.with_event(event, margin_ledger))
@@ -1785,6 +1837,7 @@ class LiveTmfPaperSimulation:
         mfe = max(previous.max_favorable_excursion, pnl, Decimal(0))
         mae = min(previous.max_adverse_excursion, pnl, Decimal(0))
         stop_loss_price = previous.stop_loss_price
+        range_trade = entry.strategy_mode == "RANGE"
         initial_stop_loss_price = entry.entry_price + (
             -self.config.stop_loss_points
             if entry.entry_side is PaperTradingSide.BUY
@@ -1804,7 +1857,7 @@ class LiveTmfPaperSimulation:
             wave_pivot_price=structural_stop_price,
             buffer_points=self.config.emergency_stop_buffer_points,
         )
-        if structural_stop_price is not None:
+        if structural_stop_price is not None and not range_trade:
             if stop_loss_price == initial_stop_loss_price:
                 stop_loss_price = structural_stop_price
             elif entry.entry_side is PaperTradingSide.BUY:
@@ -1832,6 +1885,7 @@ class LiveTmfPaperSimulation:
         )
         trend_hold_extended = (
             self.config.trend_hold_enabled
+            and not range_trade
             and trend_still_aligned
             and take_profit_reached
         )
@@ -1887,9 +1941,12 @@ class LiveTmfPaperSimulation:
             )
         exit_type: TmfPaperPerformanceEventType | None = None
         ma20_exit = (
-            entry.entry_side is PaperTradingSide.BUY
+            not range_trade
+            and entry.entry_side is PaperTradingSide.BUY
             and direction.m15_ma20_position == "below"
         ) or (
+            not range_trade
+            and
             entry.entry_side is PaperTradingSide.SELL
             and direction.m15_ma20_position == "above"
         )
@@ -2015,6 +2072,7 @@ class LiveTmfPaperSimulation:
             fill_hash,
             self.journal.events[-1].event_hash,
             self.config.point_value,
+            strategy_mode=entry.strategy_mode,
         )
         self._publish(self.journal.with_event(event, ledger))
         if exit_type is not None:
@@ -2032,6 +2090,11 @@ class LiveTmfPaperSimulation:
                 self._profit_reentry_exit_price = quote.price
                 self._profit_reentry_pullback_seen = False
         reasons = (
+            ("RANGE_TARGET_EXIT",)
+            if range_trade and exit_type is TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT
+            else ("RANGE_BREAKOUT_EXIT",)
+            if range_trade and exit_type is TmfPaperPerformanceEventType.STOP_LOSS_EXIT
+            else
             ("M15_MA20_RULE_EXIT",)
             if exit_type is TmfPaperPerformanceEventType.M15_MA20_RULE_EXIT
             else ("PROFIT_LOCK_EXIT",)
