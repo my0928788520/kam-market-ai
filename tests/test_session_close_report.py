@@ -68,8 +68,30 @@ def test_night_report_combines_direction_volume_volatility_us_futures_and_fx() -
     assert "成交量：1.20倍20期均量" in alert.text
     assert "獨立波動：1.40倍20期均幅" in alert.text
     assert "標普期貨：+0.50%（延遲參考）" in alert.text
-    assert "占比為規則模型估計，尚非歷史校準勝率" in alert.text
+    assert "當盤占比為線型量價規則估計；歷史校準率另列" in alert.text
     assert alert.live_order_allowed is False
+
+
+def test_report_includes_line_volume_confirmation_and_historical_calibration() -> None:
+    calibration = {
+        "current_confirmation": {
+            "line_confirmation": "confirmed",
+            "volume_confirmation": "放量確認",
+            "historical_group": {
+                "calibrated_success_rate": 62.5,
+                "sample_size": 40,
+            },
+        }
+    }
+    alert = build_session_close_alert(
+        payload(),
+        context(),
+        session="regular",
+        observed_at=datetime(2026, 8, 21, 5, 50, tzinfo=UTC),
+        calibration=calibration,
+    )
+    assert "線型確認：線型同向確認｜放量確認" in alert.text
+    assert "歷史校準：62.5%（40筆・初步可信）" in alert.text
 
 
 def test_incomplete_external_context_stays_explicit_instead_of_inventing_data() -> None:

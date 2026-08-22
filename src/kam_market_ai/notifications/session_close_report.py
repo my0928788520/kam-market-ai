@@ -138,6 +138,7 @@ def build_session_close_alert(
     *,
     session: str,
     observed_at: datetime,
+    calibration: Mapping[str, object] | None = None,
 ) -> LinePendingOrderAlert:
     if session not in {"regular", "afterhours"} or observed_at.tzinfo is None:
         raise ValueError("invalid session close report")
@@ -204,6 +205,24 @@ def build_session_close_alert(
     bullish = round(score)
     bearish = 100 - bullish
     confidence = "資料不足" if evidence < 3 else "一般" if evidence < 5 else "較完整"
+    calibration = calibration if isinstance(calibration, Mapping) else {}
+    current_confirmation = calibration.get("current_confirmation")
+    current_confirmation = (
+        current_confirmation if isinstance(current_confirmation, Mapping) else {}
+    )
+    line_state = str(current_confirmation.get("line_confirmation", "partial"))
+    line_label = "線型同向確認" if line_state == "confirmed" else "線型部分確認"
+    volume_state = str(current_confirmation.get("volume_confirmation", "資料不足"))
+    historical = current_confirmation.get("historical_group")
+    historical = historical if isinstance(historical, Mapping) else {}
+    historical_rate = historical.get("calibrated_success_rate")
+    historical_sample = int(historical.get("sample_size", 0) or 0)
+    historical_text = (
+        "樣本不足"
+        if historical_rate is None
+        else f"{historical_rate}%（{historical_sample}筆・"
+        f"{'樣本不足' if historical_sample < 30 else '初步可信' if historical_sample < 100 else '可信度較高'}）"
+    )
 
     def change_text(label: str) -> str:
         reading = context.reading(label)
@@ -223,12 +242,14 @@ def build_session_close_alert(
             f"60分：{m60_bias}｜15分：{m15_position}/{m15_direction}",
             f"成交量：{volume_ratio:.2f}倍20期均量" if volume_ratio is not None else "成交量：資料不足",
             f"獨立波動：{volatility_ratio:.2f}倍20期均幅" if volatility_ratio is not None else "獨立波動：資料不足",
+            f"線型確認：{line_label}｜{volume_state}",
+            f"歷史校準：{historical_text}",
             change_text("標普期貨"),
             change_text("那指期貨"),
             change_text("道指期貨"),
             change_text("美元台幣"),
             f"資料完整度：{confidence}",
-            "說明：占比為規則模型估計，尚非歷史校準勝率",
+            "說明：當盤占比為線型量價規則估計；歷史校準率另列",
             "模式：唯讀行情＋Paper Trading｜禁止真實下單",
         )
     )

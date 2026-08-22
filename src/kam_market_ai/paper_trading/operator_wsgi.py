@@ -630,8 +630,15 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
         analysis_volatility = escape(
             str(daily_analysis.get("volatility", "獨立波動：資料不足"))
         )
+        analysis_line = escape(
+            str(daily_analysis.get("line_confirmation", "線型確認：資料不足"))
+        )
+        analysis_history = escape(
+            str(daily_analysis.get("historical_calibration", "歷史校準：樣本不足"))
+        )
         daily_analysis_chip = (
-            f"<span class='daily-analysis-chip' title='報告時間：{analysis_time}｜{analysis_volatility}'>"
+            f"<span class='daily-analysis-chip' title='報告時間：{analysis_time}｜"
+            f"{analysis_volatility}｜{analysis_line}｜{analysis_history}'>"
             f"<b>每日分析</b><strong>{analysis_session}・{analysis_ratio}・{analysis_volume}</strong>"
             "</span>"
         )

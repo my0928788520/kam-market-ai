@@ -52,6 +52,9 @@ from kam_market_ai.paper_trading.live_tmf_simulation import (
     build_live_tmf_paper_quote,
 )
 from kam_market_ai.paper_trading.operator_app import create_operator_app
+from kam_market_ai.paper_trading.session_direction_calibration import (
+    build_session_direction_calibration,
+)
 
 from .fubon_five_timeframe_pipeline import FiveTimeframe, FubonFiveTimeframeCandlePipeline
 from .fubon_live_chart_source import (
@@ -461,6 +464,13 @@ def main(
         if paper_session is None or verifier.latest_candle_result is None:
             return
         now = datetime.now(UTC)
+        current_snapshot = read_five_timeframe_snapshot(args.snapshot)
+        session_calibration = build_session_direction_calibration(
+            paper_session.journal.events,
+            current_snapshot,
+            session="afterhours" if refresher.after_hours else "regular",
+        )
+        paper_runtime["session_direction_calibration"] = session_calibration
         report_session = due_session_close(now)
         report_slot = f"{report_session}:{now.date().isoformat()}" if report_session else None
         if (
@@ -470,19 +480,27 @@ def main(
         ):
             try:
                 report_alert = build_session_close_alert(
-                    read_five_timeframe_snapshot(args.snapshot),
+                    current_snapshot,
                     session_report_source.load(),
                     session=report_session,
                     observed_at=now,
+                    calibration=session_calibration,
                 )
                 report_lines = report_alert.text.splitlines()
+                report_values = {
+                    line.split("：", 1)[0]: line
+                    for line in report_lines
+                    if "：" in line
+                }
                 paper_runtime["daily_session_analysis"] = {
                     "session": "日盤" if report_session == "regular" else "夜盤",
                     "reported_at": now.isoformat(),
                     "ratio": report_lines[1] if len(report_lines) > 1 else "多空占比資料不足",
-                    "volume": report_lines[3] if len(report_lines) > 3 else "成交量：資料不足",
-                    "volatility": (
-                        report_lines[4] if len(report_lines) > 4 else "獨立波動：資料不足"
+                    "volume": report_values.get("成交量", "成交量：資料不足"),
+                    "volatility": report_values.get("獨立波動", "獨立波動：資料不足"),
+                    "line_confirmation": report_values.get("線型確認", "線型確認：資料不足"),
+                    "historical_calibration": report_values.get(
+                        "歷史校準", "歷史校準：樣本不足"
                     ),
                 }
                 sent = line_notifier.send_once(report_alert)
@@ -494,7 +512,7 @@ def main(
                 paper_runtime["line_session_report_status"] = "RETRY_PENDING"
         try:
             analysis = build_current_market_analysis(
-                read_five_timeframe_snapshot(args.snapshot),
+                current_snapshot,
                 observed_at=now,
             )
             if analysis.bucket != current_analysis_bucket:
@@ -763,6 +781,15 @@ def main(
                 "regular_session_report_time": "13:45 Asia/Taipei",
                 "afterhours_session_report_time": "05:00 Asia/Taipei",
                 "external_reference_source": "YAHOO_PUBLIC_DELAYED_REFERENCE",
+                "paper_session_direction_calibration_enabled": bool(
+                    args.paper_test_armed
+                ),
+                "paper_session_calibration_minimum_sample_size": (
+                    30 if args.paper_test_armed else None
+                ),
+                "paper_line_volume_confirmation_enabled": bool(
+                    args.paper_test_armed
+                ),
                 "line_rollover_reminders_enabled": line_notifier is not None,
                 "line_alert_state": args.line_alert_state if line_notifier is not None else None,
                 "paper_journal": args.paper_journal if args.paper_test_armed else None,
