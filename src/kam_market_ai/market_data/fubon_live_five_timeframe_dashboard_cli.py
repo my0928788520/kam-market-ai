@@ -33,6 +33,7 @@ from kam_market_ai.models import Candle, Instrument
 from kam_market_ai.notifications import (
     LinePushNotifier,
     PersistentRefreshFaultMonitor,
+    PublicDelayedReferenceSource,
     build_current_market_analysis,
     build_current_market_analysis_alert,
     build_due_tmf_rollover_alert,
@@ -40,6 +41,9 @@ from kam_market_ai.notifications import (
     build_paper_health_alert,
     build_paper_sample_milestone_alert,
     build_pending_order_alert,
+    build_session_close_alert,
+    desired_live_session,
+    due_session_close,
 )
 from kam_market_ai.paper_trading.live_tmf_simulation import (
     LiveTmfPaperSimulation,
@@ -334,6 +338,8 @@ def main(
     current_analysis_bucket: str | None = None
     current_analysis_fingerprint: str | None = None
     pending_current_analysis_alert = None
+    session_report_source = PublicDelayedReferenceSource()
+    last_session_report_slot: str | None = None
     taiex_weekly_cycle: dict[str, object]
     try:
         taiex_weekly_cycle = TaiexWeeklyCycleSource(
@@ -441,6 +447,7 @@ def main(
         nonlocal active_line_alert, active_line_alert_is_exit
         nonlocal current_analysis_bucket, current_analysis_fingerprint
         nonlocal pending_current_analysis_alert
+        nonlocal last_session_report_slot
         quote_source.refresh_safely()
         chart_source.capture_latest()
         if line_notifier is not None:
@@ -454,6 +461,27 @@ def main(
         if paper_session is None or verifier.latest_candle_result is None:
             return
         now = datetime.now(UTC)
+        report_session = due_session_close(now)
+        report_slot = f"{report_session}:{now.date().isoformat()}" if report_session else None
+        if (
+            report_session is not None
+            and report_slot != last_session_report_slot
+            and line_notifier is not None
+        ):
+            try:
+                report_alert = build_session_close_alert(
+                    read_five_timeframe_snapshot(args.snapshot),
+                    session_report_source.load(),
+                    session=report_session,
+                    observed_at=now,
+                )
+                sent = line_notifier.send_once(report_alert)
+                paper_runtime["line_session_report_status"] = (
+                    "SENT" if sent else "DUPLICATE"
+                )
+                last_session_report_slot = report_slot
+            except (OSError, RuntimeError, TypeError, ValueError):
+                paper_runtime["line_session_report_status"] = "RETRY_PENDING"
         try:
             analysis = build_current_market_analysis(
                 read_five_timeframe_snapshot(args.snapshot),
@@ -670,7 +698,16 @@ def main(
     def refresh_loop() -> None:
         delay = args.refresh_seconds
         while not stop.wait(delay):
-            success = refresher.refresh_safely()
+            expected_session = desired_live_session(datetime.now(UTC))
+            current_session = "afterhours" if refresher.after_hours else "regular"
+            if expected_session != current_session:
+                success, _message = switch_session(expected_session)
+                paper_runtime["automatic_session"] = expected_session
+                paper_runtime["automatic_session_switch_status"] = (
+                    "VERIFIED" if success else "FAILED_CLOSED"
+                )
+            else:
+                success = refresher.refresh_safely()
             deliver_refresh_monitor_result(success)
             delay = (
                 args.refresh_seconds
@@ -707,7 +744,15 @@ def main(
                 "paper_simulation_enabled": args.paper_test_armed,
                 "paper_manual_approval_granted": args.paper_test_armed,
                 "line_alerts_enabled": line_notifier is not None,
-                "line_alert_mode": "paper_proposal_only" if line_notifier is not None else None,
+                "line_alert_mode": (
+                    "paper_events_and_session_close_reports"
+                    if line_notifier is not None
+                    else None
+                ),
+                "line_session_close_reports_enabled": line_notifier is not None,
+                "regular_session_report_time": "13:45 Asia/Taipei",
+                "afterhours_session_report_time": "05:00 Asia/Taipei",
+                "external_reference_source": "YAHOO_PUBLIC_DELAYED_REFERENCE",
                 "line_rollover_reminders_enabled": line_notifier is not None,
                 "line_alert_state": args.line_alert_state if line_notifier is not None else None,
                 "paper_journal": args.paper_journal if args.paper_test_armed else None,

@@ -6,7 +6,9 @@ param(
     [int]$Port = 8765,
 
     [ValidateRange(30, 300)]
-    [int]$StartupTimeoutSeconds = 300
+    [int]$StartupTimeoutSeconds = 300,
+
+    [switch]$DisableLineAlerts
 )
 
 $ErrorActionPreference = 'Stop'
@@ -74,6 +76,8 @@ New-Item -ItemType Directory -Path $launcherLogDirectory -Force | Out-Null
 $session = Get-KamSession
 Write-Host "KAM_STARTING | symbol=$Symbol | session=$session | port=$Port" -ForegroundColor Cyan
 Write-Host 'KAM_SAFETY | Paper Trading only | live orders disabled' -ForegroundColor Yellow
+$lineStatus = if ($DisableLineAlerts) { 'disabled by operator' } else { 'enabled' }
+Write-Host "KAM_LINE | $lineStatus"
 
 Stop-OldKamProcesses
 Start-Sleep -Seconds 2
@@ -90,6 +94,9 @@ $watchdogArguments = @(
     '-PaperTestArmed',
     '-NoBrowser'
 )
+if (-not $DisableLineAlerts) {
+    $watchdogArguments += '-LineAlerts'
+}
 
 $watchdog = Start-Process `
     -FilePath 'powershell.exe' `

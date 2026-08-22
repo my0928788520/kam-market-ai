@@ -95,8 +95,14 @@ def test_preview_runs_all_five_timeframes_and_remains_fail_closed() -> None:
             "range_support_touches",
             "range_resistance_touches",
             "range_window_bars",
-        "range_excludes_latest",
-    }
+            "range_excludes_latest",
+            "latest_volume",
+            "average_volume_20",
+            "volume_ratio_20",
+            "latest_range_points",
+            "average_range_20",
+            "volatility_ratio_20",
+        }
     assert payload["timeframes"]["5m"]["last_price"] == 102
     assert payload["timeframes"]["5m"]["ma20"] is None
     assert payload["timeframes"]["5m"]["price_vs_ma20"] == "insufficient"

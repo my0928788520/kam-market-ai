@@ -103,12 +103,35 @@ def _ma20_display_metrics(candles: tuple[Candle, ...]) -> dict[str, object]:
     """Expose only bounded display metrics; raw candle history stays outside snapshots."""
     closes = tuple(float(item.close) for item in candles)
     latest = closes[-1]
+    volumes = tuple(float(item.volume) for item in candles)
+    ranges = tuple(float(item.high) - float(item.low) for item in candles)
+    activity = {
+        "latest_volume": volumes[-1],
+        "average_volume_20": (
+            sum(volumes[-20:]) / 20 if len(volumes) >= 20 else None
+        ),
+        "volume_ratio_20": (
+            volumes[-1] / (sum(volumes[-20:]) / 20)
+            if len(volumes) >= 20 and sum(volumes[-20:]) > 0
+            else None
+        ),
+        "latest_range_points": ranges[-1],
+        "average_range_20": (
+            sum(ranges[-20:]) / 20 if len(ranges) >= 20 else None
+        ),
+        "volatility_ratio_20": (
+            ranges[-1] / (sum(ranges[-20:]) / 20)
+            if len(ranges) >= 20 and sum(ranges[-20:]) > 0
+            else None
+        ),
+    }
     if len(closes) < 20:
         return {
             "last_price": latest,
             "ma20": None,
             "price_vs_ma20": "insufficient",
             "ma20_direction": "insufficient",
+            **activity,
         }
     ma20 = sum(closes[-20:]) / 20
     if latest > ma20:
@@ -126,6 +149,7 @@ def _ma20_display_metrics(candles: tuple[Candle, ...]) -> dict[str, object]:
         "ma20": ma20,
         "price_vs_ma20": position,
         "ma20_direction": direction,
+        **activity,
     }
 
 
