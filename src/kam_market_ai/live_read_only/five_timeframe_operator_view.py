@@ -263,6 +263,10 @@ def build_five_timeframe_operator_view(
     execution_boundary = execution_boundary if isinstance(execution_boundary, Mapping) else {}
     current_analysis = paper.get("current_analysis")
     current_analysis = current_analysis if isinstance(current_analysis, Mapping) else {}
+    daily_session_analysis = paper.get("daily_session_analysis")
+    daily_session_analysis = (
+        daily_session_analysis if isinstance(daily_session_analysis, Mapping) else {}
+    )
     current_symbol = str(payload.get("symbol", "TMF"))
     paper_instrument = str(
         performance.get("instrument") or paper.get("instrument") or current_symbol
@@ -320,6 +324,7 @@ def build_five_timeframe_operator_view(
         "unrealized_pnl": str(margin_state.get("unrealized_pnl", "0")),
         "next_step": next_step,
         "current_analysis": dict(current_analysis),
+        "daily_session_analysis": dict(daily_session_analysis),
         "automation_mode": "AUTO PAPER" if paper_armed else "未武裝",
     }
     proposal = {

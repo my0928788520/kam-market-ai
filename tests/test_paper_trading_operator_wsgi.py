@@ -200,6 +200,38 @@ def test_current_analysis_uses_free_matching_space_and_stable_refresh_hash() -> 
     assert "nextDetails.replaceWith(currentDetails)" not in refresh
 
 
+def test_banner_centers_latest_daily_session_analysis_between_safety_and_line() -> None:
+    view = PaperTradingOperatorView(
+        "KAM",
+        "安全",
+        {},
+        {"LINE 通知": "已啟用"},
+        {"cash": "100"},
+        (),
+        False,
+        demo={
+            "source_kind": "FUBON_LIVE_FIVE_TIMEFRAME",
+            "banner": "自動模擬已啟用・禁止真實下單",
+            "daily_session_analysis": {
+                "session": "夜盤",
+                "reported_at": "2026-08-22T21:05:00+00:00",
+                "ratio": "多方 58%｜空方 42%",
+                "volume": "成交量：1.21倍20期均量",
+                "volatility": "獨立波動：1.35倍20期均幅",
+            },
+        },
+    )
+
+    html = render_operator_html(view)
+
+    banner = html.split("<div class='banner'>", 1)[1].split("</div>", 1)[0]
+    assert banner.index("banner-message") < banner.index("daily-analysis-chip")
+    assert banner.index("daily-analysis-chip") < banner.index("line-alert-chip")
+    assert "每日分析" in banner
+    assert "夜盤・多方 58%｜空方 42%・成交量：1.21倍20期均量" in banner
+    assert "獨立波動：1.35倍20期均幅" in banner
+
+
 def test_stop_quality_metrics_keep_labels_and_long_values_separated() -> None:
     css = Path("src/kam_market_ai/paper_trading/static/operator.css").read_text(
         encoding="utf-8"

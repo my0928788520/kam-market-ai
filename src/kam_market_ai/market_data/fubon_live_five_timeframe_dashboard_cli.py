@@ -475,6 +475,16 @@ def main(
                     session=report_session,
                     observed_at=now,
                 )
+                report_lines = report_alert.text.splitlines()
+                paper_runtime["daily_session_analysis"] = {
+                    "session": "日盤" if report_session == "regular" else "夜盤",
+                    "reported_at": now.isoformat(),
+                    "ratio": report_lines[1] if len(report_lines) > 1 else "多空占比資料不足",
+                    "volume": report_lines[3] if len(report_lines) > 3 else "成交量：資料不足",
+                    "volatility": (
+                        report_lines[4] if len(report_lines) > 4 else "獨立波動：資料不足"
+                    ),
+                }
                 sent = line_notifier.send_once(report_alert)
                 paper_runtime["line_session_report_status"] = (
                     "SENT" if sent else "DUPLICATE"

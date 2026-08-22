@@ -620,6 +620,27 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
         f"<span class='line-alert-chip' title='LINE 通知：{line_alert_status}'>"
         f"<b>LINE 通知</b><strong>{line_alert_status}</strong></span>"
     )
+    daily_analysis = demo.get("daily_session_analysis")
+    daily_analysis = daily_analysis if isinstance(daily_analysis, Mapping) else {}
+    if daily_analysis:
+        analysis_session = escape(str(daily_analysis.get("session", "收盤")))
+        analysis_ratio = escape(str(daily_analysis.get("ratio", "多空占比資料不足")))
+        analysis_volume = escape(str(daily_analysis.get("volume", "成交量：資料不足")))
+        analysis_time = escape(str(daily_analysis.get("reported_at", "—")))
+        analysis_volatility = escape(
+            str(daily_analysis.get("volatility", "獨立波動：資料不足"))
+        )
+        daily_analysis_chip = (
+            f"<span class='daily-analysis-chip' title='報告時間：{analysis_time}｜{analysis_volatility}'>"
+            f"<b>每日分析</b><strong>{analysis_session}・{analysis_ratio}・{analysis_volume}</strong>"
+            "</span>"
+        )
+    else:
+        daily_analysis_chip = (
+            "<span class='daily-analysis-chip daily-analysis-waiting' "
+            "title='日盤收盤後與夜盤收盤後各產生一次分析'>"
+            "<b>每日分析</b><strong>日盤 13:45・夜盤 05:00</strong></span>"
+        )
     if snapshot.status is MarketSnapshotStatus.INVALID_PRODUCT:
         proposal = "<section class='proposal'><h2>模擬委託建議</h2><p>商品代碼無效，未載入模擬委託建議。</p></section>"
     disclaimer_lines = (
@@ -627,7 +648,7 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
         "期貨具高槓桿，可能產生超過原始保證金之損失；所有實際委託均由使用者自行判斷並於券商端操作，交易結果與損益由使用者自行承擔。",
     )
     disclaimer = "".join(f"<span>{escape(line)}</span>" for line in disclaimer_lines)
-    return f"""<!doctype html><html lang='zh-Hant-TW'><head><meta charset='utf-8'><title>{escape(view.title)}</title><link rel='stylesheet' href='/static/operator.css'></head><body><main><header><h1>{escape(view.title)}</h1>{_market_header_status(snapshot)}<a class='account-chip' href='/account'>期貨帳戶｜資金安全</a>{_market_snapshot_header(snapshot)}</header><div class='banner'><span class='banner-message'>{escape(str(demo.get('banner', '尚未載入模擬委託建議。本機頁面目前為唯讀模式。')))} · 目前僅 Header 已切換至離線示範行情；決策卡尚未接入此商品 snapshot。</span>{line_alert_chip}</div><div class='dashboard'><section class='direction-card'><h2>市場方向</h2><strong>{escape(str(demo.get('direction', '—')))}</strong><p>{escape(str(demo.get('direction_reason', '尚未載入方向資料')))}</p></section><section class='control-card'><h2>多空控制權</h2><strong>{escape(control_label)}</strong><small>控制權分裂</small><div class='control-cells'>{cells}</div></section>{_cycle(view)}<section class='timeframes'><h2>三週期狀態</h2><div>{frames}</div></section>{proposal}<section class='matching'><h2>交易績效</h2>{_matching_rows(view.matching)}</section></div><footer><div class='footer-metrics'><span>模擬現金：{escape(str(view.ledger.get('cash', '—')))}</span><span>模擬部位：{escape(str(view.ledger.get('positions', '—')))}</span><span>已實現損益：—</span><span>未實現損益：{escape(str(demo.get('unrealized_pnl', '—')))}</span><span>緊急停止：{'已啟動' if view.emergency_stop else '未啟動'}</span><span class='audit'>稽核紀錄：{audit}</span></div><p class='risk-disclaimer'>{disclaimer}</p></footer></main></body></html>"""
+    return f"""<!doctype html><html lang='zh-Hant-TW'><head><meta charset='utf-8'><title>{escape(view.title)}</title><link rel='stylesheet' href='/static/operator.css'></head><body><main><header><h1>{escape(view.title)}</h1>{_market_header_status(snapshot)}<a class='account-chip' href='/account'>期貨帳戶｜資金安全</a>{_market_snapshot_header(snapshot)}</header><div class='banner'><span class='banner-message'>{escape(str(demo.get('banner', '尚未載入模擬委託建議。本機頁面目前為唯讀模式。')))} · 目前僅 Header 已切換至離線示範行情；決策卡尚未接入此商品 snapshot。</span>{daily_analysis_chip}{line_alert_chip}</div><div class='dashboard'><section class='direction-card'><h2>市場方向</h2><strong>{escape(str(demo.get('direction', '—')))}</strong><p>{escape(str(demo.get('direction_reason', '尚未載入方向資料')))}</p></section><section class='control-card'><h2>多空控制權</h2><strong>{escape(control_label)}</strong><small>控制權分裂</small><div class='control-cells'>{cells}</div></section>{_cycle(view)}<section class='timeframes'><h2>三週期狀態</h2><div>{frames}</div></section>{proposal}<section class='matching'><h2>交易績效</h2>{_matching_rows(view.matching)}</section></div><footer><div class='footer-metrics'><span>模擬現金：{escape(str(view.ledger.get('cash', '—')))}</span><span>模擬部位：{escape(str(view.ledger.get('positions', '—')))}</span><span>已實現損益：—</span><span>未實現損益：{escape(str(demo.get('unrealized_pnl', '—')))}</span><span>緊急停止：{'已啟動' if view.emergency_stop else '未啟動'}</span><span class='audit'>稽核紀錄：{audit}</span></div><p class='risk-disclaimer'>{disclaimer}</p></footer></main></body></html>"""
 
 
 _render_terminal_html = render_operator_html
