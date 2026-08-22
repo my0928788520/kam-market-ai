@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import html
 import json
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Callable
 from zoneinfo import ZoneInfo
 
 from .payload import build_dashboard_payload
@@ -158,13 +158,14 @@ def render_five_timeframe_html(payload: dict[str, object]) -> str:
 
 
 class DashboardApp:
-    def __init__(self, snapshot_path: str | Path = "debug/position/dashboard_position_snapshot.json", *, five_timeframe_snapshot_path: str | Path | None = None, five_timeframe_max_age_seconds: int = 180, five_timeframe_health_provider: Callable[[], dict[str, object]] | None = None, presenter: DashboardPresenterView | None = None, ui_config: DashboardUIConfig | None = None, adapter_config: DashboardWSGIAdapterConfig | None = None) -> None:
+    def __init__(self, snapshot_path: str | Path = "debug/position/dashboard_position_snapshot.json", *, five_timeframe_snapshot_path: str | Path | None = None, five_timeframe_max_age_seconds: int = 180, five_timeframe_health_provider: Callable[[], dict[str, object]] | None = None, paper_runtime_provider: Callable[[], Mapping[str, object]] | None = None, presenter: DashboardPresenterView | None = None, ui_config: DashboardUIConfig | None = None, adapter_config: DashboardWSGIAdapterConfig | None = None) -> None:
         self.snapshot_path = Path(snapshot_path)
         self.five_timeframe_snapshot_path = Path(five_timeframe_snapshot_path) if five_timeframe_snapshot_path else None
         if five_timeframe_max_age_seconds <= 0:
             raise ValueError("five_timeframe_max_age_seconds must be positive")
         self.five_timeframe_max_age_seconds = five_timeframe_max_age_seconds
         self.five_timeframe_health_provider = five_timeframe_health_provider
+        self.paper_runtime_provider = paper_runtime_provider
         self.presenter = presenter
         self.ui_config = ui_config or DashboardUIConfig.provisional()
         self.adapter_config = adapter_config or DashboardWSGIAdapterConfig.provisional()
@@ -186,6 +187,14 @@ class DashboardApp:
                 payload = read_five_timeframe_snapshot(self.five_timeframe_snapshot_path)
                 if five_timeframe_snapshot_age_seconds(payload) > self.five_timeframe_max_age_seconds:
                     raise ValueError("STALE_FIVE_TIMEFRAME_SNAPSHOT")
+                if self.paper_runtime_provider is not None:
+                    paper_runtime = dict(self.paper_runtime_provider())
+                    if (
+                        paper_runtime.get("live_order_allowed") is True
+                        or paper_runtime.get("broker_connected") is True
+                    ):
+                        raise ValueError("UNSAFE_PAPER_RUNTIME")
+                    payload["paper_runtime"] = paper_runtime
                 status = "200 OK"
             except (OSError, TypeError, ValueError, json.JSONDecodeError):
                 payload = {

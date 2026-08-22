@@ -126,6 +126,53 @@ def test_dashboard_rejects_stale_snapshot(tmp_path) -> None:
     assert json.loads(body)["status"] == "SNAPSHOT_UNAVAILABLE"
 
 
+def test_dashboard_api_exposes_read_only_paper_runtime(tmp_path) -> None:
+    path = write_five_timeframe_snapshot(tmp_path / "live.json", safe_payload())
+    response = {}
+    runtime = {
+        "session_direction_calibration": {
+            "dry_run": True,
+            "live_order_allowed": False,
+            "groups": {"regular_LONG": {"sample_size": 7}},
+        },
+        "live_order_allowed": False,
+        "broker_connected": False,
+    }
+
+    body = b"".join(
+        DashboardApp(
+            five_timeframe_snapshot_path=path,
+            paper_runtime_provider=lambda: runtime,
+        )(
+            {"PATH_INFO": "/api/five-timeframe", "REQUEST_METHOD": "GET"},
+            lambda status, headers: response.update(status=status),
+        )
+    )
+    payload = json.loads(body)
+
+    assert response["status"] == "200 OK"
+    calibration = payload["paper_runtime"]["session_direction_calibration"]
+    assert calibration["groups"]["regular_LONG"]["sample_size"] == 7
+    assert calibration["live_order_allowed"] is False
+
+
+def test_dashboard_api_rejects_unsafe_paper_runtime(tmp_path) -> None:
+    path = write_five_timeframe_snapshot(tmp_path / "live.json", safe_payload())
+    response = {}
+    body = b"".join(
+        DashboardApp(
+            five_timeframe_snapshot_path=path,
+            paper_runtime_provider=lambda: {"live_order_allowed": True},
+        )(
+            {"PATH_INFO": "/api/five-timeframe", "REQUEST_METHOD": "GET"},
+            lambda status, headers: response.update(status=status),
+        )
+    )
+
+    assert response["status"] == "503 Service Unavailable"
+    assert json.loads(body)["live_order_allowed"] is False
+
+
 def test_dashboard_health_endpoint_is_read_only_and_reports_degradation() -> None:
     response = {}
     body = b"".join(DashboardApp(

@@ -845,6 +845,7 @@ def main(
             five_timeframe_snapshot_path=args.snapshot,
             five_timeframe_max_age_seconds=max(180, args.refresh_seconds * 3),
             five_timeframe_health_provider=lambda: refresher.health.safe_payload(),
+            paper_runtime_provider=lambda: paper_runtime,
         )
         operator_app = create_operator_app(
             lambda: build_five_timeframe_operator_view(
