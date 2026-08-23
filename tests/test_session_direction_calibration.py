@@ -64,7 +64,26 @@ def test_calibrates_day_night_and_direction_without_double_counting() -> None:
     assert night["sample_size"] == 1
     assert night["calibrated_success_rate"] == 45.45
     assert day["confidence"] == "insufficient"
+    assert day["expectancy"] == "200.00"
+    assert day["quality_gate_state"] == "normal"
     assert result["live_order_allowed"] is False
+
+
+def test_two_losses_activate_only_matching_group_recovery() -> None:
+    events = [
+        event("entry", "one", "2026-08-21T01:00:00Z"),
+        event("stop_loss_exit", "one", "2026-08-21T01:30:00Z", pnl=-100),
+        event("entry", "two", "2026-08-21T02:00:00Z"),
+        event("stop_loss_exit", "two", "2026-08-21T02:30:00Z", pnl=-200),
+    ]
+    result = build_session_direction_calibration(events, snapshot(), session="regular")
+    day_long = result["groups"]["regular_LONG"]
+    assert day_long["expectancy"] == "-150.00"
+    assert day_long["consecutive_losses"] == 2
+    assert day_long["quality_gate_state"] == "recovery"
+    assert day_long["recommended_confirmation_candles"] == 3
+    assert day_long["early_candidate_allowed"] is False
+    assert result["groups"]["afterhours_LONG"]["quality_gate_state"] == "normal"
 
 
 def test_line_and_volume_confirm_current_direction() -> None:

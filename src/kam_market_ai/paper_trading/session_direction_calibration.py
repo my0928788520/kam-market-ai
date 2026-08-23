@@ -9,6 +9,11 @@ from math import sqrt
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from .session_direction_quality_gate import (
+    completed_outcomes_by_group,
+    quality_metrics,
+)
+
 TAIPEI = ZoneInfo("Asia/Taipei")
 EXIT_EVENT_TYPES = {
     "stop_loss_exit",
@@ -69,6 +74,13 @@ def _group_payload(outcomes: list[Decimal]) -> dict[str, object]:
     gross_profit = sum((value for value in outcomes if value > 0), Decimal(0))
     gross_loss = abs(sum((value for value in outcomes if value < 0), Decimal(0)))
     interval = _wilson_interval(wins, sample)
+    metrics = quality_metrics(outcomes)
+    recovery_mode = (
+        sample >= 2
+        and int(metrics["consecutive_losses"]) >= 2
+        and metrics["expectancy"] is not None
+        and Decimal(str(metrics["expectancy"])) < 0
+    )
     return {
         "sample_size": sample,
         "wins": wins,
@@ -88,6 +100,10 @@ def _group_payload(outcomes: list[Decimal]) -> dict[str, object]:
         "net_pnl": str(sum(outcomes, Decimal(0))),
         "confidence": "insufficient" if sample < 30 else "preliminary" if sample < 100 else "established",
         "minimum_sample_size": 30,
+        **metrics,
+        "quality_gate_state": "recovery" if recovery_mode else "normal",
+        "recommended_confirmation_candles": 3 if recovery_mode else 1,
+        "early_candidate_allowed": not recovery_mode,
     }
 
 
@@ -184,22 +200,7 @@ def build_session_direction_calibration(
         raise ValueError("session calibration requires read-only market data")
     if session is not None and session not in {"regular", "afterhours"}:
         raise ValueError("invalid calibration session")
-    entries: dict[str, object] = {}
-    outcomes: dict[str, list[Decimal]] = {
-        "regular_LONG": [],
-        "regular_SHORT": [],
-        "afterhours_LONG": [],
-        "afterhours_SHORT": [],
-    }
-    for event in events:
-        trade_id = str(_value(event, "trade_id"))
-        event_type = _event_type(event)
-        if event_type == "entry":
-            entries[trade_id] = event
-        elif event_type in EXIT_EVENT_TYPES and trade_id in entries:
-            entry = entries.pop(trade_id)
-            key = f"{_session(entry)}_{_direction(entry)}"
-            outcomes[key].append(Decimal(str(_value(event, "realized_pnl"))))
+    outcomes = completed_outcomes_by_group(events)
 
     groups = {key: _group_payload(values) for key, values in outcomes.items()}
     current = _current_confirmation(payload)

@@ -63,6 +63,9 @@ from .proposal_runner import (
     PaperOrderProposalRunnerState,
     confirm_paper_order_proposal,
 )
+from .session_direction_quality_gate import (
+    evaluate_session_direction_quality_gate,
+)
 
 LIVE_TMF_PAPER_SIMULATION_VERSION = "0.2"
 LIVE_TMF_PAPER_JOURNAL_SCHEMA = "kam-live-tmf-paper-journal-v2"
@@ -1369,6 +1372,27 @@ class LiveTmfPaperSimulation:
                 reasons=("RANGE_PAPER_TRADING_DISABLED",),
             )
 
+        session_quality_gate = evaluate_session_direction_quality_gate(
+            self.journal.events,
+            observed_at=quote.observed_at,
+            direction=direction.direction,
+            opportunity_mode=direction.opportunity_mode,
+            recovery_confirmation_candles=(
+                self.config.performance_recovery_confirmation_candles
+            ),
+        )
+        if (
+            self.config.dynamic_entry_confirmation_enabled
+            and session_quality_gate.action == "SHADOW_ONLY"
+        ):
+            self._reset_entry_confirmation()
+            return self._result(
+                TmfPaperCycleAction.HOLD,
+                direction.direction,
+                quote,
+                reasons=("SESSION_DIRECTION_RECOVERY_SHADOW_ONLY",),
+            )
+
         required_confirmation_candles = self.config.entry_confirmation_candles
         maximum_confirmation_move = self.config.max_entry_confirmation_move_points
         if self.config.dynamic_entry_confirmation_enabled:
@@ -1381,6 +1405,7 @@ class LiveTmfPaperSimulation:
                     "entry_volatility_points",
                     positive=True,
                 )
+
                 maximum_confirmation_move = min(
                     self.config.volatile_entry_confirmation_move_points,
                     max(
@@ -1390,35 +1415,44 @@ class LiveTmfPaperSimulation:
                     ),
                 )
 
-        closed_outcomes = [
-            event.realized_pnl
-            for event in self.journal.events
-            if event.event_type
-            in {
-                TmfPaperPerformanceEventType.STOP_LOSS_EXIT,
-                TmfPaperPerformanceEventType.PROFIT_LOCK_EXIT,
-                TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT,
-                TmfPaperPerformanceEventType.M15_MA20_RULE_EXIT,
-            }
-        ]
-        gross_profit = sum(
-            (value for value in closed_outcomes if value > 0), Decimal(0)
-        )
-        gross_loss = abs(
-            sum((value for value in closed_outcomes if value < 0), Decimal(0))
-        )
-        recovery_mode = (
-            direction.opportunity_grade == "B"
-            and len(closed_outcomes) >= self.config.performance_recovery_minimum_trades
-            and gross_loss > 0
-            and gross_profit / gross_loss
-            < self.config.performance_recovery_profit_factor_floor
-        )
-        if recovery_mode:
+        if self.config.dynamic_entry_confirmation_enabled:
             required_confirmation_candles = max(
                 required_confirmation_candles,
-                self.config.performance_recovery_confirmation_candles,
+                session_quality_gate.minimum_confirmation_candles,
             )
+        else:
+            # Preserve the legacy aggregate repair policy for installations that
+            # have not explicitly enabled adaptive entry confirmation.
+            closed_outcomes = [
+                event.realized_pnl
+                for event in self.journal.events
+                if event.event_type
+                in {
+                    TmfPaperPerformanceEventType.STOP_LOSS_EXIT,
+                    TmfPaperPerformanceEventType.PROFIT_LOCK_EXIT,
+                    TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT,
+                    TmfPaperPerformanceEventType.M15_MA20_RULE_EXIT,
+                }
+            ]
+            gross_profit = sum(
+                (value for value in closed_outcomes if value > 0), Decimal(0)
+            )
+            gross_loss = abs(
+                sum((value for value in closed_outcomes if value < 0), Decimal(0))
+            )
+            recovery_mode = (
+                direction.opportunity_grade == "B"
+                and len(closed_outcomes)
+                >= self.config.performance_recovery_minimum_trades
+                and gross_loss > 0
+                and gross_profit / gross_loss
+                < self.config.performance_recovery_profit_factor_floor
+            )
+            if recovery_mode:
+                required_confirmation_candles = max(
+                    required_confirmation_candles,
+                    self.config.performance_recovery_confirmation_candles,
+                )
 
         if required_confirmation_candles > 1:
             if self._pending_entry_direction != direction.direction:
