@@ -12,7 +12,7 @@ from .order_proposal import PaperOrderProposalResult
 PAPER_TRADING_OPERATOR_PRESENTER_VERSION = "0.1"
 
 _VALUE_LABELS = {
-    "buy": "買進", "sell": "賣出", "close": "平倉", "hold": "觀望",
+    "buy": "多單進場", "sell": "空單進場", "close": "平倉（平多／回補）", "hold": "觀望",
     "market": "市價", "limit": "限價", "confirmed": "已人工確認",
     "required": "等待人工確認", "not_applicable": "不適用", "rejected": "已拒絕",
     "expired": "已過期", "filled": "已完成", "partially_filled": "部分成交",
@@ -68,7 +68,7 @@ def build_operator_presenter(proposal_result: PaperOrderProposalResult, matching
         ledger = {"cash": _text(matching_result.ledger.cash_balance), "positions": _text(len(matching_result.ledger.positions)), "ledger_hash": _text(matching_result.ledger.ledger_hash)}
         audit.append({"type": _text(matching_result.audit_event.event_type), "hash": _text(matching_result.audit_event.audit_hash)})
     summary = "緊急停止已啟動，拒絕所有新的模擬委託。" if emergency_stop else "僅供模擬交易檢視，必須經人工確認。"
-    return PaperTradingOperatorView("KAM 模擬交易操作台", summary, proposal_fields, matching, ledger, tuple(audit), emergency_stop)
+    return PaperTradingOperatorView("KAM 期貨模擬交易操作台", summary, proposal_fields, matching, ledger, tuple(audit), emergency_stop)
 
 
 def build_demo_operator_presenter(proposal_result: PaperOrderProposalResult, matching_result: PaperTradingMatchingResult, snapshot: object) -> PaperTradingOperatorView:
