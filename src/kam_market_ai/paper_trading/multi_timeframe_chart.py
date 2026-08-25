@@ -10,6 +10,8 @@ from itertools import pairwise
 from math import isfinite
 from typing import Protocol
 
+from .futures_chart_markers import FuturesPaperChartMarker, sort_futures_paper_markers
+
 SUPPORTED_CHART_TIMEFRAMES = ("15m", "60m", "1d", "1w")
 TIMEFRAME_LABELS = {"15m": "15 分 K", "60m": "60 分 K", "1d": "日 K", "1w": "週 K"}
 
@@ -47,6 +49,7 @@ class ChartSeries:
     last_candle_is_forming: bool = False
     forming_label: str | None = None
     trading_session: str | None = None
+    paper_markers: tuple[FuturesPaperChartMarker, ...] = ()
 
     def __post_init__(self) -> None:
         if self.current_price is not None and (
@@ -66,6 +69,11 @@ class ChartSeries:
             raise ValueError("forming label requires a forming candle")
         if self.trading_session not in {None, "regular", "afterhours"}:
             raise ValueError("trading_session must be regular or afterhours")
+        verified_markers = sort_futures_paper_markers(self.paper_markers)
+        if verified_markers != self.paper_markers:
+            raise ValueError("paper_markers must be in deterministic event order")
+        if any(marker.instrument != self.instrument for marker in self.paper_markers):
+            raise ValueError("paper marker instrument must match chart series")
 
 
 @dataclass(frozen=True, slots=True)
@@ -463,8 +471,14 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     displayed_price = (
         series.current_price if series.current_price is not None else candles[-1].close
     )
-    raw_high = max(max(item.high for item in candles), displayed_price)
-    raw_low = min(min(item.low for item in candles), displayed_price)
+    visible_markers = tuple(
+        marker
+        for marker in series.paper_markers
+        if candles[0].opened_at <= marker.occurred_at <= candles[-1].opened_at
+    )
+    marker_prices = tuple(float(marker.price) for marker in visible_markers)
+    raw_high = max(max(item.high for item in candles), displayed_price, *marker_prices)
+    raw_low = min(min(item.low for item in candles), displayed_price, *marker_prices)
     raw_span = raw_high - raw_low or max(abs(raw_high) * 0.002, 1.0)
     high, low = raw_high + raw_span * 0.08, raw_low - raw_span * 0.08
     span = high - low
@@ -559,6 +573,27 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
         f"<text class='chart-price-label' x='8' y='{y(value) + 4:.2f}'>{value:,.0f}</text>"
         for value in reversed(grid_values)
     )
+    marker_nodes: list[str] = []
+    for marker in visible_markers:
+        candle_index = min(
+            range(len(candles)),
+            key=lambda index: abs(
+                (candles[index].opened_at - marker.occurred_at).total_seconds()
+            ),
+        )
+        marker_x = first_x + candle_index * step
+        marker_y = y(float(marker.price))
+        marker_class = escape(marker.action.value)
+        marker_label = escape(marker.label)
+        marker_id = escape(marker.marker_id)
+        marker_nodes.append(
+            f"<g class='chart-paper-marker chart-paper-marker-{marker_class}' "
+            f"data-marker-id='{marker_id}' aria-label='{marker_label}'>"
+            f"<circle cx='{marker_x:.2f}' cy='{marker_y:.2f}' r='5'/>"
+            f"<text x='{marker_x:.2f}' y='{marker_y - 10:.2f}' text-anchor='middle'>"
+            f"{marker_label}</text></g>"
+        )
+
     latest = candles[-1]
     latest_y = y(displayed_price)
     time_labels = (
@@ -569,7 +604,7 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
         "<svg class='candlestick-chart' viewBox='0 0 1024 392' role='img' aria-label='唯讀 K 線、20MA、即時水平線與成交量'>"
         f"{grid}<line class='chart-current-line' x1='{left:.0f}' y1='{latest_y:.2f}' x2='{right:.0f}' y2='{latest_y:.2f}'/>"
         f"<text class='chart-current-price-label' x='{right - 4:.0f}' y='{latest_y - 6:.2f}' text-anchor='end'>即時 {_price_text(displayed_price)}</text>"
-        f"<g class='chart-candles'>{''.join(bodies)}</g>{ma_line}{daily_descending_line}<g class='chart-manual-drawings'></g><g class='chart-volumes'>{''.join(volumes)}</g>"
+        f"<g class='chart-candles'>{''.join(bodies)}</g>{ma_line}{daily_descending_line}<g class='chart-paper-markers'>{''.join(marker_nodes)}</g><g class='chart-manual-drawings'></g><g class='chart-volumes'>{''.join(volumes)}</g>"
         f"<text class='chart-volume-label' x='{left:.0f}' y='288'>成交量</text>{time_labels}"
         f"<g class='chart-crosshair' hidden><line class='chart-crosshair-x' x1='0' y1='{top:.2f}' x2='0' y2='{volume_bottom:.2f}'/><line class='chart-crosshair-y' x1='{left:.2f}' y1='0' x2='{right:.2f}' y2='0'/></g>"
         f"<g class='chart-hover-zones'>{''.join(hover_zones)}</g></svg>"
@@ -643,6 +678,6 @@ def render_multi_timeframe_chart_html(
       <header><div><h1>多週期 K 線</h1><small>15 分・60 分・日・週｜唯讀市場結構檢視</small></div><a class='account-chip' href='/'>返回市場儀表板</a>{session_controls}<strong class='chart-session-badge chart-session-{escape(session_class)}' aria-label='目前 K 線檢視時段'>檢視：{escape(session_text)}</strong><span id='chart-live-status' class='chart-live-status' role='status' aria-live='polite'>每 3 秒更新・禁止真實下單</span></header>
       <nav class='chart-toolbar' aria-label='圖表商品與週期'>{instrument_tabs}<span class='chart-toolbar-divider'></span>{timeframe_tabs}</nav>
       <div id='chart-summary' class='chart-summary'>{escape(status)}</div><section id='chart-panel' class='chart-panel'>{_price_board(series, ma_values)}{_chart_svg(series, ma_values)}<div class='chart-tooltip' role='status' aria-live='polite' hidden></div></section>
-      <aside class='chart-overlays' aria-label='圖表顯示項目'><span class='enabled'>K 線</span><span class='enabled'>20MA</span>{trend_overlay}{range_overlay}<span class='enabled'>成交量</span></aside>
+      <aside class='chart-overlays' aria-label='圖表顯示項目'><span class='enabled'>K 線</span><span class='enabled'>20MA</span>{trend_overlay}{range_overlay}<span class='enabled'>Paper 訊號（已驗證事件）</span><span class='enabled'>成交量</span></aside>
       <footer id='chart-footer' class='chart-footer'><span>資料來源：{escape(series.source)}</span><span>K 線時間：{escape(updated)}</span><span>即時報價時間：{escape(quote_updated)}</span><span>資料不足時不補假資料</span><span>任何單一指標均不構成進出場訊號</span></footer>
     </main></body></html>"""
