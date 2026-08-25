@@ -2,6 +2,10 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from kam_market_ai.paper_trading.futures_chart_markers import (
+    FuturesPaperChartMarker,
+    FuturesPaperMarkerAction,
+)
 from kam_market_ai.paper_trading.multi_timeframe_chart import (
     ChartCandle,
     ChartSeries,
@@ -481,3 +485,78 @@ def test_wsgi_serves_external_non_overlapping_chart_refresh_script() -> None:
     assert "zone.dataset.high" in script and "zone.dataset.low" in script
     assert "zone.dataset.ma20" in script and "尚未形成" in script
     assert 'maximumFractionDigits: 0' in script
+
+
+
+def test_chart_renders_only_explicit_verified_futures_paper_markers() -> None:
+    start = datetime(2026, 8, 25, tzinfo=UTC)
+    markers = tuple(
+        FuturesPaperChartMarker(
+            "TMF",
+            start + timedelta(hours=index),
+            __import__("decimal").Decimal(str(100 + index)),
+            __import__("decimal").Decimal("1"),
+            action,
+            f"verified-event-{index}",
+        )
+        for index, action in enumerate(
+            (
+                FuturesPaperMarkerAction.LONG_ENTRY,
+                FuturesPaperMarkerAction.LONG_EXIT,
+                FuturesPaperMarkerAction.SHORT_ENTRY,
+                FuturesPaperMarkerAction.SHORT_COVER,
+            )
+        )
+    )
+
+    class MarkerSource:
+        def read_series(self, instrument: str, timeframe: str) -> ChartSeries:
+            candles = tuple(
+                ChartCandle(
+                    start + timedelta(hours=index),
+                    100 + index,
+                    103 + index,
+                    99 + index,
+                    102 + index,
+                    10,
+                )
+                for index in range(6)
+            )
+            return ChartSeries(
+                instrument,
+                timeframe,
+                candles,
+                "verified-paper-events",
+                candles[-1].opened_at,
+                paper_markers=markers,
+            )
+
+    html = render_multi_timeframe_chart_html(MarkerSource(), instrument="TMF")
+
+    assert html.count("class='chart-paper-marker chart-paper-marker-") == 4
+    assert "多單進場" in html
+    assert "平多" in html
+    assert "空單進場" in html
+    assert "回補" in html
+    assert "Paper 訊號（已驗證事件）" in html
+    assert html.count("data-marker-id=") == 4
+
+
+def test_chart_rejects_marker_from_a_different_instrument() -> None:
+    marker = FuturesPaperChartMarker(
+        "TX",
+        datetime(2026, 8, 25, tzinfo=UTC),
+        __import__("decimal").Decimal("22000"),
+        __import__("decimal").Decimal("1"),
+        FuturesPaperMarkerAction.LONG_ENTRY,
+        "wrong-instrument-event",
+    )
+    with pytest.raises(ValueError, match="instrument"):
+        ChartSeries(
+            "TMF",
+            "60m",
+            (),
+            "fixture",
+            None,
+            paper_markers=(marker,),
+        )
