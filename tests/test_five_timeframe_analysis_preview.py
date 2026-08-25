@@ -5,6 +5,7 @@ import pytest
 
 from kam_market_ai.live_read_only.five_timeframe_analysis_preview import (
     _daily_descending_trendline_metrics,
+    _m60_w_bottom_metrics,
     build_verified_five_timeframe_analysis_preview,
 )
 from kam_market_ai.market_data.fubon_five_timeframe_pipeline import (
@@ -14,6 +15,31 @@ from kam_market_ai.market_data.fubon_five_timeframe_pipeline import (
 from kam_market_ai.models import Candle, Instrument
 
 NOW = datetime(2026, 8, 13, 4, 0, tzinfo=UTC)
+
+
+def test_m60_w_bottom_live_neckline_break_is_candidate_until_close() -> None:
+    lows = (100, 96, 92, 96, 99, 95, 93, 97, 100, 102)
+    highs = (103, 99, 95, 101, 106, 100, 96, 102, 105, 108)
+    candles = tuple(
+        Candle(
+            Instrument.TMF,
+            NOW + timedelta(hours=index),
+            NOW + timedelta(hours=index + 1),
+            (low + high) / 2,
+            high,
+            low,
+            107 if index == len(lows) - 1 else (low + high) / 2,
+            20 if index == len(lows) - 1 else 10,
+        )
+        for index, (low, high) in enumerate(zip(lows, highs, strict=True))
+    )
+
+    result = _m60_w_bottom_metrics(candles)
+
+    assert result["wave_pattern"] == "w_bottom_breakout_candidate"
+    assert result["w_neckline"] == 106
+    assert result["w_closed_breakout_confirmed"] is False
+    assert result["w_volume_confirmation"] is True
 
 
 def complete_result() -> CompleteFiveTimeframeCandleResult:

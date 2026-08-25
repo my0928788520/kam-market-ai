@@ -28,6 +28,27 @@ def _view() -> PaperTradingOperatorView:
     return PaperTradingOperatorView("<KAM>", "安全", {"instrument": "TEST"}, {"state": "等待中"}, {"cash": "100"}, (), False)
 
 
+def test_m60_card_prioritizes_w_bottom_breakout_over_stale_bearish_label() -> None:
+    card = _timeframe_card(
+        "60 分",
+        "BD",
+        {
+            "status": "ambiguous",
+            "position": "bearish",
+            "trend": "bullish",
+            "wave_pattern": "w_bottom_breakout_candidate",
+            "w_neckline": 45411,
+            "w_closed_breakout_confirmed": False,
+            "w_volume_confirmation": True,
+        },
+    )
+
+    assert "<strong>偏多</strong>" in card
+    assert "W底・突破候選" in card
+    assert "頸線：45,411・等待60分收盤・量能確認" in card
+    assert "偏空傾向" not in card
+
+
 def test_wsgi_is_get_only_escapes_html_and_serves_static_css() -> None:
     app = build_operator_wsgi(_view); response = {}
     def start(status, headers): response.update(status=status, headers=headers)

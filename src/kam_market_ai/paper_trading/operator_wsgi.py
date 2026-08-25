@@ -381,6 +381,8 @@ def _timeframe_card(name: object, state: object, details: Mapping[str, object] |
         "偏空": ("BD", "空方健康"),
     }.get(raw, ("—", raw))
     details = details or {}
+    wave_pattern = str(details.get("wave_pattern", "none"))
+    status_label = {"A": "偏多", "N": "中性", "B": "偏空"}.get(code[:1], "")
     frame_status = str(details.get("status", ""))
     if code.endswith("D"):
         condition = {
@@ -408,6 +410,13 @@ def _timeframe_card(name: object, state: object, details: Mapping[str, object] |
                 bias = "方向分歧"
         if condition is not None and bias is not None:
             interpretation = f"{bias}・{condition}"
+    if str(name) == "60 分" and wave_pattern.startswith("w_bottom_"):
+        status_label = "偏多"
+        interpretation = {
+            "w_bottom_breakout_confirmed": "W底・突破確認",
+            "w_bottom_breakout_candidate": "W底・突破候選",
+            "w_bottom_forming": "W底・形成中",
+        }.get(wave_pattern, interpretation)
     ma20 = details.get("ma20")
     relation = {"above": "在20MA上方", "below": "在20MA下方", "equal": "貼近20MA", "insufficient": "20MA尚未形成"}.get(str(details.get("price_vs_ma20", "insufficient")), "20MA資料不足")
     direction = {"rising": "上彎", "falling": "下彎", "flat": "走平", "insufficient": "尚未形成"}.get(str(details.get("ma20_direction", "insufficient")), "資料不足")
@@ -436,12 +445,24 @@ def _timeframe_card(name: object, state: object, details: Mapping[str, object] |
     except (TypeError, ValueError):
         range_bars = 0
     range_label = f"{range_bars}棒" if range_bars else "區間"
-    status_label = {"A": "偏多", "N": "中性", "B": "偏空"}.get(code[:1], "")
     status_code = f"<strong>{escape(status_label)}</strong>" if status_label else ""
+    wave_line = ""
+    if str(name) == "60 分" and wave_pattern.startswith("w_bottom_"):
+        neckline = _display_price(details.get("w_neckline"))
+        confirmation = (
+            "收盤確認"
+            if details.get("w_closed_breakout_confirmed")
+            else "等待60分收盤"
+        )
+        volume = "量能確認" if details.get("w_volume_confirmation") else "等待量能"
+        wave_line = (
+            f"<small class='timeframe-wave-pattern'>頸線：{escape(neckline)}・"
+            f"{escape(confirmation)}・{escape(volume)}</small>"
+        )
     return (
         "<article class='timeframe-card'>"
         f"<b>{escape(str(name))}</b>{status_code}<span>{escape(interpretation)}</span>"
-        f"<small>{escape(relation + ma_text)}</small><small>20MA 方向：{escape(direction)}</small>{ma60_line}"
+        f"<small>{escape(relation + ma_text)}</small><small>20MA 方向：{escape(direction)}</small>{wave_line}{ma60_line}"
         f"<small class='timeframe-resistance'>{range_label}壓力：{escape(resistance)}</small>"
         f"<small class='timeframe-support'>{range_label}支撐：{escape(support)}</small></article>"
     )

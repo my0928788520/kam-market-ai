@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
+from itertools import pairwise
 
 from kam_market_ai.analysis.position_engine import (
     PositionEngineConfig,
@@ -193,6 +194,90 @@ def _m60_ma20_support_metrics(candles: tuple[Candle, ...]) -> dict[str, object]:
         "market_bias": bias,
         "support_close": close,
         "support_low": low,
+    }
+
+
+def _m60_w_bottom_metrics(candles: tuple[Candle, ...]) -> dict[str, object]:
+    """Describe a recent 60-minute W bottom without turning it into an order.
+
+    The final intraday candle is treated as forming.  A live move through the
+    neckline is therefore a candidate; confirmation requires a completed bar
+    to close above the same neckline.  Raw candle history remains outside the
+    public snapshot.
+    """
+    empty: dict[str, object] = {
+        "wave_pattern": "none",
+        "wave_pattern_label": None,
+        "w_neckline": None,
+        "w_left_low": None,
+        "w_right_low": None,
+        "w_breakout_distance": None,
+        "w_closed_breakout_confirmed": False,
+        "w_volume_confirmation": False,
+    }
+    if len(candles) < 7:
+        return empty
+    completed = candles[:-1]
+    window = completed[-32:]
+    if len(window) < 5:
+        return empty
+    pivot_lows = [
+        index
+        for index in range(1, len(window) - 1)
+        if float(window[index].low) <= float(window[index - 1].low)
+        and float(window[index].low) < float(window[index + 1].low)
+    ]
+    candidates: list[tuple[float, int, int, float]] = []
+    for left, right in pairwise(pivot_lows):
+        if not 2 <= right - left <= 16:
+            continue
+        neckline = max(float(window[index].high) for index in range(left + 1, right))
+        left_low = float(window[left].low)
+        right_low = float(window[right].low)
+        floor = min(left_low, right_low)
+        depth = neckline - floor
+        if depth <= 0 or abs(right_low - left_low) > depth * 0.60:
+            continue
+        recovery = max(
+            [float(item.high) for item in window[right + 1 :]]
+            + [float(candles[-1].high), float(candles[-1].close)]
+        )
+        if recovery < right_low + (neckline - right_low) * 0.65:
+            continue
+        prominence = depth - abs(right_low - left_low) * 0.35
+        candidates.append((prominence, left, right, neckline))
+    if not candidates:
+        return empty
+    _, left, right, neckline = max(candidates, key=lambda item: (item[0], item[2]))
+    live_price = float(candles[-1].close)
+    completed_close = float(completed[-1].close)
+    closed_breakout = completed_close > neckline
+    live_breakout = live_price > neckline
+    breakout_candle = completed[-1] if closed_breakout else candles[-1]
+    comparison = completed[-20:]
+    average_volume = sum(float(item.volume) for item in comparison) / len(comparison)
+    volume_confirmed = average_volume > 0 and float(breakout_candle.volume) >= average_volume
+    pattern = (
+        "w_bottom_breakout_confirmed"
+        if closed_breakout
+        else "w_bottom_breakout_candidate"
+        if live_breakout
+        else "w_bottom_forming"
+    )
+    label = {
+        "w_bottom_breakout_confirmed": "W底・突破確認",
+        "w_bottom_breakout_candidate": "W底・突破候選",
+        "w_bottom_forming": "W底・形成中",
+    }[pattern]
+    return {
+        "wave_pattern": pattern,
+        "wave_pattern_label": label,
+        "w_neckline": neckline,
+        "w_left_low": float(window[left].low),
+        "w_right_low": float(window[right].low),
+        "w_breakout_distance": live_price - neckline,
+        "w_closed_breakout_confirmed": closed_breakout,
+        "w_volume_confirmation": volume_confirmed,
     }
 
 
@@ -499,6 +584,11 @@ def build_verified_five_timeframe_analysis_preview(
             **_ma20_display_metrics(series[source_timeframe]),
             **(
                 _m60_ma20_support_metrics(series[source_timeframe])
+                if source_timeframe is FiveTimeframe.M60
+                else {}
+            ),
+            **(
+                _m60_w_bottom_metrics(series[source_timeframe])
                 if source_timeframe is FiveTimeframe.M60
                 else {}
             ),
