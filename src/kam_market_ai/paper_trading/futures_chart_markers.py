@@ -100,3 +100,67 @@ def sort_futures_paper_markers(
     if len(set(hashes)) != len(hashes):
         raise ValueError("duplicate Paper Trading source event")
     return tuple(sorted(markers, key=lambda marker: (marker.occurred_at, marker.marker_id)))
+
+
+def build_futures_paper_markers_from_events(
+    events: tuple[object, ...],
+    *,
+    chart_instrument: str,
+) -> tuple[FuturesPaperChartMarker, ...]:
+    """Translate verified TMF journal entry/exit events into display markers.
+
+    MARK events are intentionally omitted.  The original event hash remains the
+    evidence identity even when a contract-month symbol is projected onto its
+    chart product root (for example TMFI6 onto TMF).
+    """
+
+    from .contracts import PaperTradingSide
+    from .live_tmf_simulation import (
+        TmfPaperPerformanceEvent,
+        TmfPaperPerformanceEventType,
+    )
+
+    if not chart_instrument or chart_instrument != chart_instrument.strip().upper():
+        raise ValueError("chart_instrument must be canonical")
+    markers: list[FuturesPaperChartMarker] = []
+    exit_types = {
+        TmfPaperPerformanceEventType.STOP_LOSS_EXIT,
+        TmfPaperPerformanceEventType.PROFIT_LOCK_EXIT,
+        TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT,
+        TmfPaperPerformanceEventType.M15_MA20_RULE_EXIT,
+    }
+    for event in events:
+        if not isinstance(event, TmfPaperPerformanceEvent):
+            raise TypeError("journal events must be TmfPaperPerformanceEvent")
+        if not event.instrument.startswith(chart_instrument):
+            continue
+        if event.event_type is TmfPaperPerformanceEventType.MARK:
+            continue
+        if event.event_type is TmfPaperPerformanceEventType.ENTRY:
+            action = (
+                FuturesPaperMarkerAction.LONG_ENTRY
+                if event.entry_side is PaperTradingSide.BUY
+                else FuturesPaperMarkerAction.SHORT_ENTRY
+            )
+            price = event.entry_price
+        elif event.event_type in exit_types:
+            action = (
+                FuturesPaperMarkerAction.LONG_EXIT
+                if event.entry_side is PaperTradingSide.BUY
+                else FuturesPaperMarkerAction.SHORT_COVER
+            )
+            price = event.current_price
+        else:
+            raise ValueError("unsupported Paper Trading performance event")
+        markers.append(
+            FuturesPaperChartMarker(
+                chart_instrument,
+                event.observed_at,
+                price,
+                event.quantity,
+                action,
+                event.event_hash,
+                source="verified_tmf_paper_journal",
+            )
+        )
+    return sort_futures_paper_markers(tuple(markers))
