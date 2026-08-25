@@ -15,6 +15,7 @@ from kam_market_ai.market_data.fubon_five_timeframe_pipeline import (
     FiveTimeframe,
 )
 from kam_market_ai.models import Candle, Instrument
+from kam_market_ai.paper_trading.contracts import PaperTradingSide
 from kam_market_ai.paper_trading.five_timeframe_paper_direction import (
     decide_five_timeframe_paper_direction,
 )
@@ -815,7 +816,47 @@ def test_performance_summary_separates_long_short_and_requires_evidence() -> Non
     assert summary["long"]["net_pnl"] == "420"
     assert summary["short"]["net_pnl"] == "-220"
     assert summary["adjustment_allowed"] is False
+    assert summary["excluded_anomalous_trades"] == 0
+    assert summary["statistics_integrity"] == "verified"
     assert summary["live_order_allowed"] is False
+
+
+def test_long_exit_keeps_locked_side_after_stop_moves_above_entry() -> None:
+    session = LiveTmfPaperSimulation(config())
+    entered = session.process_evaluation(
+        direction("AU"), quote("22000"), evaluated_at=NOW
+    )
+    assert entered.performance_event is not None
+    assert entered.performance_event.canonical_payload()["entry_side"] == "buy"
+
+    exited = session.process_evaluation(
+        direction("AU"),
+        quote("21996", 1),
+        evaluated_at=NOW + timedelta(minutes=1),
+        structural_stop_price=Decimal(22005),
+    )
+
+    assert exited.action is TmfPaperCycleAction.EXIT_FILLED
+    assert exited.performance_event is not None
+    assert exited.performance_event.entry_side.value == "buy"
+    assert exited.performance_event.canonical_payload()["entry_side"] == "buy"
+    assert exited.performance_event.realized_pnl == Decimal(-40)
+
+
+def test_exit_event_rejects_side_and_pnl_mismatch() -> None:
+    session = LiveTmfPaperSimulation(config())
+    session.process_evaluation(direction("AU"), quote("22000"), evaluated_at=NOW)
+    exited = session.process_evaluation(
+        direction("AF"), quote("21978", 1),
+        evaluated_at=NOW + timedelta(minutes=1),
+    )
+    assert exited.performance_event is not None
+
+    with pytest.raises(ValueError, match="realized PnL conflicts"):
+        replace(
+            exited.performance_event,
+            position_side=PaperTradingSide.SELL,
+        )
 
 
 def test_exit_cooldown_prevents_immediate_reentry_and_allows_later_entry() -> None:

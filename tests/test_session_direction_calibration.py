@@ -111,3 +111,30 @@ def test_timezone_aware_datetime_event_is_supported() -> None:
         snapshot(),
     )
     assert result["groups"]["regular_LONG"]["wins"] == 1
+
+
+def test_inconsistent_pnl_is_excluded_from_calibration_statistics() -> None:
+    entry = event("entry", "bad", "2026-08-21T01:00:00Z")
+    entry.update({"quantity": 1, "point_value": 10, "entry_side": "buy"})
+    exit_event = event(
+        "stop_loss_exit", "bad", "2026-08-21T01:01:00Z", pnl=40
+    )
+    exit_event.update(
+        {
+            "quantity": 1,
+            "point_value": 10,
+            "entry_side": "sell",
+            "current_price": 96,
+            "stop_trigger_price": 90,
+        }
+    )
+
+    result = build_session_direction_calibration(
+        [entry, exit_event], snapshot(), session="regular"
+    )
+
+    group = result["groups"]["regular_LONG"]
+    assert group["sample_size"] == 0
+    assert group["excluded_anomalous_trades"] == 1
+    assert group["statistics_integrity"] == "anomalies_excluded"
+    assert result["excluded_anomalous_trades"] == 1

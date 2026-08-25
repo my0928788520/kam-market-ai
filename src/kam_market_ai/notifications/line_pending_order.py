@@ -305,28 +305,49 @@ def build_paper_exit_alert(payload: Mapping[str, object]) -> LinePendingOrderAle
     fill_hash = event.get("fill_hash")
     if not isinstance(proposal_hash, str) or len(proposal_hash) != 64 or not fill_hash:
         return None
-    observed = datetime.fromisoformat(str(event["observed_at"]).replace("Z", "+00:00"))
-    identity = sha256(f"{proposal_hash}:{event_type}:{fill_hash}".encode("utf-8")).hexdigest()
-    side = (
-        "偏多"
-        if Decimal(str(event.get("stop_loss_price"))) < Decimal(str(event.get("entry_price")))
-        else "偏空"
+    observed = datetime.fromisoformat(str(event["observed_at"]))
+    identity = sha256(f"{proposal_hash}:{event_type}:{fill_hash}".encode()).hexdigest()
+    locked_side = str(event.get("entry_side", "")).lower()
+    if locked_side not in {"buy", "sell"}:
+        entry_price = Decimal(str(event.get("entry_price")))
+        current_price = Decimal(str(event.get("current_price")))
+        realized_pnl = Decimal(str(event.get("realized_pnl")))
+        price_change = current_price - entry_price
+        locked_side = (
+            "buy"
+            if price_change != 0 and realized_pnl * price_change > 0
+            else "sell"
+            if price_change != 0 and realized_pnl * price_change < 0
+            else "buy"
+            if Decimal(str(event.get("stop_loss_price"))) < entry_price
+            else "sell"
+        )
+    side = "偏多" if locked_side == "buy" else "偏空"
+    trigger_line = (
+        f"實際停損觸發價：{event['stop_trigger_price']}"
+        if event_type == "stop_loss_exit" and event.get("stop_trigger_price") is not None
+        else None
     )
-    text = "\n".join(
+    lines = [
+        f"KAM 模擬{labels[event_type]}",
+        f"原方向：{side}",
+        f"商品：{event['instrument']}",
+        f"口數：{event['quantity']} 口",
+        f"進場價：{event['entry_price']}",
+        f"平倉價：{event['current_price']}",
+        f"出場原因：{labels[event_type]}",
+        f"已實現損益：{event['realized_pnl']}",
+    ]
+    if trigger_line is not None:
+        lines.append(trigger_line)
+    lines.extend(
         (
-            f"KAM 模擬{labels[event_type]}",
-            f"原方向：{side}",
-            f"商品：{event['instrument']}",
-            f"口數：{event['quantity']} 口",
-            f"進場價：{event['entry_price']}",
-            f"平倉價：{event['current_price']}",
-            f"出場原因：{labels[event_type]}",
-            f"已實現損益：{event['realized_pnl']}",
             f"平倉時間：{observed.isoformat()}",
             "狀態：模擬部位已平倉，舊提醒已停止",
             "安全：本通知不會送出真實委託",
         )
     )
+    text = "\n".join(lines)
     return LinePendingOrderAlert(identity, text, observed + timedelta(minutes=5))
 
 

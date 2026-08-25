@@ -10,7 +10,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from .session_direction_quality_gate import (
-    completed_outcomes_by_group,
+    completed_trade_audit,
     quality_metrics,
 )
 
@@ -200,9 +200,18 @@ def build_session_direction_calibration(
         raise ValueError("session calibration requires read-only market data")
     if session is not None and session not in {"regular", "afterhours"}:
         raise ValueError("invalid calibration session")
-    outcomes = completed_outcomes_by_group(events)
+    outcomes, anomalies = completed_trade_audit(events)
 
-    groups = {key: _group_payload(values) for key, values in outcomes.items()}
+    groups = {
+        key: {
+            **_group_payload(values),
+            "excluded_anomalous_trades": len(anomalies[key]),
+            "statistics_integrity": (
+                "anomalies_excluded" if anomalies[key] else "verified"
+            ),
+        }
+        for key, values in outcomes.items()
+    }
     current = _current_confirmation(payload)
     session = session or _session_clock_from_payload(payload)
     direction = current["direction"]
@@ -212,6 +221,7 @@ def build_session_direction_calibration(
     return {
         "groups": groups,
         "current_confirmation": current,
+        "excluded_anomalous_trades": sum(map(len, anomalies.values())),
         "dry_run": True,
         "live_order_allowed": False,
     }

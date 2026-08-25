@@ -165,6 +165,31 @@ def test_stop_loss_exit_builds_one_paper_close_alert() -> None:
     assert alert.live_order_allowed is False
 
 
+def test_exit_alert_uses_locked_entry_side_not_moved_stop_position() -> None:
+    value = payload()
+    value["action"] = "exit_filled"
+    value["performance_event"].update(
+        {
+            "event_type": "stop_loss_exit",
+            "entry_side": "buy",
+            "entry_price": "45336",
+            "current_price": "45332",
+            "stop_loss_price": "45340",
+            "stop_trigger_price": "45340",
+            "realized_pnl": "-40",
+            "fill_hash": "f" * 64,
+            "proposal_hash": "a" * 64,
+        }
+    )
+
+    alert = build_paper_exit_alert(value)
+
+    assert alert is not None
+    assert "原方向：偏多" in alert.text
+    assert "實際停損觸發價：45340" in alert.text
+    assert "原方向：偏空" not in alert.text
+
+
 def test_take_profit_exit_is_deduplicated_separately_from_entry() -> None:
     value = payload()
     value["action"] = "exit_filled"

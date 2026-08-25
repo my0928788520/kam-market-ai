@@ -65,6 +65,7 @@ from .proposal_runner import (
 )
 from .session_direction_quality_gate import (
     evaluate_session_direction_quality_gate,
+    validate_completed_trade,
 )
 
 LIVE_TMF_PAPER_SIMULATION_VERSION = "0.2"
@@ -477,6 +478,7 @@ class TmfPaperPerformanceEvent:
     strategy_mode: str = "TREND"
     stop_trigger_price: Decimal | None = None
     exit_slippage_points: Decimal | None = None
+    position_side: PaperTradingSide | None = None
 
     def __post_init__(self) -> None:
         if not self.trade_id or not self.instrument or self.instrument != self.instrument.upper():
@@ -526,6 +528,42 @@ class TmfPaperPerformanceEvent:
             _decimal(self.exit_slippage_points, "exit_slippage_points")
             if self.exit_slippage_points < 0:
                 raise ValueError("exit_slippage_points cannot be negative.")
+        if self.position_side is not None and not isinstance(
+            self.position_side, PaperTradingSide
+        ):
+            raise TypeError("position_side must be a PaperTradingSide.")
+        if self.position_side is not None and self.event_type in {
+            TmfPaperPerformanceEventType.STOP_LOSS_EXIT,
+            TmfPaperPerformanceEventType.PROFIT_LOCK_EXIT,
+            TmfPaperPerformanceEventType.TAKE_PROFIT_EXIT,
+            TmfPaperPerformanceEventType.M15_MA20_RULE_EXIT,
+        }:
+            multiplier = (
+                Decimal(1)
+                if self.position_side is PaperTradingSide.BUY
+                else Decimal(-1)
+            )
+            expected_pnl = (
+                (self.current_price - self.entry_price)
+                * multiplier
+                * self.quantity
+                * self.point_value
+            )
+            if self.realized_pnl != expected_pnl:
+                raise ValueError("paper exit realized PnL conflicts with locked side.")
+            if self.event_type in {
+                TmfPaperPerformanceEventType.STOP_LOSS_EXIT,
+                TmfPaperPerformanceEventType.PROFIT_LOCK_EXIT,
+            } and self.stop_trigger_price is not None:
+                touched = (
+                    self.position_side is PaperTradingSide.BUY
+                    and self.current_price <= self.stop_trigger_price
+                ) or (
+                    self.position_side is PaperTradingSide.SELL
+                    and self.current_price >= self.stop_trigger_price
+                )
+                if not touched:
+                    raise ValueError("paper stop exit conflicts with locked side.")
 
     def canonical_payload(self) -> dict[str, object]:
         payload = {
@@ -570,6 +608,8 @@ class TmfPaperPerformanceEvent:
             payload["exit_slippage_points"] = _decimal(
                 self.exit_slippage_points, "exit_slippage_points"
             )
+        if self.position_side is not None:
+            payload["entry_side"] = self.position_side.value
         return payload
 
     @property
@@ -578,6 +618,8 @@ class TmfPaperPerformanceEvent:
 
     @property
     def entry_side(self) -> PaperTradingSide:
+        if self.position_side is not None:
+            return self.position_side
         return (
             PaperTradingSide.BUY
             if self.stop_loss_price < self.entry_price
@@ -604,6 +646,8 @@ class TmfPaperSimulationJournal:
             raise ValueError("unsupported live TMF paper journal version.")
         previous: str | None = None
         open_trade: str | None = None
+        open_side: PaperTradingSide | None = None
+        open_proposal_hash: str | None = None
         for event in self.events:
             if event.instrument != self.instrument or event.point_value != self.point_value:
                 raise ValueError("journal event identity mismatch.")
@@ -614,6 +658,18 @@ class TmfPaperSimulationJournal:
                 if open_trade is not None:
                     raise ValueError("journal cannot contain overlapping paper positions.")
                 open_trade = event.trade_id
+                open_side = event.entry_side
+                open_proposal_hash = event.proposal_hash
+            elif event.event_type is TmfPaperPerformanceEventType.MARK:
+                if open_trade != event.trade_id:
+                    raise ValueError("journal mark does not match an open paper trade.")
+                if event.proposal_hash != open_proposal_hash:
+                    raise ValueError("journal proposal changed during an open paper trade.")
+                if (
+                    event.position_side is not None
+                    and event.entry_side is not open_side
+                ):
+                    raise ValueError("journal mark side does not match open paper trade.")
             elif event.event_type in {
                 TmfPaperPerformanceEventType.STOP_LOSS_EXIT,
                 TmfPaperPerformanceEventType.PROFIT_LOCK_EXIT,
@@ -622,7 +678,16 @@ class TmfPaperSimulationJournal:
             }:
                 if open_trade != event.trade_id:
                     raise ValueError("journal exit does not match an open paper trade.")
+                if event.proposal_hash != open_proposal_hash:
+                    raise ValueError("journal proposal changed during an open paper trade.")
+                if (
+                    event.position_side is not None
+                    and event.entry_side is not open_side
+                ):
+                    raise ValueError("journal exit side does not match open paper trade.")
                 open_trade = None
+                open_side = None
+                open_proposal_hash = None
         if bool(self.ledger.positions) != (open_trade is not None):
             raise ValueError("journal position and event state do not match.")
 
@@ -691,7 +756,7 @@ class TmfPaperSimulationJournal:
 
     def performance_summary_payload(self) -> dict[str, object]:
         """Summarize closed paper trades without changing any entry rule."""
-        exits = [
+        raw_exits = [
             event
             for event in self.events
             if event.event_type
@@ -702,6 +767,24 @@ class TmfPaperSimulationJournal:
                 TmfPaperPerformanceEventType.M15_MA20_RULE_EXIT,
             }
         ]
+        entries = {
+            event.trade_id: event
+            for event in self.events
+            if event.event_type is TmfPaperPerformanceEventType.ENTRY
+        }
+        excluded_anomalies: list[str] = []
+        exits: list[TmfPaperPerformanceEvent] = []
+        for event in raw_exits:
+            entry = entries.get(event.trade_id)
+            reason = (
+                "ENTRY_MISSING"
+                if entry is None
+                else validate_completed_trade(entry, event)
+            )
+            if reason is not None:
+                excluded_anomalies.append(f"{event.trade_id}:{reason}")
+                continue
+            exits.append(event)
         outcomes = [event.realized_pnl for event in exits]
         wins = [value for value in outcomes if value > 0]
         losses = [value for value in outcomes if value < 0]
@@ -790,7 +873,11 @@ class TmfPaperSimulationJournal:
                 shadow_incremental_pnl += exit_event.realized_pnl - fixed_pnl
 
         def direction_summary(side: PaperTradingSide) -> dict[str, object]:
-            selected = [event.realized_pnl for event in exits if event.entry_side is side]
+            selected = [
+                event.realized_pnl
+                for event in exits
+                if entries[event.trade_id].entry_side is side
+            ]
             selected_wins = sum(1 for value in selected if value > 0)
             return {
                 "sample_size": len(selected),
@@ -853,6 +940,10 @@ class TmfPaperSimulationJournal:
             "long": direction_summary(PaperTradingSide.BUY),
             "short": direction_summary(PaperTradingSide.SELL),
             "adjustment_allowed": sample_size >= MINIMUM_PERFORMANCE_SAMPLE_SIZE,
+            "excluded_anomalous_trades": len(excluded_anomalies),
+            "statistics_integrity": (
+                "anomalies_excluded" if excluded_anomalies else "verified"
+            ),
             "live_order_allowed": False,
         }
 
@@ -1075,6 +1166,11 @@ class TmfPaperJournalStore:
                 None
                 if item.get("exit_slippage_points") is None
                 else Decimal(str(item["exit_slippage_points"]))
+            ),
+            position_side=(
+                None
+                if item.get("entry_side") is None
+                else PaperTradingSide(str(item["entry_side"]))
             ),
         )
 
@@ -1728,6 +1824,7 @@ class LiveTmfPaperSimulation:
             self.journal.events[-1].event_hash if self.journal.events else None,
             self.config.point_value,
             strategy_mode="RANGE" if is_range_entry else "TREND",
+            position_side=entry_side,
         )
         margin_ledger = self._reserve_margin(matched.ledger, fill)
         self._publish(self.journal.with_event(event, margin_ledger))
@@ -2204,6 +2301,7 @@ class LiveTmfPaperSimulation:
             strategy_mode=entry.strategy_mode,
             stop_trigger_price=stop_loss_price if stop_exit else None,
             exit_slippage_points=exit_slippage_points,
+            position_side=entry.entry_side,
         )
         self._publish(self.journal.with_event(event, ledger))
         if exit_type is not None:

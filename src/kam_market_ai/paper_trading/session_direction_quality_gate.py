@@ -46,15 +46,75 @@ def session_name(observed_at: datetime) -> str:
 
 
 def _direction(entry: object) -> str:
+    locked = _value(entry, "position_side")
+    if locked is None:
+        locked = _value(entry, "entry_side")
+    locked = getattr(locked, "value", locked)
+    if str(locked).lower() == "buy":
+        return "LONG"
+    if str(locked).lower() == "sell":
+        return "SHORT"
     entry_price = Decimal(str(_value(entry, "entry_price")))
     stop_price = Decimal(str(_value(entry, "stop_loss_price")))
     return "LONG" if stop_price < entry_price else "SHORT"
 
 
-def completed_outcomes_by_group(
+def validate_completed_trade(entry: object, exit_event: object) -> str | None:
+    """Return an audit reason when a completed trade is unsafe for statistics."""
+    direction = _direction(entry)
+    explicit_exit_side = _value(exit_event, "position_side")
+    if explicit_exit_side is None and isinstance(exit_event, Mapping):
+        explicit_exit_side = exit_event.get("entry_side")
+    explicit_exit_side = getattr(explicit_exit_side, "value", explicit_exit_side)
+    expected_side = "buy" if direction == "LONG" else "sell"
+    if (
+        explicit_exit_side is not None
+        and str(explicit_exit_side).lower() != expected_side
+    ):
+        return "POSITION_SIDE_MISMATCH"
+    pnl_inputs = (
+        _value(entry, "entry_price"),
+        _value(exit_event, "current_price"),
+        _value(entry, "quantity"),
+        _value(entry, "point_value"),
+        _value(exit_event, "realized_pnl"),
+    )
+    # Older imported summaries may not contain enough execution fields to audit.
+    # Preserve those samples; every new journal event contains all five fields.
+    if any(value is None for value in pnl_inputs):
+        return None
+    try:
+        entry_price = Decimal(str(_value(entry, "entry_price")))
+        current_price = Decimal(str(_value(exit_event, "current_price")))
+        quantity = Decimal(str(_value(entry, "quantity")))
+        point_value = Decimal(str(_value(entry, "point_value")))
+        realized = Decimal(str(_value(exit_event, "realized_pnl")))
+    except (ArithmeticError, TypeError, ValueError):
+        return "PNL_INPUT_INVALID"
+    multiplier = Decimal(1) if direction == "LONG" else Decimal(-1)
+    expected_pnl = (
+        (current_price - entry_price) * multiplier * quantity * point_value
+    )
+    if realized != expected_pnl:
+        return "REALIZED_PNL_MISMATCH"
+    kind = _event_type(exit_event)
+    trigger = _value(exit_event, "stop_trigger_price")
+    if kind in {"stop_loss_exit", "profit_lock_exit"} and trigger is not None:
+        stop_trigger = Decimal(str(trigger))
+        touched = (
+            direction == "LONG" and current_price <= stop_trigger
+        ) or (
+            direction == "SHORT" and current_price >= stop_trigger
+        )
+        if not touched:
+            return "STOP_TRIGGER_SIDE_MISMATCH"
+    return None
+
+
+def completed_trade_audit(
     events: Iterable[Any],
-) -> dict[str, list[Decimal]]:
-    """Pair each entry with its first exit and split it into four independent groups."""
+) -> tuple[dict[str, list[Decimal]], dict[str, list[str]]]:
+    """Split valid outcomes and anomalous audit reasons without editing history."""
     entries: dict[str, object] = {}
     outcomes = {
         "regular_LONG": [],
@@ -62,6 +122,7 @@ def completed_outcomes_by_group(
         "afterhours_LONG": [],
         "afterhours_SHORT": [],
     }
+    anomalies: dict[str, list[str]] = {key: [] for key in outcomes}
     for event in events:
         trade_id = str(_value(event, "trade_id"))
         kind = _event_type(event)
@@ -70,7 +131,19 @@ def completed_outcomes_by_group(
         elif kind in EXIT_EVENT_TYPES and trade_id in entries:
             entry = entries.pop(trade_id)
             key = f"{session_name(_observed_at(entry))}_{_direction(entry)}"
-            outcomes[key].append(Decimal(str(_value(event, "realized_pnl"))))
+            reason = validate_completed_trade(entry, event)
+            if reason is None:
+                outcomes[key].append(Decimal(str(_value(event, "realized_pnl"))))
+            else:
+                anomalies[key].append(f"{trade_id}:{reason}")
+    return outcomes, anomalies
+
+
+def completed_outcomes_by_group(
+    events: Iterable[Any],
+) -> dict[str, list[Decimal]]:
+    """Pair each entry with its first exit and split it into four independent groups."""
+    outcomes, _ = completed_trade_audit(events)
     return outcomes
 
 
@@ -169,7 +242,9 @@ def evaluate_session_direction_quality_gate(
 __all__ = [
     "SessionDirectionQualityGate",
     "completed_outcomes_by_group",
+    "completed_trade_audit",
     "evaluate_session_direction_quality_gate",
     "quality_metrics",
     "session_name",
+    "validate_completed_trade",
 ]
