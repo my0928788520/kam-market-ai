@@ -45,6 +45,9 @@ from kam_market_ai.notifications import (
     desired_live_session,
     due_session_close,
 )
+from kam_market_ai.paper_trading.futures_marker_chart_source import (
+    FuturesPaperMarkerChartSource,
+)
 from kam_market_ai.paper_trading.live_tmf_simulation import (
     LiveTmfPaperSimulation,
     TmfPaperJournalStore,
@@ -445,6 +448,12 @@ def main(
         except (OSError, TypeError, ValueError):
             print(json.dumps({"success": False, "failure_stage": "PAPER_JOURNAL_ERROR"}))
             return 2
+
+    if paper_session is not None:
+        chart_source = FuturesPaperMarkerChartSource(
+            chart_source,
+            lambda: paper_session.journal.events,
+        )
 
     def capture_verified_refresh() -> None:
         nonlocal active_line_alert, active_line_alert_is_exit
