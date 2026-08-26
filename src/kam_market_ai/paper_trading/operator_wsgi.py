@@ -269,6 +269,8 @@ def _proposal_rows(proposal: dict[str, str], matching: dict[str, str]) -> str:
         for key, value in proposal.items()
         if key in visible_keys
     }
+    if "status" in proposal and "狀態" not in frontend:
+        frontend["狀態"] = proposal["status"]
     if has_position:
         frontend.update(
             (key, matching[key])
@@ -320,11 +322,12 @@ def _matching_rows(values: dict[str, str]) -> str:
             "目前契約",
             "行情更新（台灣）",
             "Paper 持倉",
-            "日誌雜湊",
             "實盤狀態",
         )
         if key in values
     }
+    if "日誌雜湊" in values and len(values) == 1:
+        status["日誌雜湊"] = values["日誌雜湊"]
     if values.get("契約檢查") not in {None, "一致"}:
         status["契約警告"] = values["契約檢查"]
     if values.get("日誌驗證") not in {None, "正常", "等待首次驗證"}:
@@ -488,7 +491,7 @@ def render_operator_html(view: PaperTradingOperatorView) -> str:
     demo = view.demo or {}; bull, cells = _cells(view)
     frames = _frontend_timeframe_cards(demo.get("timeframes", ()))
     audit = "".join(f"<li title='{escape(item['hash'])}'>{escape(item['type'])} · {escape(item['hash'][:10])}</li>" for item in view.audit_events[-3:])
-    return f"""<!doctype html><html lang='zh-Hant-TW'><head><meta charset='utf-8'><title>{escape(view.title)}</title><link rel='stylesheet' href='/static/operator.css'></head><body><main><header><h1>{escape(view.title)}</h1><span>{escape(str(demo.get('instrument', '—')))}</span><span>資料狀態：{'DEMO' if demo else '本機'}</span><span>PAPER TRADING</span><span>唯讀模式・模擬執行・禁止真實下單</span></header><div class='banner'>{escape(str(demo.get('banner', '尚未載入模擬委託建議。本機頁面目前為唯讀模式。')))}</div><div class='dashboard'><section class='direction-card'><h2>市場方向</h2><strong>{escape(str(demo.get('direction', '—')))}</strong><p>{escape(str(demo.get('direction_reason', '尚未載入方向資料')))}</p></section><section class='control-card'><h2>多空控制權</h2><strong>多方 {bull}｜空方 {10-bull}</strong><small>控制權分裂</small><div class='control-cells'>{cells}</div></section>{_cycle(view)}<section class='timeframes'><h2>三週期狀態</h2><div>{frames}</div></section><section><h2>趨勢健康度</h2><strong>{escape(str(demo.get('trend_health', '—')))}</strong></section><section><h2>目前模擬部位</h2><strong>{escape(str(demo.get('position', '無部位')))}</strong><p>現價 {escape(str(demo.get('current_price', '—')))} · 未實現 {escape(str(demo.get('unrealized_pnl', '—')))}</p></section><section class='next-card next-wait'><h2>唯一下一步</h2><strong>{escape(str(demo.get('next_step', '等待資料完整')))}</strong></section><section class='proposal'><h2>模擬委託建議</h2><dl>{_rows(view.proposal)}</dl></section><section class='matching'><h2>模擬撮合結果</h2>{_matching_rows(view.matching)}</section></div><footer><span>模擬現金：{escape(str(view.ledger.get('cash', '—')))}</span><span>模擬部位：{escape(str(view.ledger.get('positions', '—')))}</span><span>已實現損益：—</span><span>未實現損益：{escape(str(demo.get('unrealized_pnl', '—')))}</span><span>緊急停止：{'已啟動' if view.emergency_stop else '未啟動'}</span><span class='audit'>稽核紀錄：{audit}</span></footer></main></body></html>"""
+    return f"""<!doctype html><html lang='zh-Hant-TW'><head><meta charset='utf-8'><title>{escape(view.title)}</title><link rel='stylesheet' href='/static/operator.css'></head><body><main><header><h1>{escape(view.title)}</h1><span>{escape(str(demo.get('instrument', '—')))}</span><span>資料狀態：{'DEMO' if demo else '本機'}</span><span>PAPER TRADING</span><span>唯讀模式・模擬執行・禁止真實下單</span></header><div class='banner'>{escape(str(demo.get('banner', '尚未載入模擬委託建議。本機頁面目前為唯讀模式。')))}</div><div class='dashboard'><section class='direction-card'><h2>市場方向</h2><strong>{escape(str(demo.get('direction', '—')))}</strong><p>{escape(str(demo.get('direction_reason', '尚未載入方向資料')))}</p></section><section class='control-card'><h2>多空控制權</h2><strong>多方 {bull}｜空方 {10-bull}</strong><small>控制權分裂</small><div class='control-cells'>{cells}</div></section>{weekly_note}{_cycle(view)}<section class='timeframes'><h2>三週期狀態</h2><div>{frames}</div></section><section><h2>趨勢健康度</h2><strong>{escape(str(demo.get('trend_health', '—')))}</strong></section><section><h2>目前模擬部位</h2><strong>{escape(str(demo.get('position', '無部位')))}</strong><p>現價 {escape(str(demo.get('current_price', '—')))} · 未實現 {escape(str(demo.get('unrealized_pnl', '—')))}</p></section><section class='next-card next-wait'><h2>唯一下一步</h2><strong>{escape(str(demo.get('next_step', '等待資料完整')))}</strong></section><section class='proposal'><h2>模擬委託建議</h2><dl>{_rows(view.proposal)}</dl></section><section class='matching'><h2>模擬撮合結果</h2>{_matching_rows(view.matching)}</section></div><footer><span>模擬現金：{escape(str(view.ledger.get('cash', '—')))}</span><span>模擬部位：{escape(str(view.ledger.get('positions', '—')))}</span><span>已實現損益：—</span><span>未實現損益：{escape(str(demo.get('unrealized_pnl', '—')))}</span><span>緊急停止：{'已啟動' if view.emergency_stop else '未啟動'}</span><span class='audit'>稽核紀錄：{audit}</span></footer></main></body></html>"""
 
 def _money(value: object) -> str:
     if value is None:
@@ -623,7 +626,7 @@ def _market_snapshot_header(snapshot: MarketSnapshot) -> str:
             f"<span class='market-chip'>{escape(snapshot.instrument_name)} · {escape(snapshot.product_code)}</span>",
             f"<span class='market-chip'>{escape(snapshot.contract_code or '—')}／{escape(snapshot.contract_month or '—')}</span>",
             f"<span class='market-chip'>最新：{escape(_money(snapshot.last_price))} · 量：{escape(_money(snapshot.volume))}</span>",
-            f"<span class='market-chip'>資料時間：{escape(str(snapshot.timestamp or '—'))}</span>",
+            f"<span class='market-chip'>資料時間（台灣）：{escape(snapshot.timestamp.astimezone(ZoneInfo('Asia/Taipei')).strftime('%Y-%m-%d %H:%M') if isinstance(snapshot.timestamp, datetime) and snapshot.timestamp.tzinfo is not None else '—')}</span>",
             f"<span class='market-chip'>{session} · {market} · {freshness}</span>",
             "<span class='market-chip' title='OFFLINE_DEMO'>離線示範行情</span>",
         ))
@@ -636,6 +639,19 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
     demo = view.demo or {}
     bull, cells = _cells(view)
     frames = _frontend_timeframe_cards(demo.get("timeframes", ()), demo.get("timeframe_details"))
+    timeframe_details = demo.get("timeframe_details")
+    weekly_details = (
+        timeframe_details.get("週線", {})
+        if isinstance(timeframe_details, Mapping)
+        else {}
+    )
+    weekly_note = ""
+    if isinstance(weekly_details, Mapping) and weekly_details.get("status") == "ambiguous":
+        observed = {str(weekly_details.get("position", "")), str(weekly_details.get("trend", ""))}
+        if observed == {"bullish"}:
+            weekly_note = "<span class='weekly-structure-note'>偏多觀察・結構待確認</span>"
+        elif observed == {"bearish"}:
+            weekly_note = "<span class='weekly-structure-note'>偏空觀察・結構待確認</span>"
     control_label = _control_label(view, bull)
     audit = "".join(f"<li title='{escape(item['hash'])}'>{escape(item['type'])} · {escape(item['hash'][:10])}</li>" for item in view.audit_events[-3:])
     proposal_title = "自動模擬執行" if demo.get("automation_mode") == "AUTO PAPER" else "模擬委託建議"
@@ -681,7 +697,7 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
         "期貨具高槓桿，可能產生超過原始保證金之損失；所有實際委託均由使用者自行判斷並於券商端操作，交易結果與損益由使用者自行承擔。",
     )
     disclaimer = "".join(f"<span>{escape(line)}</span>" for line in disclaimer_lines)
-    return f"""<!doctype html><html lang='zh-Hant-TW'><head><meta charset='utf-8'><title>{escape(view.title)}</title><link rel='stylesheet' href='/static/operator.css'></head><body><main><header><h1>{escape(view.title)}</h1>{_market_header_status(snapshot)}<a class='account-chip' href='/account'>期貨帳戶｜資金安全</a>{_market_snapshot_header(snapshot)}</header><div class='banner'><span class='banner-message'>{escape(str(demo.get('banner', '尚未載入模擬委託建議。本機頁面目前為唯讀模式。')))} · 目前僅 Header 已切換至離線示範行情；決策卡尚未接入此商品 snapshot。</span>{daily_analysis_chip}{line_alert_chip}</div><div class='dashboard'><section class='direction-card'><h2>市場方向</h2><strong>{escape(str(demo.get('direction', '—')))}</strong><p>{escape(str(demo.get('direction_reason', '尚未載入方向資料')))}</p></section><section class='control-card'><h2>多空控制權</h2><strong>{escape(control_label)}</strong><small>控制權分裂</small><div class='control-cells'>{cells}</div></section>{_cycle(view)}<section class='timeframes'><h2>三週期狀態</h2><div>{frames}</div></section><section class='trend-health-card'><h2>趨勢健康度</h2><strong>{escape(str(demo.get('trend_health', '—')))}</strong></section><section class='position-card'><h2>目前模擬部位</h2><strong>{escape(str(demo.get('position', '無部位')))}</strong><p>現價 {escape(str(demo.get('current_price', '—')))} · 未實現 {escape(str(demo.get('unrealized_pnl', '—')))}</p></section><section class='next-card next-wait'><h2>唯一下一步</h2><strong>{escape(str(demo.get('next_step', '等待資料完整')))}</strong></section>{proposal}<section class='matching'><h2>交易績效</h2>{_matching_rows(view.matching)}</section></div><footer><div class='footer-metrics'><span>模擬現金：{escape(str(view.ledger.get('cash', '—')))}</span><span>模擬部位：{escape(str(view.ledger.get('positions', '—')))}</span><span>已實現損益：—</span><span>未實現損益：{escape(str(demo.get('unrealized_pnl', '—')))}</span><span>緊急停止：{'已啟動' if view.emergency_stop else '未啟動'}</span><span class='audit'>稽核紀錄：{audit}</span></div><p class='risk-disclaimer'>{disclaimer}</p></footer></main></body></html>"""
+    return f"""<!doctype html><html lang='zh-Hant-TW'><head><meta charset='utf-8'><title>{escape(view.title)}</title><link rel='stylesheet' href='/static/operator.css'></head><body><main><header><h1>{escape(view.title)}</h1>{_market_header_status(snapshot)}<a class='account-chip' href='/account'>期貨帳戶｜資金安全</a>{_market_snapshot_header(snapshot)}</header><div class='banner'><span class='banner-message'>{escape(str(demo.get('banner', '尚未載入模擬委託建議。本機頁面目前為唯讀模式。')))} · 目前僅 Header 已切換至離線示範行情；決策卡尚未接入此商品 snapshot。</span>{daily_analysis_chip}{line_alert_chip}</div><div class='dashboard'><section class='direction-card'><h2>市場方向</h2><strong>{escape(str(demo.get('direction', '—')))}</strong><p>{escape(str(demo.get('direction_reason', '尚未載入方向資料')))}</p></section><section class='control-card'><h2>多空控制權</h2><strong>{escape(control_label)}</strong><small>控制權分裂</small><div class='control-cells'>{cells}</div></section>{_cycle(view)}<section class='timeframes'><h2>三週期狀態</h2><div>{frames}</div></section><section class='trend-health-card'><h2>趨勢健康度</h2><strong>{escape(str(demo.get('trend_health', '—')))}</strong></section><section class='position-card'><h2>目前模擬部位</h2><strong>{escape(str(demo.get('position', '無部位')))}</strong><p>現價 {escape(str(demo.get('current_price', '—')))} · 未實現 {escape(str(demo.get('unrealized_pnl', '—')))}</p></section><section class='next-card next-wait'><h2>唯一下一步</h2><strong>{escape(str(demo.get('next_step', '等待資料完整')))}</strong></section>{proposal}<section class='matching'><h2>模擬撮合結果／交易績效</h2>{_matching_rows(view.matching)}</section></div><footer><div class='footer-metrics'><span>模擬現金：{escape(str(view.ledger.get('cash', '—')))}</span><span>模擬部位：{escape(str(view.ledger.get('positions', '—')))}</span><span>已實現損益：—</span><span>未實現損益：{escape(str(demo.get('unrealized_pnl', '—')))}</span><span>緊急停止：{'已啟動' if view.emergency_stop else '未啟動'}</span><span class='audit'>稽核紀錄：{audit}</span></div><p class='risk-disclaimer'>{disclaimer}</p></footer></main></body></html>"""
 
 
 _render_terminal_html = render_operator_html
