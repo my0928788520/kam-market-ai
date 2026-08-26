@@ -560,3 +560,49 @@ def test_chart_rejects_marker_from_a_different_instrument() -> None:
             None,
             paper_markers=(marker,),
         )
+
+
+
+def test_paper_event_during_last_forming_hour_maps_to_last_60m_candle() -> None:
+    start = datetime(2026, 8, 26, tzinfo=UTC)
+    inside_last_bar = FuturesPaperChartMarker(
+        "TMF",
+        start + timedelta(hours=1, minutes=59),
+        __import__("decimal").Decimal("105"),
+        __import__("decimal").Decimal("1"),
+        FuturesPaperMarkerAction.LONG_ENTRY,
+        "inside-last-forming-bar",
+    )
+    next_bar_event = FuturesPaperChartMarker(
+        "TMF",
+        start + timedelta(hours=2),
+        __import__("decimal").Decimal("106"),
+        __import__("decimal").Decimal("1"),
+        FuturesPaperMarkerAction.LONG_EXIT,
+        "next-bar-not-visible",
+    )
+    candles = (
+        ChartCandle(start, 100, 103, 99, 102, 10),
+        ChartCandle(start + timedelta(hours=1), 102, 106, 101, 105, 12),
+    )
+    series = ChartSeries(
+        "TMF",
+        "60m",
+        candles,
+        "forming-hour",
+        candles[-1].opened_at,
+        paper_markers=(inside_last_bar, next_bar_event),
+    )
+    source = type(
+        "LastBarMarkerSource",
+        (),
+        {"read_series": lambda self, instrument, timeframe: series},
+    )()
+
+    html = render_multi_timeframe_chart_html(source, timeframe="60m")
+
+    assert html.count("data-marker-id=") == 1
+    assert "inside-last-forming-bar" not in html
+    assert "多單進場｜價格 105｜口數 1｜時間 2026-08-26T01:59:00+00:00" in html
+    assert "<circle cx='523.00'" in html
+    assert "回補" not in html
