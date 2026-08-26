@@ -584,6 +584,21 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
         f"<text class='chart-price-label' x='8' y='{y(value) + 4:.2f}'>{value:,.0f}</text>"
         for value in reversed(grid_values)
     )
+    # Keep the plot readable: one representative marker per candle.
+    # The complete, lossless event history remains available in the detail panel.
+    plot_markers: list[tuple[FuturesPaperChartMarker, int, int]] = []
+    for candle_index, candle in enumerate(candles):
+        candle_end = candle.opened_at + timeframe_duration
+        candle_markers = [
+            marker
+            for marker in visible_markers
+            if candle.opened_at <= marker.occurred_at < candle_end
+        ]
+        if candle_markers:
+            plot_markers.append(
+                (candle_markers[-1], candle_index, len(candle_markers))
+            )
+
     marker_nodes: list[str] = []
     lane_state = {
         "above": {"last_index": -100, "lane": -1},
@@ -593,12 +608,7 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
         FuturesPaperMarkerAction.LONG_ENTRY,
         FuturesPaperMarkerAction.SHORT_COVER,
     }
-    for marker in visible_markers:
-        candle_index = max(
-            index
-            for index, candle in enumerate(candles)
-            if candle.opened_at <= marker.occurred_at
-        )
+    for marker, candle_index, candle_marker_count in plot_markers:
         placement = "below" if marker.action in below_actions else "above"
         state = lane_state[placement]
         lane = state["lane"] + 1 if candle_index - state["last_index"] <= 3 else 0
@@ -622,9 +632,15 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
             }[marker.action]
         )
         marker_id = escape(marker.marker_id)
+        grouped_note = (
+            f"｜同根 K 棒共 {candle_marker_count} 筆，圖上顯示最後一筆"
+            if candle_marker_count > 1
+            else ""
+        )
         marker_detail = escape(
             f"{marker.label}｜價格 {_price_text(float(marker.price))}｜"
             f"口數 {marker.quantity}｜時間 {marker.occurred_at.isoformat()}"
+            f"{grouped_note}"
         )
         marker_nodes.append(
             f"<g class='chart-paper-marker chart-paper-marker-{marker_class} "
