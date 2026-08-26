@@ -339,3 +339,10 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
 .chart-paper-marker-long_exit circle {
   fill: #7c3aed;
 }
+
+
+/* Restored compact desktop contract used by the verified operator layout. */
+.matching dl dd:last-child { font-size: 10.5px; }
+@media (max-height: 1000px) and (min-width: 1001px) {
+  .dashboard { grid-template-rows: 68px 142px 70px minmax(0, 1fr); }
+}
