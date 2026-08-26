@@ -353,3 +353,14 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
 .weekly-structure-note { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 
 .legacy-matching-heading { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+
+.chart-paper-marker-stem {
+  stroke: #d7deea;
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+  opacity: .7;
+  vector-effect: non-scaling-stroke;
+}
+.chart-paper-marker-above text { dominant-baseline: auto; }
+.chart-paper-marker-below text { dominant-baseline: hanging; }
