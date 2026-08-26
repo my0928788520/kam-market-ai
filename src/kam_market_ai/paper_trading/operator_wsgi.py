@@ -720,6 +720,14 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
         if "實盤狀態" in view.matching
         else ""
     )
+    position_card = (
+        ""
+        if demo.get("automation_mode") == "AUTO PAPER"
+        else "<section class='position-card'><h2>目前模擬部位</h2>"
+        f"<strong>{escape(str(demo.get('position', '無部位')))}</strong>"
+        f"<p>現價 {escape(str(demo.get('current_price', '—')))} · "
+        f"未實現 {escape(str(demo.get('unrealized_pnl', '—')))}</p></section>"
+    )
     return f"""<!doctype html><html lang='zh-Hant-TW'><head><meta charset='utf-8'><title>{escape(view.title)}</title><link rel='stylesheet' href='/static/operator.css'></head><body><main><header><h1>{escape(view.title)}</h1>{_market_header_status(snapshot)}<a class='account-chip' href='/account'>期貨帳戶｜資金安全</a>{_market_snapshot_header(snapshot)}</header><div class='banner'><span class='banner-message'>{escape(str(demo.get('banner', '尚未載入模擬委託建議。本機頁面目前為唯讀模式。')))} · 目前僅 Header 已切換至離線示範行情；決策卡尚未接入此商品 snapshot。</span>{daily_analysis_chip}{line_alert_chip}</div><div class='dashboard'><section class='direction-card'><h2>市場方向</h2><strong>{escape(str(demo.get('direction', '—')))}</strong><p>{escape(str(demo.get('direction_reason', '尚未載入方向資料')))}</p></section><section class='control-card'><h2>多空控制權</h2><strong>{escape(control_label)}</strong><small>控制權分裂</small><div class='control-cells'>{cells}</div></section>{weekly_note}{_cycle(view)}<section class='timeframes'><h2>三週期狀態</h2><div>{frames}</div></section><section class='trend-health-card'><h2>趨勢健康度</h2><strong>{escape(str(demo.get('trend_health', '—')))}</strong></section>{position_card}<section class='next-card next-wait'><h2>唯一下一步</h2><strong>{escape(str(demo.get('next_step', '等待資料完整')))}</strong></section>{proposal}<section class='matching'><h2>交易績效</h2><span class='legacy-matching-heading'>模擬撮合結果</span>{_matching_rows(view.matching)}</section></div><footer><div class='footer-metrics'><span>模擬現金：{escape(str(view.ledger.get('cash', '—')))}</span><span>模擬部位：{escape(str(view.ledger.get('positions', '—')))}</span><span>已實現損益：—</span><span>未實現損益：{escape(str(demo.get('unrealized_pnl', '—')))}</span><span>緊急停止：{'已啟動' if view.emergency_stop else '未啟動'}</span>{live_lock}<span class='audit'>稽核紀錄：{audit}</span></div><p class='risk-disclaimer'>{disclaimer}</p></footer></main></body></html>"""
 
 
