@@ -10,6 +10,7 @@
   let activeDrawingTool = null;
   let draftDrawing = null;
   let editingAnchor = null;
+  let paperPanelOpen = false;
   const drawingStorageKey = `kam-chart-drawings:${window.location.pathname}:${window.location.search}`;
   let manualDrawings = [];
   try {
@@ -40,6 +41,13 @@
       current.replaceChildren(...Array.from(replacement.childNodes).map((node) => document.importNode(node, true)));
     }
     renderManualDrawings();
+    const paperPanel = document.querySelector(".chart-paper-detail");
+    if (paperPanel) paperPanel.classList.toggle("is-open", paperPanelOpen);
+    const panelToggle = document.querySelector("[data-paper-panel-toggle]");
+    if (panelToggle) {
+      panelToggle.setAttribute("aria-expanded", String(paperPanelOpen));
+      panelToggle.textContent = paperPanelOpen ? "收合" : "查看";
+    }
   };
 
   const saveManualDrawings = () => {
@@ -289,6 +297,14 @@
   });
 
   document.addEventListener("keydown", (event) => {
+    if ((event.key === "Enter" || event.key === " ") && event.target.matches?.(".chart-paper-marker")) {
+      event.preventDefault();
+      selectPaperMarker(
+        event.target.dataset.markerId,
+        event.target.dataset.markerDetail || event.target.getAttribute("aria-label"),
+      );
+      return;
+    }
     if (event.key === "Escape") {
       draftDrawing = null;
       editingAnchor = null;
@@ -298,7 +314,59 @@
     }
   });
 
+  const selectPaperMarker = (markerId, detail) => {
+    for (const marker of document.querySelectorAll(".chart-paper-marker")) {
+      marker.classList.toggle("is-selected", marker.dataset.markerId === markerId);
+    }
+    for (const row of document.querySelectorAll(".chart-paper-event")) {
+      row.classList.toggle("is-selected", row.dataset.markerTarget === markerId);
+    }
+    const selected = document.querySelector(".chart-paper-selected");
+    if (selected && detail) selected.textContent = detail;
+    paperPanelOpen = true;
+    const panel = document.querySelector(".chart-paper-detail");
+    if (panel) panel.classList.add("is-open");
+    const toggle = document.querySelector("[data-paper-panel-toggle]");
+    if (toggle) {
+      toggle.setAttribute("aria-expanded", "true");
+      toggle.textContent = "收合";
+    }
+  };
+
+  document.addEventListener("pointerover", (event) => {
+    const marker = event.target.closest?.(".chart-paper-marker");
+    if (!marker) return;
+    const selected = document.querySelector(".chart-paper-selected");
+    if (selected) selected.textContent = marker.dataset.markerDetail || marker.getAttribute("aria-label") || "";
+  });
+
   document.addEventListener("click", (event) => {
+    const panelToggle = event.target.closest?.("[data-paper-panel-toggle]");
+    if (panelToggle) {
+      paperPanelOpen = !paperPanelOpen;
+      const panel = panelToggle.closest(".chart-paper-detail");
+      panel?.classList.toggle("is-open", paperPanelOpen);
+      panelToggle.setAttribute("aria-expanded", String(paperPanelOpen));
+      panelToggle.textContent = paperPanelOpen ? "收合" : "查看";
+      return;
+    }
+    const marker = event.target.closest?.(".chart-paper-marker");
+    if (marker) {
+      selectPaperMarker(marker.dataset.markerId, marker.dataset.markerDetail || marker.getAttribute("aria-label"));
+      return;
+    }
+    const paperEvent = event.target.closest?.(".chart-paper-event");
+    if (paperEvent) {
+      const target = document.querySelector(
+        `.chart-paper-marker[data-marker-id="${CSS.escape(paperEvent.dataset.markerTarget || "")}"]`,
+      );
+      selectPaperMarker(
+        paperEvent.dataset.markerTarget,
+        target?.dataset.markerDetail || target?.getAttribute("aria-label") || paperEvent.textContent.trim(),
+      );
+      target?.focus();
+      return;
+    }
     const toolButton = event.target.closest?.("[data-manual-tool]");
     if (toolButton) {
       const selected = toolButton.dataset.manualTool;
