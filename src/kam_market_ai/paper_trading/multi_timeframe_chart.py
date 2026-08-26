@@ -471,10 +471,17 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     displayed_price = (
         series.current_price if series.current_price is not None else candles[-1].close
     )
+    timeframe_duration = {
+        "15m": timedelta(minutes=15),
+        "60m": timedelta(hours=1),
+        "1d": timedelta(days=1),
+        "1w": timedelta(days=7),
+    }[series.timeframe]
+    visible_end = candles[-1].opened_at + timeframe_duration
     visible_markers = tuple(
         marker
         for marker in series.paper_markers
-        if candles[0].opened_at <= marker.occurred_at <= candles[-1].opened_at
+        if candles[0].opened_at <= marker.occurred_at < visible_end
     )
     marker_prices = tuple(float(marker.price) for marker in visible_markers)
     raw_high = max(max(item.high for item in candles), displayed_price, *marker_prices)
@@ -575,20 +582,24 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
     )
     marker_nodes: list[str] = []
     for marker in visible_markers:
-        candle_index = min(
-            range(len(candles)),
-            key=lambda index: abs(
-                (candles[index].opened_at - marker.occurred_at).total_seconds()
-            ),
+        candle_index = max(
+            index
+            for index, candle in enumerate(candles)
+            if candle.opened_at <= marker.occurred_at
         )
         marker_x = first_x + candle_index * step
         marker_y = y(float(marker.price))
         marker_class = escape(marker.action.value)
         marker_label = escape(marker.label)
         marker_id = escape(marker.marker_id)
+        marker_detail = escape(
+            f"{marker.label}｜價格 {_price_text(float(marker.price))}｜"
+            f"口數 {marker.quantity}｜時間 {marker.occurred_at.isoformat()}"
+        )
         marker_nodes.append(
             f"<g class='chart-paper-marker chart-paper-marker-{marker_class}' "
-            f"data-marker-id='{marker_id}' aria-label='{marker_label}'>"
+            f"data-marker-id='{marker_id}' aria-label='{marker_detail}'>"
+            f"<title>{marker_detail}</title>"
             f"<circle cx='{marker_x:.2f}' cy='{marker_y:.2f}' r='5'/>"
             f"<text x='{marker_x:.2f}' y='{marker_y - 10:.2f}' text-anchor='middle'>"
             f"{marker_label}</text></g>"
