@@ -613,7 +613,14 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
         )
         stem_end_y = label_y - 5 if placement == "below" else label_y + 4
         marker_class = escape(marker.action.value)
-        marker_label = escape(marker.label)
+        marker_label = escape(
+            {
+                FuturesPaperMarkerAction.LONG_ENTRY: "多進",
+                FuturesPaperMarkerAction.LONG_EXIT: "多出",
+                FuturesPaperMarkerAction.SHORT_ENTRY: "空進",
+                FuturesPaperMarkerAction.SHORT_COVER: "空補",
+            }[marker.action]
+        )
         marker_id = escape(marker.marker_id)
         marker_detail = escape(
             f"{marker.label}｜價格 {_price_text(float(marker.price))}｜"
@@ -622,7 +629,8 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
         marker_nodes.append(
             f"<g class='chart-paper-marker chart-paper-marker-{marker_class} "
             f"chart-paper-marker-{placement}' data-marker-lane='{lane}' "
-            f"data-marker-id='{marker_id}' aria-label='{marker_detail}'>"
+            f"data-marker-id='{marker_id}' data-marker-detail='{marker_detail}' "
+            f"role='button' tabindex='0' aria-label='{marker_detail}'>"
             f"<title>{marker_detail}</title>"
             f"<line class='chart-paper-marker-stem' x1='{marker_x:.2f}' "
             f"y1='{marker_y:.2f}' x2='{marker_x:.2f}' y2='{stem_end_y:.2f}'/>"
@@ -645,6 +653,29 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
         f"<text class='chart-volume-label' x='{left:.0f}' y='288'>成交量</text>{time_labels}"
         f"<g class='chart-crosshair' hidden><line class='chart-crosshair-x' x1='0' y1='{top:.2f}' x2='0' y2='{volume_bottom:.2f}'/><line class='chart-crosshair-y' x1='{left:.2f}' y1='0' x2='{right:.2f}' y2='0'/></g>"
         f"<g class='chart-hover-zones'>{''.join(hover_zones)}</g></svg>"
+    )
+
+
+def _paper_marker_detail_panel(series: ChartSeries) -> str:
+    markers = tuple(reversed(series.paper_markers[-20:]))
+    rows = "".join(
+        "<button type='button' class='chart-paper-event' "
+        f"data-marker-target='{escape(marker.marker_id)}'>"
+        f"<strong>{escape(marker.label)}</strong>"
+        f"<span>{_price_text(float(marker.price))}・{marker.quantity} 口</span>"
+        f"<small>{escape(_time_label(marker.occurred_at, series.timeframe))}</small>"
+        "</button>"
+        for marker in markers
+    )
+    if not rows:
+        rows = "<p class='chart-paper-event-empty'>目前沒有 Paper Trading 事件</p>"
+    return (
+        "<aside class='chart-paper-detail' aria-label='Paper Trading 交易明細'>"
+        "<div class='chart-paper-detail-header'><strong>模擬交易紀錄</strong>"
+        "<button type='button' data-paper-panel-toggle aria-expanded='false'>查看</button></div>"
+        f"<div class='chart-paper-detail-list'>{rows}</div>"
+        "<p class='chart-paper-selected' role='status'>點選圖示查看完整資料</p>"
+        "</aside>"
     )
 
 
@@ -714,7 +745,7 @@ def render_multi_timeframe_chart_html(
     return f"""<!doctype html><html class='chart-page' lang='zh-Hant-TW'><head><meta charset='utf-8'><title>KAM 多週期 K 線</title><link rel='stylesheet' href='/static/operator.css'><script src='/static/chart-refresh.js' defer></script></head><body class='chart-page'><main class='chart-main'>
       <header><div><h1>多週期 K 線</h1><small>15 分・60 分・日・週｜唯讀市場結構檢視</small></div><a class='account-chip' href='/'>返回市場儀表板</a>{session_controls}<strong class='chart-session-badge chart-session-{escape(session_class)}' aria-label='目前 K 線檢視時段'>檢視：{escape(session_text)}</strong><span id='chart-live-status' class='chart-live-status' role='status' aria-live='polite'>每 3 秒更新・禁止真實下單</span></header>
       <nav class='chart-toolbar' aria-label='圖表商品與週期'>{instrument_tabs}<span class='chart-toolbar-divider'></span>{timeframe_tabs}</nav>
-      <div id='chart-summary' class='chart-summary'>{escape(status)}</div><section id='chart-panel' class='chart-panel'>{_price_board(series, ma_values)}{_chart_svg(series, ma_values)}<div class='chart-tooltip' role='status' aria-live='polite' hidden></div></section>
+      <div id='chart-summary' class='chart-summary'>{escape(status)}</div><section id='chart-panel' class='chart-panel'>{_price_board(series, ma_values)}{_chart_svg(series, ma_values)}{_paper_marker_detail_panel(series)}<div class='chart-tooltip' role='status' aria-live='polite' hidden></div></section>
       <aside class='chart-overlays' aria-label='圖表顯示項目'><span class='enabled'>K 線</span><span class='enabled'>20MA</span>{trend_overlay}{range_overlay}<span class='enabled'>Paper 訊號（已驗證事件）</span><span class='enabled'>成交量</span></aside>
       <footer id='chart-footer' class='chart-footer'><span>資料來源：{escape(series.source)}</span><span>K 線時間：{escape(updated)}</span><span>即時報價時間：{escape(quote_updated)}</span><span>資料不足時不補假資料</span><span>任何單一指標均不構成進出場訊號</span></footer>
     </main></body></html>"""
