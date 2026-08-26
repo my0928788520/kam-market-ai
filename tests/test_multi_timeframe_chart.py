@@ -623,3 +623,49 @@ def test_paper_event_during_last_forming_hour_maps_to_last_60m_candle() -> None:
     assert "多單進場｜價格 105｜口數 1｜時間 2026-08-26T01:59:00+00:00" in html
     assert "<circle cx='534.00'" in html
     assert "回補" not in html
+
+
+def test_chart_consolidates_multiple_paper_events_in_the_same_candle() -> None:
+    start = datetime(2026, 8, 26, tzinfo=UTC)
+    markers = (
+        FuturesPaperChartMarker(
+            "TMF",
+            start + timedelta(minutes=10),
+            __import__("decimal").Decimal("101"),
+            __import__("decimal").Decimal("1"),
+            FuturesPaperMarkerAction.LONG_ENTRY,
+            "same-candle-entry",
+        ),
+        FuturesPaperChartMarker(
+            "TMF",
+            start + timedelta(minutes=40),
+            __import__("decimal").Decimal("102"),
+            __import__("decimal").Decimal("1"),
+            FuturesPaperMarkerAction.LONG_EXIT,
+            "same-candle-exit",
+        ),
+    )
+    candles = (
+        ChartCandle(start, 100, 103, 99, 102, 10),
+        ChartCandle(start + timedelta(hours=1), 102, 104, 101, 103, 12),
+    )
+    series = ChartSeries(
+        "TMF",
+        "60m",
+        candles,
+        "same-candle-events",
+        candles[-1].opened_at,
+        paper_markers=markers,
+    )
+    source = type(
+        "SameCandleMarkerSource",
+        (),
+        {"read_series": lambda self, instrument, timeframe: series},
+    )()
+
+    html = render_multi_timeframe_chart_html(source, timeframe="60m")
+
+    assert html.count("class='chart-paper-marker chart-paper-marker-") == 1
+    assert "chart-paper-marker-long_exit" in html
+    assert "同根 K 棒共 2 筆，圖上顯示最後一筆" in html
+    assert html.count("class='chart-paper-event'") == 2
