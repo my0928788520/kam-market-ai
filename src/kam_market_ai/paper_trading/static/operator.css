@@ -380,3 +380,85 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
 .chart-paper-markers:hover .chart-paper-marker:not(:hover) circle {
   opacity: .45;
 }
+
+
+/* Paper Trading chart clarity: minimal plot markers with an optional detail drawer. */
+.chart-paper-marker circle { r: 4px; }
+.chart-paper-marker text { font-size: 9px; }
+.chart-paper-marker:focus { outline: none; }
+.chart-paper-marker:focus circle,
+.chart-paper-marker.is-selected circle {
+  stroke: #fff6b6;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 5px #ffe27a);
+}
+.chart-paper-detail {
+  position: absolute;
+  z-index: 8;
+  top: 12px;
+  right: 12px;
+  width: min(270px, 32vw);
+  max-height: calc(100% - 24px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: 1px solid #42516a;
+  border-radius: 11px;
+  background: #0a1018f2;
+  box-shadow: 0 12px 30px #0009;
+  transform: translateX(calc(100% - 66px));
+  transition: transform 160ms ease;
+}
+.chart-paper-detail.is-open { transform: translateX(0); }
+.chart-paper-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 9px;
+  border-bottom: 1px solid #303c50;
+}
+.chart-paper-detail-header strong { font-size: 12px; letter-spacing: 0; }
+.chart-paper-detail-header button {
+  border: 1px solid #6c4c76;
+  border-radius: 6px;
+  padding: 4px 7px;
+  color: #f4e9ff;
+  background: #3a2445;
+  cursor: pointer;
+}
+.chart-paper-detail-list {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  padding: 7px;
+  overflow: auto;
+}
+.chart-paper-event {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 7px;
+  padding: 7px 8px;
+  border: 1px solid #344157;
+  border-radius: 7px;
+  color: #eaf0fa;
+  background: #111926;
+  text-align: left;
+  cursor: pointer;
+}
+.chart-paper-event:hover,
+.chart-paper-event.is-selected { border-color: #ca74dc; background: #25162d; }
+.chart-paper-event strong { font-size: 11px; letter-spacing: 0; }
+.chart-paper-event span { color: #f3c5ff; font-size: 10px; }
+.chart-paper-event small { grid-column: 1 / -1; margin: 0; color: #8998ad; font-size: 9px; }
+.chart-paper-selected,
+.chart-paper-event-empty {
+  margin: 0;
+  padding: 7px 9px;
+  border-top: 1px solid #303c50;
+  color: #bec9d9;
+  font-size: 10px;
+}
+@media (max-width: 760px) {
+  .chart-paper-detail { width: min(250px, 78vw); }
+}
