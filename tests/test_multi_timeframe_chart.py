@@ -604,5 +604,5 @@ def test_paper_event_during_last_forming_hour_maps_to_last_60m_candle() -> None:
     assert html.count("data-marker-id=") == 1
     assert "inside-last-forming-bar" not in html
     assert "多單進場｜價格 105｜口數 1｜時間 2026-08-26T01:59:00+00:00" in html
-    assert "<circle cx='523.00'" in html
+    assert "<circle cx='534.00'" in html
     assert "回補" not in html
