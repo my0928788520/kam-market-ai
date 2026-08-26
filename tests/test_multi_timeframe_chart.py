@@ -43,6 +43,10 @@ def test_chart_tooltip_stays_visible_long_enough_to_read() -> None:
     assert "setPointerCapture?.(event.pointerId)" in script
     assert "拖曳中：虛線為預覽" in script
     assert "drawing.y1 = point.y" in script and "drawing.y2 = point.y" in script
+    assert 'document.addEventListener("pointerover"' in script
+    assert "selectPaperMarker" in script
+    assert "data-paper-panel-toggle" in script
+    assert "paperPanelOpen" in script
 
 
 class FixtureChartSource:
@@ -545,6 +549,14 @@ def test_chart_renders_only_explicit_verified_futures_paper_markers() -> None:
     assert "回補" in html
     assert "Paper 訊號（已驗證事件）" in html
     assert html.count("data-marker-id=") == 4
+    assert ">多進</text>" in html
+    assert ">多出</text>" in html
+    assert ">空進</text>" in html
+    assert ">空補</text>" in html
+    assert "class='chart-paper-detail'" in html
+    assert "模擬交易紀錄" in html
+    assert html.count("class='chart-paper-event'") == 4
+    assert "data-paper-panel-toggle aria-expanded='false'" in html
 
 
 def test_chart_rejects_marker_from_a_different_instrument() -> None:
