@@ -534,6 +534,11 @@ def test_chart_renders_only_explicit_verified_futures_paper_markers() -> None:
     html = render_multi_timeframe_chart_html(MarkerSource(), instrument="TMF")
 
     assert html.count("class='chart-paper-marker chart-paper-marker-") == 4
+    assert "chart-paper-marker-long_entry chart-paper-marker-below' data-marker-lane='0'" in html
+    assert "chart-paper-marker-long_exit chart-paper-marker-above' data-marker-lane='0'" in html
+    assert "chart-paper-marker-short_entry chart-paper-marker-above' data-marker-lane='1'" in html
+    assert "chart-paper-marker-short_cover chart-paper-marker-below' data-marker-lane='1'" in html
+    assert html.count("class='chart-paper-marker-stem'") == 4
     assert "多單進場" in html
     assert "平多" in html
     assert "空單進場" in html
