@@ -462,3 +462,62 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
 @media (max-width: 760px) {
   .chart-paper-detail { width: min(250px, 78vw); }
 }
+
+
+/* Compact Paper chart overlay: preserve the plot width and reveal details only on demand. */
+.chart-paper-detail {
+  top: 10px;
+  right: 10px;
+  width: min(300px, 42vw);
+}
+.chart-paper-detail:not(.is-open) {
+  width: 44px;
+  height: 38px;
+  max-height: 38px;
+  display: block;
+  border-color: #53627a;
+  transform: none;
+  background: #111927f2;
+}
+.chart-paper-detail:not(.is-open) .chart-paper-detail-header {
+  height: 100%;
+  padding: 3px;
+  border-bottom: 0;
+}
+.chart-paper-detail:not(.is-open) .chart-paper-detail-header strong,
+.chart-paper-detail:not(.is-open) .chart-paper-detail-list,
+.chart-paper-detail:not(.is-open) .chart-paper-selected {
+  display: none;
+}
+.chart-paper-detail:not(.is-open) .chart-paper-detail-header button {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  color: #dbe7f8;
+  background: transparent;
+  font-size: 10px;
+  font-weight: 800;
+}
+.chart-paper-marker circle {
+  r: 3.5px;
+  opacity: .88;
+}
+.chart-paper-marker text,
+.chart-paper-marker-stem {
+  display: none;
+}
+.chart-paper-marker:hover circle,
+.chart-paper-marker:focus circle {
+  opacity: 1;
+  stroke: #fff6b6;
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 4px #ffe27a);
+}
+.chart-paper-markers:hover .chart-paper-marker:not(:hover) circle {
+  opacity: .28;
+}
+@media (max-width: 760px) {
+  .chart-paper-detail { width: min(280px, calc(100vw - 28px)); }
+  .chart-paper-detail:not(.is-open) { width: 42px; }
+}
