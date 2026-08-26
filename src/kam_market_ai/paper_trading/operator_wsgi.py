@@ -281,7 +281,11 @@ def _proposal_rows(proposal: dict[str, str], matching: dict[str, str]) -> str:
             for key in ("風控狀態", "五分鐘確認", "緊急停損")
             if key in matching and str(matching[key]) != "—"
         )
-    return _rows(frontend)
+    rendered = _rows(frontend)
+    return rendered.replace(
+        "<dt>風險</dt><dd title='不可判讀'>不可判讀</dd>",
+        "<dt>風險</dt><dd>不可判讀</dd>",
+    )
 
 
 def _paper_position_strip(proposal: Mapping[str, str], matching: Mapping[str, str]) -> str:
