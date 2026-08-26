@@ -10,7 +10,11 @@ from itertools import pairwise
 from math import isfinite
 from typing import Protocol
 
-from .futures_chart_markers import FuturesPaperChartMarker, sort_futures_paper_markers
+from .futures_chart_markers import (
+    FuturesPaperChartMarker,
+    FuturesPaperMarkerAction,
+    sort_futures_paper_markers,
+)
 
 SUPPORTED_CHART_TIMEFRAMES = ("15m", "60m", "1d", "1w")
 TIMEFRAME_LABELS = {"15m": "15 分 K", "60m": "60 分 K", "1d": "日 K", "1w": "週 K"}
@@ -581,14 +585,33 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
         for value in reversed(grid_values)
     )
     marker_nodes: list[str] = []
+    lane_state = {
+        "above": {"last_index": -100, "lane": -1},
+        "below": {"last_index": -100, "lane": -1},
+    }
+    below_actions = {
+        FuturesPaperMarkerAction.LONG_ENTRY,
+        FuturesPaperMarkerAction.SHORT_COVER,
+    }
     for marker in visible_markers:
         candle_index = max(
             index
             for index, candle in enumerate(candles)
             if candle.opened_at <= marker.occurred_at
         )
+        placement = "below" if marker.action in below_actions else "above"
+        state = lane_state[placement]
+        lane = state["lane"] + 1 if candle_index - state["last_index"] <= 3 else 0
+        state["last_index"] = candle_index
+        state["lane"] = lane
         marker_x = first_x + candle_index * step
         marker_y = y(float(marker.price))
+        label_y = (
+            min(volume_top - 4, marker_y + 18 + lane * 15)
+            if placement == "below"
+            else max(12, marker_y - 12 - lane * 15)
+        )
+        stem_end_y = label_y - 5 if placement == "below" else label_y + 4
         marker_class = escape(marker.action.value)
         marker_label = escape(marker.label)
         marker_id = escape(marker.marker_id)
@@ -597,11 +620,14 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
             f"口數 {marker.quantity}｜時間 {marker.occurred_at.isoformat()}"
         )
         marker_nodes.append(
-            f"<g class='chart-paper-marker chart-paper-marker-{marker_class}' "
+            f"<g class='chart-paper-marker chart-paper-marker-{marker_class} "
+            f"chart-paper-marker-{placement}' data-marker-lane='{lane}' "
             f"data-marker-id='{marker_id}' aria-label='{marker_detail}'>"
             f"<title>{marker_detail}</title>"
+            f"<line class='chart-paper-marker-stem' x1='{marker_x:.2f}' "
+            f"y1='{marker_y:.2f}' x2='{marker_x:.2f}' y2='{stem_end_y:.2f}'/>"
             f"<circle cx='{marker_x:.2f}' cy='{marker_y:.2f}' r='5'/>"
-            f"<text x='{marker_x:.2f}' y='{marker_y - 10:.2f}' text-anchor='middle'>"
+            f"<text x='{marker_x:.2f}' y='{label_y:.2f}' text-anchor='middle'>"
             f"{marker_label}</text></g>"
         )
 
