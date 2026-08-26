@@ -364,3 +364,19 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
 }
 .chart-paper-marker-above text { dominant-baseline: auto; }
 .chart-paper-marker-below text { dominant-baseline: hanging; }
+
+
+/* Dense Paper markers: keep the chart readable and reveal one label on hover. */
+.chart-paper-marker { cursor: help; }
+.chart-paper-marker text,
+.chart-paper-marker-stem {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.chart-paper-marker:hover text,
+.chart-paper-marker:hover .chart-paper-marker-stem {
+  opacity: 1;
+}
+.chart-paper-markers:hover .chart-paper-marker:not(:hover) circle {
+  opacity: .45;
+}
