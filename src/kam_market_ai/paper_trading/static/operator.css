@@ -318,6 +318,9 @@ html.chart-page, body.chart-page { height: auto; min-height: 100%; overflow: aut
 
 
 /* Verified Paper Trading event markers; presentation only. */
+.chart-tooltip-paper-events { display: grid; gap: 3px; margin-top: 6px; padding-top: 6px; border-top: 1px solid #5c4765; }
+.chart-tooltip-paper-events strong { color: #f0a5d9; font-size: 11px; }
+.chart-tooltip-paper-event { color: #fff1fa; font-weight: 700; }
 .chart-paper-marker circle {
   stroke: #f8fafc;
   stroke-width: 1.5;

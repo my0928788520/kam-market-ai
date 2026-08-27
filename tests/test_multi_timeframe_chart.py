@@ -537,22 +537,17 @@ def test_chart_renders_only_explicit_verified_futures_paper_markers() -> None:
 
     html = render_multi_timeframe_chart_html(MarkerSource(), instrument="TMF")
 
-    assert html.count("class='chart-paper-marker chart-paper-marker-") == 4
-    assert "chart-paper-marker-long_entry chart-paper-marker-below' data-marker-lane='0'" in html
-    assert "chart-paper-marker-long_exit chart-paper-marker-above' data-marker-lane='0'" in html
-    assert "chart-paper-marker-short_entry chart-paper-marker-above' data-marker-lane='1'" in html
-    assert "chart-paper-marker-short_cover chart-paper-marker-below' data-marker-lane='1'" in html
-    assert html.count("class='chart-paper-marker-stem'") == 4
+    assert "class='chart-paper-marker" not in html
+    assert html.count("data-paper-events='") == 6
     assert "多單進場" in html
     assert "平多" in html
     assert "空單進場" in html
     assert "回補" in html
     assert "Paper 訊號（已驗證事件）" in html
-    assert html.count("data-marker-id=") == 4
-    assert ">多進</text>" in html
-    assert ">多出</text>" in html
-    assert ">空進</text>" in html
-    assert ">空補</text>" in html
+    assert "&quot;label&quot;:&quot;多單進場&quot;" in html
+    assert "&quot;label&quot;:&quot;平多&quot;" in html
+    assert "&quot;label&quot;:&quot;空單進場&quot;" in html
+    assert "&quot;label&quot;:&quot;回補&quot;" in html
     assert "class='chart-paper-detail'" in html
     assert "模擬交易紀錄" in html
     assert html.count("class='chart-paper-event'") == 4
@@ -618,10 +613,11 @@ def test_paper_event_during_last_forming_hour_maps_to_last_60m_candle() -> None:
 
     html = render_multi_timeframe_chart_html(source, timeframe="60m")
 
-    assert html.count("data-marker-id=") == 1
+    assert "class='chart-paper-marker" not in html
     assert "inside-last-forming-bar" not in html
-    assert "多單進場｜價格 105｜口數 1｜時間 2026-08-26T01:59:00+00:00" in html
-    assert "<circle cx='534.00'" in html
+    assert "&quot;label&quot;:&quot;多單進場&quot;" in html
+    assert "&quot;price&quot;:&quot;105&quot;" in html
+    assert "&quot;time&quot;:&quot;08/26 09:59&quot;" in html
     assert "回補" not in html
 
 
@@ -665,7 +661,8 @@ def test_chart_consolidates_multiple_paper_events_in_the_same_candle() -> None:
 
     html = render_multi_timeframe_chart_html(source, timeframe="60m")
 
-    assert html.count("class='chart-paper-marker chart-paper-marker-") == 1
-    assert "chart-paper-marker-long_exit" in html
-    assert "同根 K 棒共 2 筆，圖上顯示最後一筆" in html
+    assert "class='chart-paper-marker" not in html
+    assert "&quot;label&quot;:&quot;多單進場&quot;" in html
+    assert "&quot;label&quot;:&quot;平多&quot;" in html
+    assert "data-paper-events='[{&quot;label&quot;:&quot;多單進場&quot;" in html
     assert html.count("class='chart-paper-event'") == 2

@@ -7,12 +7,12 @@ from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from html import escape
 from itertools import pairwise
+from json import dumps
 from math import isfinite
 from typing import Protocol
 
 from .futures_chart_markers import (
     FuturesPaperChartMarker,
-    FuturesPaperMarkerAction,
     sort_futures_paper_markers,
 )
 
@@ -541,12 +541,39 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
         accessible_ma = (
             f"{ma_label} {ma_value:,.2f}" if ma_value is not None else f"{ma_label} 尚未形成"
         )
+        candle_end = candle.opened_at + timeframe_duration
+        candle_markers = tuple(
+            marker
+            for marker in visible_markers
+            if candle.opened_at <= marker.occurred_at < candle_end
+        )
+        marker_payload = escape(
+            dumps(
+                [
+                    {
+                        "label": marker.label,
+                        "price": _price_text(float(marker.price)),
+                        "quantity": str(marker.quantity),
+                        "time": _time_label(marker.occurred_at, series.timeframe),
+                    }
+                    for marker in candle_markers
+                ],
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+            quote=True,
+        )
+        accessible_markers = "".join(
+            f"，{marker.label} {float(marker.price):,.2f}"
+            for marker in candle_markers
+        )
         hover_zones.append(
             f"<rect class='chart-hover-zone' tabindex='0' x='{x - step / 2:.2f}' y='{top:.2f}' width='{step:.2f}' height='{volume_bottom - top:.2f}' "
             f"data-x='{x:.2f}' data-time='{timestamp}' data-open='{candle.open:.10g}' data-high='{candle.high:.10g}' "
             f"data-low='{candle.low:.10g}' data-close='{candle.close:.10g}' data-volume='{candle.volume}' "
             f"data-ma20='{'' if ma_value is None else f'{ma_value:.10g}'}' data-ma-label='{ma_label}' data-forming='{forming_state}' "
-            f"aria-label='{timestamp}，開盤 {candle.open:,.2f}，最高 {candle.high:,.2f}，最低 {candle.low:,.2f}，收盤 {candle.close:,.2f}，{accessible_ma}'/>"
+            f"data-paper-events='{marker_payload}' "
+            f"aria-label='{timestamp}，開盤 {candle.open:,.2f}，最高 {candle.high:,.2f}，最低 {candle.low:,.2f}，收盤 {candle.close:,.2f}，{accessible_ma}{accessible_markers}'/>"
         )
     points = [
         f"{first_x + index * step:.2f},{y(value):.2f}"
@@ -584,77 +611,6 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
         f"<text class='chart-price-label' x='8' y='{y(value) + 4:.2f}'>{value:,.0f}</text>"
         for value in reversed(grid_values)
     )
-    # Keep the plot readable: one representative marker per candle.
-    # The complete, lossless event history remains available in the detail panel.
-    plot_markers: list[tuple[FuturesPaperChartMarker, int, int]] = []
-    for candle_index, candle in enumerate(candles):
-        candle_end = candle.opened_at + timeframe_duration
-        candle_markers = [
-            marker
-            for marker in visible_markers
-            if candle.opened_at <= marker.occurred_at < candle_end
-        ]
-        if candle_markers:
-            plot_markers.append(
-                (candle_markers[-1], candle_index, len(candle_markers))
-            )
-
-    marker_nodes: list[str] = []
-    lane_state = {
-        "above": {"last_index": -100, "lane": -1},
-        "below": {"last_index": -100, "lane": -1},
-    }
-    below_actions = {
-        FuturesPaperMarkerAction.LONG_ENTRY,
-        FuturesPaperMarkerAction.SHORT_COVER,
-    }
-    for marker, candle_index, candle_marker_count in plot_markers:
-        placement = "below" if marker.action in below_actions else "above"
-        state = lane_state[placement]
-        lane = state["lane"] + 1 if candle_index - state["last_index"] <= 3 else 0
-        state["last_index"] = candle_index
-        state["lane"] = lane
-        marker_x = first_x + candle_index * step
-        marker_y = y(float(marker.price))
-        label_y = (
-            min(volume_top - 4, marker_y + 18 + lane * 15)
-            if placement == "below"
-            else max(12, marker_y - 12 - lane * 15)
-        )
-        stem_end_y = label_y - 5 if placement == "below" else label_y + 4
-        marker_class = escape(marker.action.value)
-        marker_label = escape(
-            {
-                FuturesPaperMarkerAction.LONG_ENTRY: "多進",
-                FuturesPaperMarkerAction.LONG_EXIT: "多出",
-                FuturesPaperMarkerAction.SHORT_ENTRY: "空進",
-                FuturesPaperMarkerAction.SHORT_COVER: "空補",
-            }[marker.action]
-        )
-        marker_id = escape(marker.marker_id)
-        grouped_note = (
-            f"｜同根 K 棒共 {candle_marker_count} 筆，圖上顯示最後一筆"
-            if candle_marker_count > 1
-            else ""
-        )
-        marker_detail = escape(
-            f"{marker.label}｜價格 {_price_text(float(marker.price))}｜"
-            f"口數 {marker.quantity}｜時間 {marker.occurred_at.isoformat()}"
-            f"{grouped_note}"
-        )
-        marker_nodes.append(
-            f"<g class='chart-paper-marker chart-paper-marker-{marker_class} "
-            f"chart-paper-marker-{placement}' data-marker-lane='{lane}' "
-            f"data-marker-id='{marker_id}' data-marker-detail='{marker_detail}' "
-            f"role='button' tabindex='0' aria-label='{marker_detail}'>"
-            f"<title>{marker_detail}</title>"
-            f"<line class='chart-paper-marker-stem' x1='{marker_x:.2f}' "
-            f"y1='{marker_y:.2f}' x2='{marker_x:.2f}' y2='{stem_end_y:.2f}'/>"
-            f"<circle cx='{marker_x:.2f}' cy='{marker_y:.2f}' r='5'/>"
-            f"<text x='{marker_x:.2f}' y='{label_y:.2f}' text-anchor='middle'>"
-            f"{marker_label}</text></g>"
-        )
-
     latest = candles[-1]
     latest_y = y(displayed_price)
     time_labels = (
@@ -665,7 +621,7 @@ def _chart_svg(series: ChartSeries, ma_values: tuple[float | None, ...]) -> str:
         "<svg class='candlestick-chart' viewBox='0 0 1024 392' role='img' aria-label='唯讀 K 線、20MA、即時水平線與成交量'>"
         f"{grid}<line class='chart-current-line' x1='{left:.0f}' y1='{latest_y:.2f}' x2='{right:.0f}' y2='{latest_y:.2f}'/>"
         f"<text class='chart-current-price-label' x='{right - 4:.0f}' y='{latest_y - 6:.2f}' text-anchor='end'>即時 {_price_text(displayed_price)}</text>"
-        f"<g class='chart-candles'>{''.join(bodies)}</g>{ma_line}{daily_descending_line}<g class='chart-paper-markers'>{''.join(marker_nodes)}</g><g class='chart-manual-drawings'></g><g class='chart-volumes'>{''.join(volumes)}</g>"
+        f"<g class='chart-candles'>{''.join(bodies)}</g>{ma_line}{daily_descending_line}<g class='chart-manual-drawings'></g><g class='chart-volumes'>{''.join(volumes)}</g>"
         f"<text class='chart-volume-label' x='{left:.0f}' y='288'>成交量</text>{time_labels}"
         f"<g class='chart-crosshair' hidden><line class='chart-crosshair-x' x1='0' y1='{top:.2f}' x2='0' y2='{volume_bottom:.2f}'/><line class='chart-crosshair-y' x1='{left:.2f}' y1='0' x2='{right:.2f}' y2='0'/></g>"
         f"<g class='chart-hover-zones'>{''.join(hover_zones)}</g></svg>"

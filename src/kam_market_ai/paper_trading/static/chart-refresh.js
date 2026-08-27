@@ -190,6 +190,28 @@
     const volume = document.createElement("div");
     volume.textContent = `成交量 ${format(zone.dataset.volume)}`;
     tooltip.replaceChildren(time, grid, ma, volume);
+    let paperEvents = [];
+    try {
+      paperEvents = JSON.parse(zone.dataset.paperEvents || "[]");
+    } catch (_error) {
+      paperEvents = [];
+    }
+    if (paperEvents.length) {
+      const events = document.createElement("div");
+      events.className = "chart-tooltip-paper-events";
+      const heading = document.createElement("strong");
+      heading.textContent = paperEvents.length > 1
+        ? `買賣點（${paperEvents.length} 筆）`
+        : "買賣點";
+      events.appendChild(heading);
+      for (const item of paperEvents) {
+        const row = document.createElement("span");
+        row.className = "chart-tooltip-paper-event";
+        row.textContent = `${item.label}｜${item.price}｜${item.quantity} 口｜${item.time}`;
+        events.appendChild(row);
+      }
+      tooltip.appendChild(events);
+    }
     if (zone.dataset.forming === "true") {
       addTooltipLine(tooltip, "", "形成中・僅供顯示", "chart-tooltip-forming");
     }
