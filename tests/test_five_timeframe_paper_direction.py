@@ -12,6 +12,59 @@ def states(code: str) -> tuple[MappedKamTimeframeState, ...]:
     return tuple(MappedKamTimeframeState(timeframe, code, code[0], code[1], ()) for timeframe in ("1w", "1d", "60m", "15m", "5m"))
 
 
+def test_m15_ma20_long_only_buys_above_without_m60_or_slope_confirmation() -> None:
+    result = decide_five_timeframe_paper_direction(
+        states("ND"),
+        m15_ma20_position="above",
+        m15_ma20_direction="falling",
+        m15_ma20_cross="crossed_above",
+        m60_ma20_support="broken",
+        m60_market_bias="bearish",
+        m15_ma20_long_only=True,
+    )
+
+    assert (result.direction, result.action, result.eligible) == (
+        "LONG", "PAPER_BUY", True
+    )
+    assert result.reason_code == "M15_MA20_CLOSE_ABOVE_LONG_ENTRY"
+    assert result.strategy_mode == "M15_MA20_LONG_ONLY"
+    assert result.live_order_allowed is False
+
+
+def test_m15_ma20_long_only_holds_below_and_never_opens_short() -> None:
+    result = decide_five_timeframe_paper_direction(
+        states("ND"),
+        m15_ma20_position="below",
+        m15_ma20_direction="falling",
+        m15_ma20_cross="crossed_below",
+        m60_ma20_support="broken",
+        m60_market_bias="bearish",
+        m15_ma20_long_only=True,
+    )
+
+    assert (result.direction, result.action, result.eligible) == (
+        "HOLD", "NO_PAPER_ORDER", False
+    )
+    assert result.reason_code == "M15_MA20_CLOSE_BELOW_LONG_EXIT"
+    assert result.strategy_mode == "M15_MA20_LONG_ONLY"
+    assert result.live_order_allowed is False
+
+
+def test_m15_ma20_long_only_does_not_repeat_buy_while_already_above() -> None:
+    result = decide_five_timeframe_paper_direction(
+        states("ND"),
+        m15_ma20_position="above",
+        m15_ma20_direction="rising",
+        m15_ma20_cross="none",
+        m15_ma20_long_only=True,
+    )
+
+    assert (result.direction, result.action, result.eligible) == (
+        "HOLD", "NO_PAPER_ORDER", False
+    )
+    assert result.reason_code == "M15_MA20_WAIT_FOR_FRESH_CROSS_ABOVE"
+
+
 def test_m60_bullish_location_and_m15_trigger_select_one_contract_paper_long() -> None:
     result = decide_five_timeframe_paper_direction(
         states("ND"), daily_ma60_position="below",

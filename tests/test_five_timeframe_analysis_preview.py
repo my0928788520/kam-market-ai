@@ -114,7 +114,8 @@ def test_preview_runs_all_five_timeframes_and_remains_fail_closed() -> None:
         "last_price",
         "ma20",
         "price_vs_ma20",
-        "ma20_direction",
+            "ma20_direction",
+            "price_cross_ma20",
             "range_resistance",
             "range_support",
             "range_width",
@@ -266,7 +267,7 @@ def test_preview_exposes_daily_ma60_direction_filter_metrics() -> None:
     assert payload["decision_diagnostics"]["daily_ma60_position"] == "above"
     assert isinstance(payload["timeframes"]["15m"]["trend_warning_codes"], list)
     assert payload["decision_diagnostics"]["m15_ma20_position"] == "above"
-    assert payload["decision_diagnostics"]["m15_ma20_direction"] == "rising"
+    assert payload["decision_diagnostics"]["m15_ma20_direction"] == "insufficient"
 
 
 def _daily_candles_for_highs(

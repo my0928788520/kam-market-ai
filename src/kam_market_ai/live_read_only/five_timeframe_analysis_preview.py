@@ -102,6 +102,20 @@ def _five_timeframe_timing_config() -> TimingEngineConfig:
 
 def _ma20_display_metrics(candles: tuple[Candle, ...]) -> dict[str, object]:
     """Expose only bounded display metrics; raw candle history stays outside snapshots."""
+    if not candles:
+        return {
+            "last_price": None,
+            "ma20": None,
+            "price_vs_ma20": "insufficient",
+            "ma20_direction": "insufficient",
+            "price_cross_ma20": "insufficient",
+            "latest_volume": None,
+            "average_volume_20": None,
+            "volume_ratio_20": None,
+            "latest_range_points": None,
+            "average_range_20": None,
+            "volatility_ratio_20": None,
+        }
     closes = tuple(float(item.close) for item in candles)
     latest = closes[-1]
     volumes = tuple(float(item.volume) for item in candles)
@@ -132,6 +146,7 @@ def _ma20_display_metrics(candles: tuple[Candle, ...]) -> dict[str, object]:
             "ma20": None,
             "price_vs_ma20": "insufficient",
             "ma20_direction": "insufficient",
+            "price_cross_ma20": "insufficient",
             **activity,
         }
     ma20 = sum(closes[-20:]) / 20
@@ -142,14 +157,22 @@ def _ma20_display_metrics(candles: tuple[Candle, ...]) -> dict[str, object]:
     else:
         position = "equal"
     direction = "insufficient"
+    cross = "insufficient"
     if len(closes) >= 21:
         previous = sum(closes[-21:-1]) / 20
         direction = "rising" if ma20 > previous else "falling" if ma20 < previous else "flat"
+        if closes[-2] <= previous and latest > ma20:
+            cross = "crossed_above"
+        elif closes[-2] >= previous and latest < ma20:
+            cross = "crossed_below"
+        else:
+            cross = "none"
     return {
         "last_price": latest,
         "ma20": ma20,
         "price_vs_ma20": position,
         "ma20_direction": direction,
+        "price_cross_ma20": cross,
         **activity,
     }
 
@@ -581,7 +604,11 @@ def build_verified_five_timeframe_analysis_preview(
             "structure": frame.structure.normalized_state.value,
             "timing": frame.timing.normalized_state.value,
             "error_codes": list(frame.error_codes),
-            **_ma20_display_metrics(series[source_timeframe]),
+            **_ma20_display_metrics(
+                series[source_timeframe][:-1]
+                if source_timeframe is FiveTimeframe.M15
+                else series[source_timeframe]
+            ),
             **(
                 _m60_ma20_support_metrics(series[source_timeframe])
                 if source_timeframe is FiveTimeframe.M60
@@ -625,6 +652,7 @@ def build_verified_five_timeframe_analysis_preview(
         trend_warning_codes=trend_warning_codes,
         m15_ma20_position=str(analysis["15m"].get("price_vs_ma20", "insufficient")),
         m15_ma20_direction=str(analysis["15m"].get("ma20_direction", "insufficient")),
+        m15_ma20_cross=str(analysis["15m"].get("price_cross_ma20", "insufficient")),
         m60_ma20_support=str(analysis["60m"].get("ma20_support", "insufficient")),
         m60_market_bias=str(analysis["60m"].get("market_bias", "insufficient")),
         m15_ma20_value=(
@@ -642,6 +670,7 @@ def build_verified_five_timeframe_analysis_preview(
         m15_range_window_bars=analysis["15m"].get("range_window_bars"),
         m15_range_support_touches=analysis["15m"].get("range_support_touches"),
         m15_range_resistance_touches=analysis["15m"].get("range_resistance_touches"),
+        m15_ma20_long_only=True,
         daily_descending_trendline_state=str(
             analysis["1d"].get("descending_trendline_state", "insufficient")
         ),
