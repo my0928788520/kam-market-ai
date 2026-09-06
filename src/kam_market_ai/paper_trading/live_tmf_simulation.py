@@ -520,8 +520,10 @@ class TmfPaperPerformanceEvent:
             or self.account_credentials_allowed
         ):
             raise ValueError("performance records are permanently paper-only.")
-        if self.strategy_mode not in {"TREND", "RANGE"}:
-            raise ValueError("strategy_mode must be TREND or RANGE.")
+        if self.strategy_mode not in {"TREND", "RANGE", "M15_MA20_LONG_ONLY"}:
+            raise ValueError(
+                "strategy_mode must be TREND, RANGE, or M15_MA20_LONG_ONLY."
+            )
         if self.stop_trigger_price is not None:
             _decimal(self.stop_trigger_price, "stop_trigger_price", positive=True)
         if self.exit_slippage_points is not None:
@@ -1823,7 +1825,7 @@ class LiveTmfPaperSimulation:
             fill.fill_hash,
             self.journal.events[-1].event_hash if self.journal.events else None,
             self.config.point_value,
-            strategy_mode="RANGE" if is_range_entry else "TREND",
+            strategy_mode=direction.strategy_mode,
             position_side=entry_side,
         )
         margin_ledger = self._reserve_margin(matched.ledger, fill)
@@ -2081,9 +2083,13 @@ class LiveTmfPaperSimulation:
         take_profit_price = previous.take_profit_price
         trend_still_aligned = (
             entry.entry_side is PaperTradingSide.BUY
-            and direction.direction == "LONG"
-            and direction.action == "PAPER_BUY"
-            and direction.eligible
+            and (
+                entry.strategy_mode == "M15_MA20_LONG_ONLY"
+                and direction.m15_ma20_position == "above"
+                or direction.direction == "LONG"
+                and direction.action == "PAPER_BUY"
+                and direction.eligible
+            )
         ) or (
             entry.entry_side is PaperTradingSide.SELL
             and direction.direction == "SHORT"

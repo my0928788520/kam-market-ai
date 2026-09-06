@@ -659,6 +659,34 @@ def test_aligned_long_extends_take_profit_and_locks_twenty_points() -> None:
     assert extended.performance_event.take_profit_price == Decimal("22060")
 
 
+def test_m15_ma20_long_only_holds_profit_while_closed_price_remains_above() -> None:
+    session = LiveTmfPaperSimulation(config())
+    entry_direction = replace(
+        direction("AU"),
+        strategy_mode="M15_MA20_LONG_ONLY",
+        m15_ma20_position="above",
+    )
+    entered = session.process_evaluation(
+        entry_direction, quote("22000"), evaluated_at=NOW
+    )
+    assert entered.action is TmfPaperCycleAction.ENTRY_FILLED
+
+    no_fresh_cross = replace(
+        direction("AF"),
+        strategy_mode="M15_MA20_LONG_ONLY",
+        m15_ma20_position="above",
+    )
+    extended = session.process_evaluation(
+        no_fresh_cross, quote("22040", 1), evaluated_at=NOW + timedelta(minutes=1)
+    )
+
+    assert extended.action is TmfPaperCycleAction.POSITION_MARKED
+    assert extended.reason_codes == ("TREND_HOLD_TAKE_PROFIT_EXTENDED",)
+    assert extended.performance_event is not None
+    assert extended.performance_event.stop_loss_price == Decimal(22020)
+    assert extended.performance_event.take_profit_price == Decimal(22060)
+
+
 def test_profitable_trailing_stop_is_named_profit_lock_and_not_counted_as_loss() -> None:
     session = LiveTmfPaperSimulation(
         config(

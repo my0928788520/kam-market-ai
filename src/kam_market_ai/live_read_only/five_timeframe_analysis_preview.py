@@ -167,6 +167,15 @@ def _ma20_display_metrics(candles: tuple[Candle, ...]) -> dict[str, object]:
             cross = "crossed_below"
         else:
             cross = "none"
+    if len(closes) >= 22:
+        before_previous = sum(closes[-22:-2]) / 20
+        previous = sum(closes[-21:-1]) / 20
+        if (
+            closes[-3] <= before_previous
+            and closes[-2] > previous
+            and latest > ma20
+        ):
+            cross = "confirmed_above_after_cross"
     return {
         "last_price": latest,
         "ma20": ma20,
@@ -655,6 +664,7 @@ def build_verified_five_timeframe_analysis_preview(
         m15_ma20_cross=str(analysis["15m"].get("price_cross_ma20", "insufficient")),
         m60_ma20_support=str(analysis["60m"].get("ma20_support", "insufficient")),
         m60_market_bias=str(analysis["60m"].get("market_bias", "insufficient")),
+        m60_w_bottom_state=str(analysis["60m"].get("wave_pattern", "none")),
         m15_ma20_value=(
             float(analysis["15m"]["ma20"])
             if analysis["15m"].get("ma20") is not None

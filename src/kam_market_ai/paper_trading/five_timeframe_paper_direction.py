@@ -28,6 +28,7 @@ class FiveTimeframePaperDirection:
     m15_ma20_cross: str | None = None
     m60_ma20_support: str | None = None
     m60_market_bias: str | None = None
+    m60_w_bottom_state: str | None = None
     short_setup_grade: str | None = None
     opportunity_grade: str | None = None
     opportunity_mode: str = "WAIT"
@@ -62,6 +63,7 @@ class FiveTimeframePaperDirection:
             "m15_ma20_cross": self.m15_ma20_cross,
             "m60_ma20_support": self.m60_ma20_support,
             "m60_market_bias": self.m60_market_bias,
+            "m60_w_bottom_state": self.m60_w_bottom_state,
             "short_setup_grade": self.short_setup_grade,
             "opportunity_grade": self.opportunity_grade,
             "opportunity_mode": self.opportunity_mode,
@@ -93,6 +95,7 @@ def decide_five_timeframe_paper_direction(
     m15_ma20_cross: str | None = None,
     m60_ma20_support: str | None = None,
     m60_market_bias: str | None = None,
+    m60_w_bottom_state: str | None = None,
     m15_ma20_value: float | None = None,
     current_price: float | None = None,
     m15_range_support: float | None = None,
@@ -133,13 +136,22 @@ def decide_five_timeframe_paper_direction(
     if m15_ma20_direction not in {None, "rising", "falling", "flat", "insufficient"}:
         raise ValueError("m15_ma20_direction must be a normalized MA20 direction")
     if m15_ma20_cross not in {
-        None, "crossed_above", "crossed_below", "none", "insufficient"
+        None, "crossed_above", "confirmed_above_after_cross", "crossed_below", "none", "insufficient"
     }:
         raise ValueError("m15_ma20_cross must be a normalized MA20 crossing")
     if m60_ma20_support not in {None, "held", "retest_held", "broken", "insufficient"}:
         raise ValueError("m60_ma20_support must be a normalized support state")
     if m60_market_bias not in {None, "bullish", "bearish", "neutral", "insufficient"}:
         raise ValueError("m60_market_bias must be a normalized market bias")
+    if m60_w_bottom_state not in {
+        None,
+        "w_bottom_breakout_confirmed",
+        "w_bottom_breakout_candidate",
+        "w_bottom_forming",
+        "none",
+        "insufficient",
+    }:
+        raise ValueError("m60_w_bottom_state must be normalized")
     if not isinstance(trend_warning_codes, tuple) or not all(
         isinstance(item, str) for item in trend_warning_codes
     ):
@@ -158,29 +170,58 @@ def decide_five_timeframe_paper_direction(
         "m15_ma20_cross": m15_ma20_cross,
         "m60_ma20_support": m60_ma20_support,
         "m60_market_bias": m60_market_bias,
+        "m60_w_bottom_state": m60_w_bottom_state,
         "pullback_reference": m15_ma20_value,
     }
     if m15_ma20_long_only:
-        if m15_ma20_cross == "crossed_above":
+        m60_ready = (
+            m60_market_bias == "bullish"
+            and m60_ma20_support in {"held", "retest_held"}
+        ) or m60_w_bottom_state == "w_bottom_breakout_confirmed"
+        price_distance = (
+            None
+            if current_price is None or m15_ma20_value is None
+            else current_price - m15_ma20_value
+        )
+        not_chasing = price_distance is not None and 0 <= price_distance <= 40
+        if (
+            m15_ma20_cross == "confirmed_above_after_cross"
+            and m15_ma20_direction == "rising"
+            and m60_ready
+            and not_chasing
+        ):
             return FiveTimeframePaperDirection(
                 "LONG",
                 "PAPER_BUY",
-                "M15_MA20_CLOSE_ABOVE_LONG_ENTRY",
+                "M60_FILTERED_M15_MA20_HOLD_CONFIRMED_LONG_ENTRY",
                 codes,
                 True,
                 opportunity_grade="A",
                 opportunity_mode="PAPER_CANDIDATE",
                 opportunity_direction="LONG",
                 missing_condition=None,
-                early_trigger="15分K收盤站上20MA",
+                early_trigger="15分上穿後下一根守穩20MA；60分偏多；未追價",
                 strategy_mode="M15_MA20_LONG_ONLY",
                 **payload,
             )
-        reason_code = (
-            "M15_MA20_CLOSE_BELOW_LONG_EXIT"
-            if m15_ma20_position == "below"
-            else "M15_MA20_WAIT_FOR_FRESH_CROSS_ABOVE"
-        )
+        if m15_ma20_position == "below":
+            reason_code = "M15_MA20_CLOSE_BELOW_LONG_EXIT"
+            missing_condition = "等待下一次15分K重新上穿20MA"
+        elif m15_ma20_cross == "crossed_above":
+            reason_code = "M15_MA20_WAIT_FOR_HOLD_CONFIRMATION"
+            missing_condition = "等待下一根15分K守穩20MA"
+        elif not m60_ready:
+            reason_code = "M60_LONG_FILTER_NOT_CONFIRMED"
+            missing_condition = "等待60分偏多或W底突破確認"
+        elif m15_ma20_direction != "rising":
+            reason_code = "M15_MA20_SLOPE_NOT_RISING"
+            missing_condition = "等待15分20MA上彎"
+        elif not not_chasing:
+            reason_code = "M15_MA20_ENTRY_TOO_FAR_FROM_AVERAGE"
+            missing_condition = "等待價格回到15分20MA上方40點內"
+        else:
+            reason_code = "M15_MA20_WAIT_FOR_FRESH_CROSS_ABOVE"
+            missing_condition = "等待15分K由下往上收盤穿越20MA"
         return FiveTimeframePaperDirection(
             "HOLD",
             "NO_PAPER_ORDER",
@@ -189,7 +230,7 @@ def decide_five_timeframe_paper_direction(
             False,
             opportunity_mode="WAIT",
             opportunity_direction="LONG",
-            missing_condition="等待15分K由下往上收盤穿越20MA",
+            missing_condition=missing_condition,
             early_trigger="只做多；跌破20MA僅平倉、不反手做空",
             strategy_mode="M15_MA20_LONG_ONLY",
             **payload,

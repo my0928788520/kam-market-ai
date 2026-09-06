@@ -12,21 +12,23 @@ def states(code: str) -> tuple[MappedKamTimeframeState, ...]:
     return tuple(MappedKamTimeframeState(timeframe, code, code[0], code[1], ()) for timeframe in ("1w", "1d", "60m", "15m", "5m"))
 
 
-def test_m15_ma20_long_only_buys_above_without_m60_or_slope_confirmation() -> None:
+def test_m15_ma20_long_only_buys_after_hold_with_m60_and_distance_filters() -> None:
     result = decide_five_timeframe_paper_direction(
         states("ND"),
         m15_ma20_position="above",
-        m15_ma20_direction="falling",
-        m15_ma20_cross="crossed_above",
-        m60_ma20_support="broken",
-        m60_market_bias="bearish",
+        m15_ma20_direction="rising",
+        m15_ma20_cross="confirmed_above_after_cross",
+        m15_ma20_value=22000,
+        current_price=22030,
+        m60_ma20_support="held",
+        m60_market_bias="bullish",
         m15_ma20_long_only=True,
     )
 
     assert (result.direction, result.action, result.eligible) == (
         "LONG", "PAPER_BUY", True
     )
-    assert result.reason_code == "M15_MA20_CLOSE_ABOVE_LONG_ENTRY"
+    assert result.reason_code == "M60_FILTERED_M15_MA20_HOLD_CONFIRMED_LONG_ENTRY"
     assert result.strategy_mode == "M15_MA20_LONG_ONLY"
     assert result.live_order_allowed is False
 
@@ -56,6 +58,10 @@ def test_m15_ma20_long_only_does_not_repeat_buy_while_already_above() -> None:
         m15_ma20_position="above",
         m15_ma20_direction="rising",
         m15_ma20_cross="none",
+        m15_ma20_value=22000,
+        current_price=22020,
+        m60_ma20_support="held",
+        m60_market_bias="bullish",
         m15_ma20_long_only=True,
     )
 
@@ -63,6 +69,58 @@ def test_m15_ma20_long_only_does_not_repeat_buy_while_already_above() -> None:
         "HOLD", "NO_PAPER_ORDER", False
     )
     assert result.reason_code == "M15_MA20_WAIT_FOR_FRESH_CROSS_ABOVE"
+
+
+def test_m15_ma20_long_only_waits_one_closed_bar_after_cross() -> None:
+    result = decide_five_timeframe_paper_direction(
+        states("ND"),
+        m15_ma20_position="above",
+        m15_ma20_direction="rising",
+        m15_ma20_cross="crossed_above",
+        m15_ma20_value=22000,
+        current_price=22010,
+        m60_ma20_support="held",
+        m60_market_bias="bullish",
+        m15_ma20_long_only=True,
+    )
+
+    assert result.eligible is False
+    assert result.reason_code == "M15_MA20_WAIT_FOR_HOLD_CONFIRMATION"
+
+
+def test_m15_ma20_long_only_rejects_entry_more_than_40_points_above_ma() -> None:
+    result = decide_five_timeframe_paper_direction(
+        states("ND"),
+        m15_ma20_position="above",
+        m15_ma20_direction="rising",
+        m15_ma20_cross="confirmed_above_after_cross",
+        m15_ma20_value=22000,
+        current_price=22041,
+        m60_ma20_support="held",
+        m60_market_bias="bullish",
+        m15_ma20_long_only=True,
+    )
+
+    assert result.eligible is False
+    assert result.reason_code == "M15_MA20_ENTRY_TOO_FAR_FROM_AVERAGE"
+
+
+def test_confirmed_m60_w_bottom_can_satisfy_long_filter() -> None:
+    result = decide_five_timeframe_paper_direction(
+        states("ND"),
+        m15_ma20_position="above",
+        m15_ma20_direction="rising",
+        m15_ma20_cross="confirmed_above_after_cross",
+        m15_ma20_value=22000,
+        current_price=22020,
+        m60_ma20_support="broken",
+        m60_market_bias="bearish",
+        m60_w_bottom_state="w_bottom_breakout_confirmed",
+        m15_ma20_long_only=True,
+    )
+
+    assert result.eligible is True
+    assert result.direction == "LONG"
 
 
 def test_m60_bullish_location_and_m15_trigger_select_one_contract_paper_long() -> None:
