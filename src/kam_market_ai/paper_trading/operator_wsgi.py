@@ -632,15 +632,19 @@ def render_account_html(source: AccountReadOnlySource = DEMO_ACCOUNT_SOURCE, thr
     return f"""<!doctype html><html lang='zh-Hant-TW'><head><meta charset='utf-8'><title>KAM 帳戶中心</title><link rel='stylesheet' href='/static/operator.css'></head><body{body_class}><main class='account-main'><header><div><h1>KAM 帳戶中心</h1><small>期貨帳戶｜資金安全</small></div><a class='account-chip' href='/'>返回市場儀表板</a><span>唯讀模式・禁止真實交易</span></header><div class='account-banner'>示範帳戶資料・非真實帳戶・唯讀模式・禁止真實交易</div><nav class='account-tabs' aria-label='帳戶檢視'>{tabs}</nav>{content}<footer class='account-status-footer'><span>{account}</span><span>{broker}</span><span>交易功能停用</span><span>禁止真實下單</span><span>{emergency}</span></footer></main></body></html>"""
 
 
-def _market_snapshot_header(snapshot: MarketSnapshot) -> str:
-    session = {"DAY": "日盤", "NIGHT": "夜盤", "CLOSED": "休市", "UNKNOWN": "資料不足／無法判讀"}[snapshot.trading_session.value]
-    freshness = {"FRESH": "資料新鮮", "STALE": "資料延遲", "EXPIRED": "資料過期", "UNKNOWN": "資料不足／無法判讀"}[snapshot.freshness.value]
-    market = {"OPEN": "交易中", "HALTED": "暫停交易", "CLOSED": "休市", "UNKNOWN": "資料不足／無法判讀"}.get(snapshot.market_status, snapshot.market_status)
+def _market_selector(snapshot: MarketSnapshot) -> str:
     selected = snapshot.product_code
     selector = "".join(
         f"<a class='market-selector-chip {'active' if code == selected else ''}' href='/?instrument={code}'>{label}</a>"
         for code, label in (("TX", "大台 TX"), ("MTX", "小台 MTX"), ("TMF", "微台 TMF"))
     )
+    return f"<nav class='market-selector' aria-label='商品切換'>{selector}</nav>"
+
+
+def _market_snapshot_fields(snapshot: MarketSnapshot) -> str:
+    session = {"DAY": "日盤", "NIGHT": "夜盤", "CLOSED": "休市", "UNKNOWN": "資料不足／無法判讀"}[snapshot.trading_session.value]
+    freshness = {"FRESH": "資料新鮮", "STALE": "資料延遲", "EXPIRED": "資料過期", "UNKNOWN": "資料不足／無法判讀"}[snapshot.freshness.value]
+    market = {"OPEN": "交易中", "HALTED": "暫停交易", "CLOSED": "休市", "UNKNOWN": "資料不足／無法判讀"}.get(snapshot.market_status, snapshot.market_status)
     if snapshot.status is MarketSnapshotStatus.INVALID_PRODUCT:
         fields = "<span class='market-invalid'>商品代碼無效</span>"
     else:
@@ -652,7 +656,11 @@ def _market_snapshot_header(snapshot: MarketSnapshot) -> str:
             f"<span class='market-chip'>{session} · {market} · {freshness}</span>",
             "<span class='market-chip' title='OFFLINE_DEMO'>離線示範行情</span>",
         ))
-    return f"<div class='market-selector' aria-label='商品切換'>{selector}</div><div class='market-snapshot-fields'>{fields}</div>"
+    return f"<div class='market-snapshot-fields'>{fields}</div>"
+
+
+def _market_snapshot_header(snapshot: MarketSnapshot) -> str:
+    return _market_selector(snapshot) + _market_snapshot_fields(snapshot)
 
 
 def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapshot | None = None) -> str:
@@ -732,7 +740,7 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
         f"<p>現價 {escape(str(demo.get('current_price', '—')))} · "
         f"未實現 {escape(str(demo.get('unrealized_pnl', '—')))}</p></section>"
     )
-    return f"""<!doctype html><html lang='zh-Hant-TW'><head><meta charset='utf-8'><title>{escape(view.title)}</title><link rel='stylesheet' href='/static/operator.css'></head><body><main><header class='operator-header'><div class='operator-header-primary'><h1>{escape(view.title)}</h1>{_market_header_status(snapshot)}</div><div class='operator-header-secondary'><a class='account-chip' href='/account'>期貨帳戶｜資金安全</a>{_market_snapshot_header(snapshot)}</div></header><div class='banner'><span class='banner-message'>{escape(str(demo.get('banner', '尚未載入模擬委託建議。本機頁面目前為唯讀模式。')))} · 目前僅 Header 已切換至離線示範行情；決策卡尚未接入此商品 snapshot。</span>{daily_analysis_chip}{line_alert_chip}</div><div class='dashboard'><section class='direction-card'><h2>市場方向</h2><strong>{escape(str(demo.get('direction', '—')))}</strong><p>{escape(str(demo.get('direction_reason', '尚未載入方向資料')))}</p></section><section class='control-card'><h2>多空控制權</h2><strong>{escape(control_label)}</strong><small>控制權分裂</small><div class='control-cells'>{cells}</div></section>{weekly_note}{_cycle(view)}<section class='timeframes'><h2>三週期狀態</h2><div>{frames}</div></section><section class='trend-health-card'><h2>趨勢健康度</h2><strong>{escape(str(demo.get('trend_health', '—')))}</strong></section>{position_card}<section class='next-card next-wait'><h2>唯一下一步</h2><strong>{escape(str(demo.get('next_step', '等待資料完整')))}</strong></section>{proposal}<section class='matching'><h2>交易績效</h2><span class='legacy-matching-heading'>模擬撮合結果</span>{_matching_rows(view.matching)}</section></div><footer><div class='footer-metrics'><span>模擬現金：{escape(str(view.ledger.get('cash', '—')))}</span><span>模擬部位：{escape(str(view.ledger.get('positions', '—')))}</span><span>已實現損益：—</span><span>未實現損益：{escape(str(demo.get('unrealized_pnl', '—')))}</span><span>緊急停止：{'已啟動' if view.emergency_stop else '未啟動'}</span>{live_lock}<span class='audit'>稽核紀錄：{audit}</span></div><p class='risk-disclaimer'>{disclaimer}</p></footer></main></body></html>"""
+    return f"""<!doctype html><html lang='zh-Hant-TW'><head><meta charset='utf-8'><title>{escape(view.title)}</title><link rel='stylesheet' href='/static/operator.css'></head><body><main><header><h1>{escape(view.title)}</h1>{_market_header_status(snapshot)}<a class='account-chip' href='/account'>期貨帳戶｜資金安全</a>{_market_selector(snapshot)}{_market_snapshot_fields(snapshot)}</header><div class='banner'><span class='banner-message'>{escape(str(demo.get('banner', '尚未載入模擬委託建議。本機頁面目前為唯讀模式。')))} · 目前僅 Header 已切換至離線示範行情；決策卡尚未接入此商品 snapshot。</span>{daily_analysis_chip}{line_alert_chip}</div><div class='dashboard'><section class='direction-card'><h2>市場方向</h2><strong>{escape(str(demo.get('direction', '—')))}</strong><p>{escape(str(demo.get('direction_reason', '尚未載入方向資料')))}</p></section><section class='control-card'><h2>多空控制權</h2><strong>{escape(control_label)}</strong><small>控制權分裂</small><div class='control-cells'>{cells}</div></section>{weekly_note}{_cycle(view)}<section class='timeframes'><h2>三週期狀態</h2><div>{frames}</div></section><section class='trend-health-card'><h2>趨勢健康度</h2><strong>{escape(str(demo.get('trend_health', '—')))}</strong></section>{position_card}<section class='next-card next-wait'><h2>唯一下一步</h2><strong>{escape(str(demo.get('next_step', '等待資料完整')))}</strong></section>{proposal}<section class='matching'><h2>交易績效</h2><span class='legacy-matching-heading'>模擬撮合結果</span>{_matching_rows(view.matching)}</section></div><footer><div class='footer-metrics'><span>模擬現金：{escape(str(view.ledger.get('cash', '—')))}</span><span>模擬部位：{escape(str(view.ledger.get('positions', '—')))}</span><span>已實現損益：—</span><span>未實現損益：{escape(str(demo.get('unrealized_pnl', '—')))}</span><span>緊急停止：{'已啟動' if view.emergency_stop else '未啟動'}</span>{live_lock}<span class='audit'>稽核紀錄：{audit}</span></div><p class='risk-disclaimer'>{disclaimer}</p></footer></main></body></html>"""
 
 
 _render_terminal_html = render_operator_html
@@ -850,6 +858,11 @@ def render_operator_html(view: PaperTradingOperatorView, snapshot: MarketSnapsho
         banner_start = html.index("<div class='banner'>")
         banner_end = html.index("</div>", banner_start) + len("</div>")
         html = html[:banner_start] + f"<div class='banner market-status-line' title='OFFLINE_DEMO'>離線示範行情｜{_market_status_line(snapshot)}</div>" + html[banner_end:]
+    navigation = trigger + "<a class='account-chip' href='/charts'>多週期 K 線</a><a class='account-chip' href='/help'>使用說明｜SOP</a>" + _market_selector(snapshot)
+    html = html.replace(navigation, "", 1)
+    banner_start = html.index("<div class='banner")
+    banner_content_start = html.index(">", banner_start) + 1
+    html = html[:banner_content_start] + navigation + html[banner_content_start:]
     html = html.replace("<h2>模擬委託建議</h2>", "<h2>模擬委託建議</h2><p>決策呈現已切換；模擬委託流程尚未接入此商品資料快照。</p>", 1)
     html = html.replace("<h2>模擬撮合結果</h2>", "<h2>模擬撮合結果</h2><p>決策呈現已切換；模擬委託流程尚未接入此商品資料快照。</p>", 1)
     return html.replace("</main></body>", _account_drawer_html() + "</main></body>", 1)
