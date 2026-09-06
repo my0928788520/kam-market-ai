@@ -529,6 +529,20 @@ def test_market_time_is_in_header_and_latest_snapshot_line_is_emphasized() -> No
     assert "font-size: 13px; font-weight: 750;" in css
 
 
+def test_terminal_header_places_navigation_and_market_controls_on_second_row() -> None:
+    html = render_operator_html(_view(), OFFLINE_DEMO_MARKET_DATA_SOURCE.read_snapshot("TMF"))
+    css = Path("src/kam_market_ai/paper_trading/static/operator.css").read_text(encoding="utf-8")
+
+    primary_start = html.index("class='operator-header-primary'")
+    primary_end = html.index("</div>", primary_start)
+    secondary_start = html.index("class='operator-header-secondary'")
+    secondary_end = html.index("</div>", secondary_start)
+    assert primary_start < html.index("class='header-market-status'") < primary_end
+    assert secondary_start < html.index("class='account-chip'") < secondary_end
+    assert secondary_start < html.index("class='market-selector'") < secondary_end
+    assert ".operator-header { display: grid; grid-template-rows: repeat(2, minmax(0, 1fr));" in css
+
+
 def test_terminal_account_drawer_is_closed_by_default_and_reuses_get_only_account_center() -> None:
     html = render_operator_html(_view())
     css = Path("src/kam_market_ai/paper_trading/static/operator.css").read_text(encoding="utf-8")
@@ -745,7 +759,7 @@ def test_desktop_layout_contract_prevents_page_scrolling_without_card_scrollers(
     assert "@media (max-height: 1000px) and (min-width: 1001px)" in css
     assert "@media (max-height: 820px) and (min-width: 1001px)" not in css
     assert ".matching { min-height: 170px; }" not in css
-    assert "grid-template-rows: 30px 30px minmax(0, 1fr) 44px" in css
+    assert "grid-template-rows: 52px 30px minmax(0, 1fr) 44px" in css
     assert "grid-template-rows: 76px 130px 90px minmax(106px, 1fr)" in css
     assert ".current-analysis-summary { gap: 1px 8px; padding-left: 12px; }" in css
     assert ".cycle-chart svg { height: 108px; min-height: 108px; }" in css
