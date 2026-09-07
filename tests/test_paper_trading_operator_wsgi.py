@@ -469,15 +469,17 @@ def test_terminal_header_uses_read_only_market_snapshots_and_get_instrument_sele
     assert "TMF202610" in tmf and "24,108" in tmf and "82,514" in tmf
     assert "微型臺指期貨" in tmf and "休市" in tmf
     assert "微型臺指期貨・TMF｜TMF202610・202610｜最新 24,108・量 82,514" in tmf
-    assert "<span class='header-market-status'>資料時間（台灣）：2026-08-06 10:14｜休市｜資料新鮮｜帳戶未連線・券商未連線・唯讀模式・禁止真實下單</span>" in tmf
+    assert "資料時間（台灣）：2026-08-06 10:14｜休市｜資料正常｜唯讀</span>" in tmf
+    assert tmf.count("資料時間（台灣）：2026-08-06 10:14") == 1
     assert "market-selector-chip active' href='/?instrument=TMF'" in tmf
+    assert "大台 TX" not in tmf and "小台 MTX" not in tmf
 
     tx = get("instrument=TX")
     assert "TXF202609" in tx and "臺股期貨" in tx and "日盤" in tx and "14,872" in tx
-    assert "market-selector-chip active' href='/?instrument=TX'" in tx
+    assert "大台 TX" not in tx and "小台 MTX" not in tx
     mtx = get("instrument=MTX")
     assert "MXF202609" in mtx and "小型臺指期貨" in mtx and "夜盤" in mtx and "39,761" in mtx
-    assert "market-selector-chip active' href='/?instrument=MTX'" in mtx
+    assert "大台 TX" not in mtx and "小台 MTX" not in mtx
 
     invalid = get("instrument=BAD")
     assert "商品代碼無效" in invalid

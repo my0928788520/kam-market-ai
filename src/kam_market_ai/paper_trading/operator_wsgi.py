@@ -636,14 +636,12 @@ def _market_selector(snapshot: MarketSnapshot) -> str:
     selected = snapshot.product_code
     selector = "".join(
         f"<a class='market-selector-chip {'active' if code == selected else ''}' href='/?instrument={code}'>{label}</a>"
-        for code, label in (("TX", "大台 TX"), ("MTX", "小台 MTX"), ("TMF", "微台 TMF"))
+        for code, label in (("TMF", "微台 TMF"),)
     )
     return f"<nav class='market-selector' aria-label='商品切換'>{selector}</nav>"
 
 
 def _market_snapshot_fields(snapshot: MarketSnapshot) -> str:
-    session = {"DAY": "日盤", "NIGHT": "夜盤", "CLOSED": "休市", "UNKNOWN": "資料不足／無法判讀"}[snapshot.trading_session.value]
-    freshness = {"FRESH": "資料新鮮", "STALE": "資料延遲", "EXPIRED": "資料過期", "UNKNOWN": "資料不足／無法判讀"}[snapshot.freshness.value]
     market = {"OPEN": "交易中", "HALTED": "暫停交易", "CLOSED": "休市", "UNKNOWN": "資料不足／無法判讀"}.get(snapshot.market_status, snapshot.market_status)
     if snapshot.status is MarketSnapshotStatus.INVALID_PRODUCT:
         fields = "<span class='market-invalid'>商品代碼無效</span>"
@@ -652,8 +650,7 @@ def _market_snapshot_fields(snapshot: MarketSnapshot) -> str:
             f"<span class='market-chip'>{escape(snapshot.instrument_name)} · {escape(snapshot.product_code)}</span>",
             f"<span class='market-chip'>{escape(snapshot.contract_code or '—')}／{escape(snapshot.contract_month or '—')}</span>",
             f"<span class='market-chip'>最新：{escape(_money(snapshot.last_price))} · 量：{escape(_money(snapshot.volume))}</span>",
-            f"<span class='market-chip'>資料時間（台灣）：{escape(snapshot.timestamp.astimezone(ZoneInfo('Asia/Taipei')).strftime('%Y-%m-%d %H:%M') if isinstance(snapshot.timestamp, datetime) and snapshot.timestamp.tzinfo is not None else '—')}</span>",
-            f"<span class='market-chip'>{session} · {market} · {freshness}</span>",
+            f"<span class='market-chip'>{market}</span>",
             "<span class='market-chip' title='OFFLINE_DEMO'>離線示範行情</span>",
         ))
     return f"<div class='market-snapshot-fields'>{fields}</div>"
@@ -748,14 +745,14 @@ _render_terminal_html = render_operator_html
 
 def _market_header_status(snapshot: MarketSnapshot) -> str:
     if snapshot.status is MarketSnapshotStatus.INVALID_PRODUCT:
-        return "<span class='header-market-status'>商品代碼無效｜帳戶未連線・券商未連線・唯讀模式・禁止真實下單</span>"
+        return "<span class='header-market-status' title='唯讀模式・禁止真實下單'>商品代碼無效｜唯讀</span>"
     session = {"DAY": "日盤", "NIGHT": "夜盤", "CLOSED": "休市", "UNKNOWN": "資料不足／無法判讀"}[snapshot.trading_session.value]
-    freshness = {"FRESH": "資料新鮮", "STALE": "資料延遲", "EXPIRED": "資料過期", "UNKNOWN": "資料不足／無法判讀"}[snapshot.freshness.value]
+    freshness = {"FRESH": "資料正常", "STALE": "資料延遲", "EXPIRED": "資料過期", "UNKNOWN": "資料不明"}[snapshot.freshness.value]
     timestamp = snapshot.timestamp
     display_time = "—"
     if isinstance(timestamp, datetime) and timestamp.tzinfo is not None:
         display_time = timestamp.astimezone(ZoneInfo("Asia/Taipei")).strftime("%Y-%m-%d %H:%M")
-    return f"<span class='header-market-status'>資料時間（台灣）：{display_time}｜{session}｜{freshness}｜帳戶未連線・券商未連線・唯讀模式・禁止真實下單</span>"
+    return f"<span class='header-market-status' title='帳戶未連線・券商未連線・唯讀模式・禁止真實下單'>資料時間（台灣）：{display_time}｜{session}｜{freshness}｜唯讀</span>"
 
 
 def _market_status_line(snapshot: MarketSnapshot) -> str:
