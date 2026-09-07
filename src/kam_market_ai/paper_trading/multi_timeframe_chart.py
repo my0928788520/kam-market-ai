@@ -676,9 +676,11 @@ def render_multi_timeframe_chart_html(
         f"<a class='chart-tab {'active' if item == timeframe else ''}' href='/charts?instrument={escape(instrument)}&timeframe={item}{session_query}'>{TIMEFRAME_LABELS[item]}</a>"
         for item in SUPPORTED_CHART_TIMEFRAMES
     )
-    instrument_tabs = "".join(
-        f"<a class='chart-tab {'active' if item == instrument else ''}' href='/charts?instrument={item}&timeframe={escape(timeframe)}{session_query}'>{item}</a>"
-        for item in ("TX", "MTX", "TMF")
+    # The operator workflow is intentionally focused on Micro Taiwan futures.
+    # Keep legacy read-only routes compatible, but do not expose TX/MTX product
+    # switches in the chart UI.
+    instrument_tabs = (
+        f"<a class='chart-tab active' href='/charts?instrument=TMF&timeframe={escape(timeframe)}{session_query}'>TMF</a>"
     )
     updated = series.updated_at.isoformat() if series.updated_at is not None else "—"
     quote_updated = (

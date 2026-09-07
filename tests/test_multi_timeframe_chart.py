@@ -133,6 +133,8 @@ def test_chart_page_renders_injected_candles_ma20_volume_and_summary() -> None:
     assert "class='chart-crosshair'" in html and "class='chart-tooltip'" in html
     assert "class='chart-price-board'" in html
     assert "<span>最新收盤</span><strong>124</strong>" in html
+    assert "instrument=TMF" in html
+    assert "instrument=TX" not in html and "instrument=MTX" not in html
     assert "<span>20 日線</span><strong>115</strong>" in html
     assert "<strong>114.50</strong>" not in html
     assert "<span>20 棒上壓力</span><strong>125</strong>" in html
