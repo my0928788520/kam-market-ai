@@ -202,10 +202,12 @@ def build_current_market_analysis_alert(
     lines.extend(
         (
             "",
-            "現在的做法",
-            f"做多：{long_rule}",
-            f"做空：{short_rule}",
-            f"等待：{analysis.waiting_for}",
+            "目前操作",
+            f"1. 不直接追價；{analysis.waiting_for}",
+            f"2. 做多確認：{long_rule}",
+            f"3. 做多目標：先看上方壓力 {resistance}",
+            f"4. 多單失效：站回後又收破15分20MA {m15_ma20}",
+            f"5. 做空確認：{short_rule}",
             "",
             f"結論：{analysis.headline}",
             f"風險：{analysis.risk}",
