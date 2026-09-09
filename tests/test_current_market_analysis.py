@@ -37,13 +37,13 @@ def _payload() -> dict[str, object]:
     }
 
 
-def test_analysis_uses_stable_semantic_fingerprint_across_five_minute_buckets() -> None:
+def test_analysis_uses_stable_semantic_fingerprint_across_ten_minute_buckets() -> None:
     payload = _payload()
     first = build_current_market_analysis(
         payload, observed_at=datetime(2026, 8, 17, 8, 1, tzinfo=UTC)
     )
     later = build_current_market_analysis(
-        payload, observed_at=datetime(2026, 8, 17, 8, 6, tzinfo=UTC)
+        payload, observed_at=datetime(2026, 8, 17, 8, 11, tzinfo=UTC)
     )
 
     assert first.bucket != later.bucket
@@ -135,7 +135,8 @@ def test_line_alert_includes_live_position_scores_and_conditional_actions() -> N
         analysis, observed_at=observed_at, payload=payload
     )
 
-    assert "KAM 即時多空評估" in alert.text
+    assert "KAM 每10分鐘多空評估" in alert.text
+    assert "轉空判定：未成立｜維持等待，不提前反手做空" in alert.text
     assert "多方條件 84%｜空方條件 16%" in alert.text
     assert "即時價：約 47,125" in alert.text
     assert "60分20MA：47,021｜上彎" in alert.text
@@ -151,6 +152,28 @@ def test_line_alert_includes_live_position_scores_and_conditional_actions() -> N
     assert "6. 做空確認：等15分K有效跌破 47,021" in alert.text
     assert "7. 留倉：條件未完整確認，不建立跨時段模擬部位" in alert.text
     assert "比例為即時條件評分，不是獲利保證或歷史勝率" in alert.text
+
+
+def test_line_alert_marks_eligible_short_as_paper_only() -> None:
+    payload = _payload()
+    frames = payload["analysis_preview"]["timeframes"]  # type: ignore[index]
+    frames["5m"].update({"last_price": 46980, "price_vs_ma20": "below"})
+    frames["60m"].update({"ma20": 47021, "ma20_direction": "falling"})
+    frames["15m"].update(
+        {"ma20": 47304, "price_vs_ma20": "below", "ma20_direction": "falling"}
+    )
+    payload["analysis_preview"]["kam_rule_decision"]["paper_test_direction"].update(  # type: ignore[index]
+        {"direction": "SHORT", "eligible": True}
+    )
+    observed_at = datetime(2026, 9, 9, 8, 20, tzinfo=UTC)
+    analysis = build_current_market_analysis(payload, observed_at=observed_at)
+
+    alert = build_current_market_analysis_alert(
+        analysis, observed_at=observed_at, payload=payload
+    )
+
+    assert "轉空判定：條件成立｜只允許建立 Paper 空單提案" in alert.text
+    assert alert.live_order_allowed is False
 
 
 def test_analysis_requires_timezone_aware_clock() -> None:

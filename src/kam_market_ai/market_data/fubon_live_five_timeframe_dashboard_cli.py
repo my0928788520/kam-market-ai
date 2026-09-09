@@ -79,6 +79,19 @@ from .taifex_official_history import TaifexOfficialHistorySource
 _SAFE_DIAGNOSTIC_CODE = re.compile(r"[A-Z][A-Z0-9_]{2,79}")
 
 
+def _analysis_alert_due(
+    *,
+    bucket: str,
+    fingerprint: str,
+    previous_bucket: str | None,
+    previous_fingerprint: str | None,
+) -> bool:
+    """Send on each ten-minute boundary and immediately on semantic changes."""
+    return bucket != previous_bucket or (
+        previous_fingerprint is not None and fingerprint != previous_fingerprint
+    )
+
+
 def _safe_initial_refresh_error_code(error: Exception) -> str:
     """Expose only canonical machine codes; never serialize arbitrary exception text."""
     candidate = str(error)
@@ -524,16 +537,16 @@ def main(
                 current_snapshot,
                 observed_at=now,
             )
-            if analysis.bucket != current_analysis_bucket:
-                changed = (
-                    current_analysis_fingerprint is not None
-                    and analysis.fingerprint != current_analysis_fingerprint
-                )
+            if _analysis_alert_due(
+                bucket=analysis.bucket,
+                fingerprint=analysis.fingerprint,
+                previous_bucket=current_analysis_bucket,
+                previous_fingerprint=current_analysis_fingerprint,
+            ):
                 current_analysis_bucket = analysis.bucket
                 current_analysis_fingerprint = analysis.fingerprint
-                if changed or "current_analysis" not in paper_runtime:
-                    paper_runtime["current_analysis"] = analysis.safe_payload()
-                if changed and line_notifier is not None:
+                paper_runtime["current_analysis"] = analysis.safe_payload()
+                if line_notifier is not None:
                     pending_current_analysis_alert = build_current_market_analysis_alert(
                         analysis, observed_at=now, payload=current_snapshot
                     )

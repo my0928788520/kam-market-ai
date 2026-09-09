@@ -1,4 +1,4 @@
-"""Stable five-minute market analysis for the read-only KAM dashboard."""
+"""Stable ten-minute market analysis for the read-only KAM dashboard."""
 
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ def build_current_market_analysis(
     if observed_at.tzinfo is None:
         raise ValueError("market analysis clock must be timezone-aware")
     bucket_time = observed_at.replace(
-        minute=observed_at.minute - observed_at.minute % 5,
+        minute=observed_at.minute - observed_at.minute % 10,
         second=0,
         microsecond=0,
     )
@@ -148,6 +148,7 @@ def build_current_market_analysis_alert(
     fifteen = _frame(payload, "15m")
     five = _frame(payload, "5m")
     confirmation = _current_confirmation(payload)
+    decision = _decision(payload)
 
     def price(value: object) -> str:
         try:
@@ -182,6 +183,23 @@ def build_current_market_analysis_alert(
     else:
         opening = "目前方向略偏空，但仍須等待15分確認，不宜直接追價。"
 
+    direction = str(decision.get("direction", "")).upper()
+    eligible = decision.get("eligible") is True
+    m15_below = str(fifteen.get("price_vs_ma20", "")) == "below"
+    m15_falling = str(fifteen.get("ma20_direction", "")) == "falling"
+    m5_below = str(five.get("price_vs_ma20", "")) == "below"
+    below_m60 = (
+        current_number is not None
+        and m60_number is not None
+        and current_number < m60_number
+    )
+    if direction == "SHORT" and eligible:
+        short_status = "條件成立｜只允許建立 Paper 空單提案"
+    elif below_m60 and m15_below and m15_falling and m5_below:
+        short_status = "接近確認｜等待15分收破後反彈站不回60分20MA"
+    else:
+        short_status = "未成立｜維持等待，不提前反手做空"
+
     long_rule = (
         f"等15分K收回 {m15_ma20}，下一根仍守住再評估做多"
         if m15_ma20 != "資料不足"
@@ -207,7 +225,8 @@ def build_current_market_analysis_alert(
         else "等待60分支撐確認後出現15分轉強K"
     )
     lines = [
-        "KAM 即時多空評估",
+        "KAM 每10分鐘多空評估",
+        f"轉空判定：{short_status}",
         opening,
         f"多方條件 {bullish}%｜空方條件 {bearish}%",
         "",

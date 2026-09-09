@@ -2,6 +2,7 @@ from pathlib import Path
 
 from kam_market_ai.market_data.fubon_live_five_timeframe_dashboard_cli import (
     LiveFiveTimeframeSnapshotRefresher,
+    _analysis_alert_due,
     _safe_initial_refresh_error_code,
     main,
 )
@@ -36,6 +37,27 @@ class RecoveringVerifier(FixtureVerifier):
             self.calls.append(values)
             raise ConnectionError("fixture transport interruption")
         return super().run(**values)
+
+
+def test_analysis_alert_is_periodic_and_immediate_on_direction_change() -> None:
+    assert _analysis_alert_due(
+        bucket="2026-09-09T08:10:00+00:00",
+        fingerprint="same",
+        previous_bucket="2026-09-09T08:00:00+00:00",
+        previous_fingerprint="same",
+    )
+    assert _analysis_alert_due(
+        bucket="2026-09-09T08:10:00+00:00",
+        fingerprint="turned-short",
+        previous_bucket="2026-09-09T08:10:00+00:00",
+        previous_fingerprint="was-long",
+    )
+    assert not _analysis_alert_due(
+        bucket="2026-09-09T08:10:00+00:00",
+        fingerprint="same",
+        previous_bucket="2026-09-09T08:10:00+00:00",
+        previous_fingerprint="same",
+    )
 
 
 def test_refresher_writes_only_safe_snapshot(tmp_path) -> None:
