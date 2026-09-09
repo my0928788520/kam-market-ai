@@ -535,7 +535,7 @@ def main(
                     paper_runtime["current_analysis"] = analysis.safe_payload()
                 if changed and line_notifier is not None:
                     pending_current_analysis_alert = build_current_market_analysis_alert(
-                        analysis, observed_at=now
+                        analysis, observed_at=now, payload=current_snapshot
                     )
             if pending_current_analysis_alert is not None and line_notifier is not None:
                 sent = line_notifier.send_once(pending_current_analysis_alert)

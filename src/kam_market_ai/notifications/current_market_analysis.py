@@ -8,6 +8,10 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from hashlib import sha256
 
+from kam_market_ai.paper_trading.session_direction_calibration import (
+    _current_confirmation,
+)
+
 from .line_pending_order import LinePendingOrderAlert
 
 
@@ -131,23 +135,86 @@ def build_current_market_analysis(
 
 
 def build_current_market_analysis_alert(
-    analysis: CurrentMarketAnalysis, *, observed_at: datetime
+    analysis: CurrentMarketAnalysis,
+    *,
+    observed_at: datetime,
+    payload: Mapping[str, object] | None = None,
 ) -> LinePendingOrderAlert:
     identity = sha256(
         f"current-market-analysis:{analysis.bucket}:{analysis.fingerprint}".encode()
     ).hexdigest()
-    text = "\n".join(
+    payload = payload or {}
+    sixty = _frame(payload, "60m")
+    fifteen = _frame(payload, "15m")
+    five = _frame(payload, "5m")
+    confirmation = _current_confirmation(payload)
+
+    def price(value: object) -> str:
+        try:
+            return f"{float(value):,.0f}"
+        except (TypeError, ValueError):
+            return "資料不足"
+
+    def slope(value: object) -> str:
+        return {"rising": "上彎", "falling": "下彎", "flat": "走平"}.get(
+            str(value), "方向待確認"
+        )
+
+    current = price(five.get("last_price") or fifteen.get("last_price"))
+    m60_ma20 = price(sixty.get("ma20"))
+    m15_ma20 = price(fifteen.get("ma20"))
+    resistance = price(fifteen.get("range_resistance"))
+    support = price(fifteen.get("range_support"))
+    bullish = int(confirmation["bullish_ratio"])
+    bearish = int(confirmation["bearish_ratio"])
+    advantage = abs(bullish - bearish)
+    if advantage < 10:
+        opening = "目前不適合立刻進場，長短週期沒有明顯優勢。"
+    elif bullish > bearish:
+        opening = "目前方向略偏多，但仍須等待15分確認，不宜直接追價。"
+    else:
+        opening = "目前方向略偏空，但仍須等待15分確認，不宜直接追價。"
+
+    long_rule = (
+        f"等15分K收回 {m15_ma20}，下一根仍守住再評估做多"
+        if m15_ma20 != "資料不足"
+        else "等待15分K站回上彎20MA後再評估做多"
+    )
+    short_rule = (
+        f"等15分K有效跌破 {m60_ma20} 且收不回再評估做空"
+        if m60_ma20 != "資料不足"
+        else "等待60分20MA支撐失守後再評估做空"
+    )
+    lines = [
+        "KAM 即時多空評估",
+        opening,
+        f"多方條件 {bullish}%｜空方條件 {bearish}%",
+        "",
+        "目前位置",
+        f"即時價：約 {current}",
+        f"60分20MA：{m60_ma20}｜{slope(sixty.get('ma20_direction'))}",
+        f"15分20MA：{m15_ma20}｜{slope(fifteen.get('ma20_direction'))}",
+    ]
+    if resistance != "資料不足":
+        lines.append(f"上方壓力：約 {resistance}")
+    if support != "資料不足":
+        lines.append(f"下方支撐：約 {support}")
+    lines.extend(
         (
-            "KAM 現況分析更新",
-            f"盤勢：{analysis.headline}",
-            f"理由：{analysis.basis}",
-            f"矛盾：{analysis.conflict}",
+            "",
+            "現在的做法",
+            f"做多：{long_rule}",
+            f"做空：{short_rule}",
             f"等待：{analysis.waiting_for}",
+            "",
+            f"結論：{analysis.headline}",
             f"風險：{analysis.risk}",
             f"更新時間：{analysis.bucket}",
+            "說明：比例為即時條件評分，不是獲利保證或歷史勝率。",
             "模式：Paper Trading｜最多1口微台｜不會送出真實委託",
         )
     )
+    text = "\n".join(lines)
     return LinePendingOrderAlert(identity, text, observed_at + timedelta(minutes=5))
 
 

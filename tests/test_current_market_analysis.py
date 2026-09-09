@@ -115,6 +115,38 @@ def test_stale_analysis_fails_closed_and_line_alert_stays_paper_only() -> None:
     assert "不會送出真實委託" in alert.text
 
 
+def test_line_alert_includes_live_position_scores_and_conditional_actions() -> None:
+    payload = _payload()
+    frames = payload["analysis_preview"]["timeframes"]  # type: ignore[index]
+    frames["5m"]["last_price"] = 47125
+    frames["60m"].update({"ma20": 47021, "ma20_direction": "rising"})
+    frames["15m"].update(
+        {
+            "ma20": 47304,
+            "range_resistance": 47590,
+            "range_support": 46939,
+            "volume_ratio_20": 0.9,
+        }
+    )
+    observed_at = datetime(2026, 9, 9, 4, 16, tzinfo=UTC)
+    analysis = build_current_market_analysis(payload, observed_at=observed_at)
+
+    alert = build_current_market_analysis_alert(
+        analysis, observed_at=observed_at, payload=payload
+    )
+
+    assert "KAM 即時多空評估" in alert.text
+    assert "多方條件 84%｜空方條件 16%" in alert.text
+    assert "即時價：約 47,125" in alert.text
+    assert "60分20MA：47,021｜上彎" in alert.text
+    assert "15分20MA：47,304｜上彎" in alert.text
+    assert "上方壓力：約 47,590" in alert.text
+    assert "下方支撐：約 46,939" in alert.text
+    assert "做多：等15分K收回 47,304" in alert.text
+    assert "做空：等15分K有效跌破 47,021" in alert.text
+    assert "比例為即時條件評分，不是獲利保證或歷史勝率" in alert.text
+
+
 def test_analysis_requires_timezone_aware_clock() -> None:
     with pytest.raises(ValueError, match="timezone-aware"):
         build_current_market_analysis(
