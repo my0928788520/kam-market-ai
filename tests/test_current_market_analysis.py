@@ -140,12 +140,16 @@ def test_line_alert_includes_live_position_scores_and_conditional_actions() -> N
     assert "即時價：約 47,125" in alert.text
     assert "60分20MA：47,021｜上彎" in alert.text
     assert "15分20MA：47,304｜上彎" in alert.text
-    assert "上方壓力：約 47,590" in alert.text
-    assert "下方支撐：約 46,939" in alert.text
+    assert "上方近壓：15分20MA 47,304" in alert.text
+    assert "主要壓力：20棒高點 47,590" in alert.text
+    assert "下方近支撐：60分20MA 47,021" in alert.text
+    assert "次支撐：20棒低點 46,939" in alert.text
     assert "2. 做多確認：等15分K收回 47,304" in alert.text
-    assert "3. 做多目標：先看上方壓力 47,590" in alert.text
-    assert "4. 多單失效：站回後又收破15分20MA 47,304" in alert.text
-    assert "5. 做空確認：等15分K有效跌破 47,021" in alert.text
+    assert "3. 提前做多：等回測60分20MA 47,021 附近止跌" in alert.text
+    assert "4. 做多目標：先看主要壓力 47,590" in alert.text
+    assert "5. 多單失效：站回後又收破15分20MA 47,304" in alert.text
+    assert "6. 做空確認：等15分K有效跌破 47,021" in alert.text
+    assert "7. 留倉：條件未完整確認，不建立跨時段模擬部位" in alert.text
     assert "比例為即時條件評分，不是獲利保證或歷史勝率" in alert.text
 
 

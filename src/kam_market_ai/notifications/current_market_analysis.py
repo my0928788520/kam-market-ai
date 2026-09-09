@@ -167,6 +167,13 @@ def build_current_market_analysis_alert(
     support = price(fifteen.get("range_support"))
     bullish = int(confirmation["bullish_ratio"])
     bearish = int(confirmation["bearish_ratio"])
+    current_value = five.get("last_price") or fifteen.get("last_price")
+    try:
+        current_number = float(current_value)  # type: ignore[arg-type]
+        m60_number = float(sixty.get("ma20"))
+        m15_number = float(fifteen.get("ma20"))
+    except (TypeError, ValueError):
+        current_number = m60_number = m15_number = None
     advantage = abs(bullish - bearish)
     if advantage < 10:
         opening = "目前不適合立刻進場，長短週期沒有明顯優勢。"
@@ -185,6 +192,20 @@ def build_current_market_analysis_alert(
         if m60_ma20 != "資料不足"
         else "等待60分20MA支撐失守後再評估做空"
     )
+    if (
+        current_number is not None
+        and m60_number is not None
+        and m15_number is not None
+        and m60_number < current_number < m15_number
+    ):
+        location = "目前位於60分支撐與15分壓力之間，多空報酬風險比不足"
+    else:
+        location = "目前不在兩條均線的標準等待區，依確認條件操作"
+    early_long = (
+        f"等回測60分20MA {m60_ma20} 附近止跌，並出現15分轉強K"
+        if m60_ma20 != "資料不足"
+        else "等待60分支撐確認後出現15分轉強K"
+    )
     lines = [
         "KAM 即時多空評估",
         opening,
@@ -195,19 +216,25 @@ def build_current_market_analysis_alert(
         f"60分20MA：{m60_ma20}｜{slope(sixty.get('ma20_direction'))}",
         f"15分20MA：{m15_ma20}｜{slope(fifteen.get('ma20_direction'))}",
     ]
+    if m15_ma20 != "資料不足":
+        lines.append(f"上方近壓：15分20MA {m15_ma20}")
     if resistance != "資料不足":
-        lines.append(f"上方壓力：約 {resistance}")
+        lines.append(f"主要壓力：20棒高點 {resistance}")
+    if m60_ma20 != "資料不足":
+        lines.append(f"下方近支撐：60分20MA {m60_ma20}")
     if support != "資料不足":
-        lines.append(f"下方支撐：約 {support}")
+        lines.append(f"次支撐：20棒低點 {support}")
     lines.extend(
         (
             "",
             "目前操作",
-            f"1. 不直接追價；{analysis.waiting_for}",
+            f"1. 位置：{location}",
             f"2. 做多確認：{long_rule}",
-            f"3. 做多目標：先看上方壓力 {resistance}",
-            f"4. 多單失效：站回後又收破15分20MA {m15_ma20}",
-            f"5. 做空確認：{short_rule}",
+            f"3. 提前做多：{early_long}",
+            f"4. 做多目標：先看主要壓力 {resistance}",
+            f"5. 多單失效：站回後又收破15分20MA {m15_ma20}",
+            f"6. 做空確認：{short_rule}",
+            "7. 留倉：條件未完整確認，不建立跨時段模擬部位",
             "",
             f"結論：{analysis.headline}",
             f"風險：{analysis.risk}",
